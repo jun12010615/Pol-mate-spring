@@ -1,0 +1,212 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%
+request.setAttribute("currentPage", "notifications");
+request.setAttribute("breadcrumb",  new String[]{"POL-MATE", "알림"});
+%>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POL-MATE | 알림</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="${pageContext.request.contextPath}/css/polmate.css">
+<script>var _ctx = '${pageContext.request.contextPath}';</script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f4f6fb; color: #1a1a2e; -webkit-font-smoothing: antialiased; }
+.pm-page { padding: 28px 32px 48px; max-width: 900px; }
+
+.page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+.page-title-wrap {}
+.page-eyebrow { font-size:11px; color:#9ca3af; letter-spacing:0.8px; text-transform:uppercase; margin-bottom:3px; }
+.page-title { font-size:22px; font-weight:500; }
+.btn-mark-all {
+    padding:8px 16px; background:transparent; color:#6b7280;
+    border:1.5px solid #e2e5ee; border-radius:10px;
+    font-size:12px; font-family:'Noto Sans KR',sans-serif; cursor:pointer;
+    transition:all 0.13s;
+}
+.btn-mark-all:hover { border-color:#0d1a33; color:#0d1a33; }
+
+.tab-row { display:flex; gap:0; border-bottom:1px solid #e2e5ee; margin-bottom:20px; }
+.tab-btn { padding:9px 18px; font-size:13px; font-family:'Noto Sans KR',sans-serif; border:none; background:transparent; cursor:pointer; color:#6b7280; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 0.13s; }
+.tab-btn.active { color:#0d1a33; font-weight:500; border-bottom-color:#0d1a33; }
+
+.notif-group { margin-bottom:8px; }
+.group-label { font-size:10px; font-weight:500; color:#9ca3af; text-transform:uppercase; letter-spacing:0.6px; padding:10px 0 6px; }
+
+.notif-item {
+    background:#fff; border:1px solid #e2e5ee; border-radius:12px;
+    padding:14px 16px; display:flex; gap:13px; align-items:flex-start;
+    cursor:pointer; transition:background 0.13s; margin-bottom:8px; position:relative;
+}
+.notif-item.unread { background:#f8faff; border-color:#dbeafe; }
+.notif-item:hover  { background:#f4f6fb; }
+.notif-item.critical { border-left:3px solid #dc2626; padding-left:13px; }
+.notif-item.critical .notif-title { color:#dc2626; }
+
+.unread-dot { position:absolute; top:16px; right:16px; width:7px; height:7px; border-radius:50%; background:#4a7cdc; }
+
+.notif-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.notif-icon svg { width:18px; height:18px; }
+.ni-red   { background:#fef2f2; }
+.ni-amber { background:#fffbeb; }
+.ni-blue  { background:#eff6ff; }
+.ni-green { background:#f0fdf4; }
+.ni-gray  { background:#f3f4f6; }
+.ni-navy  { background:#f0f3f9; }
+
+.notif-body { flex:1; min-width:0; }
+.notif-title { font-size:13px; font-weight:500; color:#1a1a2e; margin-bottom:3px; line-height:1.4; }
+.notif-item.unread .notif-title { font-weight:600; }
+.notif-desc  { font-size:11px; color:#6b7280; line-height:1.6; margin-bottom:4px; }
+.notif-time  { font-size:10px; color:#9ca3af; }
+.notif-tag   { display:inline-block; font-size:10px; background:#f4f6fb; border:1px solid #e2e5ee; border-radius:5px; padding:2px 7px; color:#9ca3af; margin-bottom:4px; }
+
+.empty-state { padding:60px 20px; text-align:center; }
+.empty-icon  { width:64px; height:64px; background:#f4f6fb; border-radius:50%; margin:0 auto 14px; display:flex; align-items:center; justify-content:center; border:1px solid #e2e5ee; }
+.empty-icon svg { width:28px; height:28px; stroke:#9ca3af; fill:none; }
+.empty-title { font-size:14px; font-weight:500; color:#6b7280; margin-bottom:6px; }
+.empty-desc  { font-size:12px; color:#9ca3af; }
+
+.toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(80px); background:#1a2744; color:#fff; padding:10px 20px; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; opacity:0; transition:all 0.25s; z-index:500; white-space:nowrap; }
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="pm-layout">
+
+<%@ include file="sidebar.jsp" %>
+<div class="pm-content">
+<%@ include file="appbar.jsp" %>
+
+<main class="pm-page">
+
+    <div class="page-header">
+        <div class="page-title-wrap">
+            <div class="page-eyebrow">시스템 알림</div>
+            <div class="page-title">알림 <span id="unreadCount" style="font-size:14px; color:#4a7cdc; font-weight:400;"></span></div>
+        </div>
+        <button class="btn-mark-all" onclick="markAllRead()">모두 읽음 처리</button>
+    </div>
+
+    <div class="tab-row">
+        <button class="tab-btn active" id="tabAll"   onclick="switchTab('all')">전체</button>
+        <button class="tab-btn"        id="tabAlert" onclick="switchTab('alert')">경고</button>
+        <button class="tab-btn"        id="tabCase"  onclick="switchTab('case')">사건</button>
+        <button class="tab-btn"        id="tabSys"   onclick="switchTab('sys')">시스템</button>
+    </div>
+
+    <div id="notifList"><div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div><div class="empty-title">로드 중...</div></div></div>
+
+</main>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var _allNotifs = [];
+var _currentTab = 'all';
+
+var _ICON_MAP = {
+    contradiction: { cls:'ni-red',   color:'#dc2626', path:'<path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>' },
+    case:          { cls:'ni-blue',  color:'#1e40af', path:'<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>' },
+    system:        { cls:'ni-gray',  color:'#6b7280', path:'<circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>' },
+    success:       { cls:'ni-green', color:'#16a34a', path:'<polyline points="20 6 9 17 4 12"/>' },
+    info:          { cls:'ni-navy',  color:'#4a7cdc', path:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>' },
+};
+
+function getIcon(type) {
+    var t = _ICON_MAP[type] || _ICON_MAP['info'];
+    return '<div class="notif-icon ' + t.cls + '"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="' + t.color + '" stroke-width="1.8" stroke-linecap="round">' + t.path + '</svg></div>';
+}
+
+function loadNotifs() {
+    fetch(_ctx + '/notifApi?action=list', {credentials:'same-origin'})
+        .then(function(r){return r.json();})
+        .then(function(d) {
+            _allNotifs = Array.isArray(d) ? d : (d.notifications || []);
+            renderNotifs();
+            var unread = _allNotifs.filter(function(n){return n.isUnread;}).length;
+            var el = document.getElementById('unreadCount');
+            if (el) el.textContent = unread > 0 ? '(' + unread + '개 읽지 않음)' : '';
+        })
+        .catch(function() { showEmpty('알림을 불러올 수 없습니다.'); });
+}
+
+function renderNotifs() {
+    var filtered = _allNotifs.filter(function(n) {
+        if (_currentTab === 'all') return true;
+        if (_currentTab === 'alert') return n.isCritical;
+        if (_currentTab === 'case')  return n.type === 'case';
+        if (_currentTab === 'sys')   return n.type === 'sys';
+        return true;
+    });
+
+    var el = document.getElementById('notifList');
+    if (filtered.length === 0) { showEmpty('해당하는 알림이 없습니다.'); return; }
+
+    var html = '<div class="notif-group">';
+    filtered.forEach(function(n) {
+        var unreadCls = n.isUnread ? 'unread' : '';
+        var critCls   = n.isCritical ? 'critical' : '';
+        html += '<div class="notif-item ' + unreadCls + ' ' + critCls + '" onclick="markRead(' + n.notifId + ', this)">'
+              + getIcon(n.type)
+              + '<div class="notif-body">'
+              + (n.tag ? '<span class="notif-tag">' + n.tag + '</span><br>' : '')
+              + '<div class="notif-title">' + (n.title || '') + '</div>'
+              + (n.description ? '<div class="notif-desc">' + n.description + '</div>' : '')
+              + '<div class="notif-time">' + (n.timeLabel || '') + '</div>'
+              + '</div>'
+              + (n.isUnread ? '<div class="unread-dot"></div>' : '')
+              + '</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+}
+
+function showEmpty(msg) {
+    document.getElementById('notifList').innerHTML =
+        '<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="#9ca3af"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div><div class="empty-title">' + msg + '</div></div>';
+}
+
+function switchTab(tab) {
+    _currentTab = tab;
+    ['all','alert','case','sys'].forEach(function(t) { document.getElementById('tab' + (t==='all'?'All':t==='alert'?'Alert':t==='case'?'Case':'Sys')).classList.toggle('active', t===tab); });
+    renderNotifs();
+}
+
+function markRead(id, el) {
+    if (el.classList.contains('unread')) {
+        el.classList.remove('unread');
+        var dot = el.querySelector('.unread-dot');
+        if (dot) dot.remove();
+        var found = _allNotifs.find(function(n){ return n.notifId === id; });
+        if (found) found.isUnread = false;
+        var fd = new FormData(); fd.append('action','markRead'); fd.append('notifId', id);
+        fetch(_ctx + '/notifApi', {method:'POST', body:fd, credentials:'same-origin'}).catch(function(){});
+    }
+}
+
+function markAllRead() {
+    var fd = new FormData(); fd.append('action','markAllRead');
+    fetch(_ctx + '/notifApi', {method:'POST', body:fd, credentials:'same-origin'})
+        .then(function(){
+            _allNotifs.forEach(function(n){n.isUnread=false;});
+            renderNotifs();
+            showToast('모든 알림을 읽음으로 처리했습니다.');
+            var el = document.getElementById('unreadCount'); if(el) el.textContent='';
+        }).catch(function(){showToast('처리 중 오류가 발생했습니다.');});
+}
+
+function showToast(msg) {
+    var t = document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+    setTimeout(function(){t.classList.remove('show');}, 2500);
+}
+
+loadNotifs();
+</script>
+</body>
+</html>

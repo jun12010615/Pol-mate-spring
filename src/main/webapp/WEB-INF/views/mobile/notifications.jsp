@@ -1,0 +1,340 @@
+﻿<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>POL-MATE | 알림</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  :root {
+    --deep:#0d1a33; --navy:#1a2744; --mid:#243358;
+    --accent:#4a7cdc; --danger:#dc2626;
+    --tp:#1a1a2e; --ts:#6b7280; --tm:#9ca3af;
+    --bg:#f0f2f8; --card:#ffffff; --bd:#e2e5ee;
+    --success:#16a34a; --success-bg:#f0fdf4;
+    --warn-bg:#fffbeb; --warn-text:#92400e;
+    --danger-bg:#fef2f2; --danger-bd:#fecaca;
+    --info-bg:#eff6ff; --info-text:#1e40af;
+    --bnav:64px;
+  }
+  html,body { height:100%; font-family:'Noto Sans KR',sans-serif; background:var(--bg); overflow-x:hidden; }
+  .screen { width:100%; max-width:420px; height:100dvh; margin:0 auto; background:var(--bg); display:flex; flex-direction:column; }
+
+  /* 헤더 */
+  .top-header { background:var(--deep); padding:52px 20px 16px; position:sticky; top:0; z-index:10; }
+  .header-row { display:flex; align-items:center; gap:12px; }
+  .back-btn { width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.12); border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+  .back-btn svg { width:18px; height:18px; stroke:#fff; }
+  .header-title { font-size:17px; font-weight:500; color:#fff; flex:1; }
+  .btn-read-all { background:none; border:none; color:rgba(255,255,255,0.7); font-size:12px; font-family:'Noto Sans KR',sans-serif; cursor:pointer; white-space:nowrap; }
+  .btn-read-all:hover { color:#fff; }
+
+  /* 탭 */
+  .tab-row { display:flex; border-top:1px solid rgba(255,255,255,0.1); margin-top:12px; }
+  .tab-btn { flex:1; padding:11px 0; font-size:12px; color:rgba(255,255,255,0.5); background:none; border:none; cursor:pointer; font-family:'Noto Sans KR',sans-serif; border-bottom:2px solid transparent; transition:all 0.2s; }
+  .tab-btn.active { color:#fff; border-bottom-color:#fff; font-weight:500; }
+
+  /* 콘텐츠 */
+  .content { flex:1; overflow-y:auto; padding-bottom:calc(var(--bnav) + 16px); }
+
+  .tab-panel { display:none; }
+  .tab-panel.active { display:block; }
+
+  /* 알림 그룹 */
+  .notif-group { margin-bottom:4px; }
+  .group-label { font-size:10px; font-weight:500; color:var(--tm); text-transform:uppercase; letter-spacing:0.6px; padding:14px 16px 8px; }
+
+  /* 알림 아이템 */
+  .notif-item {
+    background:var(--card); border-bottom:1px solid var(--bd);
+    padding:15px 16px; display:flex; gap:13px; align-items:flex-start;
+    cursor:pointer; transition:background 0.15s; position:relative;
+  }
+  .notif-item:first-child { border-top:1px solid var(--bd); }
+  .notif-item.unread { background:#f8faff; }
+  .notif-item:active { background:var(--bg); }
+
+  /* 읽지 않음 점 */
+  .unread-dot { position:absolute; top:18px; right:16px; width:7px; height:7px; border-radius:50%; background:var(--accent); }
+
+  /* 아이콘 */
+  .notif-icon { width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .notif-icon svg { width:20px; height:20px; }
+  .ni-red    { background:var(--danger-bg); }
+  .ni-amber  { background:var(--warn-bg); }
+  .ni-blue   { background:var(--info-bg); }
+  .ni-green  { background:var(--success-bg); }
+  .ni-gray   { background:#f3f4f6; }
+  .ni-navy   { background:#f0f3f9; }
+
+  .notif-body { flex:1; min-width:0; }
+  .notif-title { font-size:13px; font-weight:500; color:var(--tp); margin-bottom:3px; line-height:1.4; }
+  .notif-item.unread .notif-title { font-weight:700; }
+  .notif-desc  { font-size:11px; color:var(--ts); line-height:1.6; margin-bottom:4px; }
+  .notif-time  { font-size:10px; color:var(--tm); }
+  .notif-tag   { display:inline-block; font-size:10px; background:var(--bg); border:1px solid var(--bd); border-radius:5px; padding:2px 7px; color:var(--tm); margin-bottom:4px; }
+
+  /* 중요 알림 강조 */
+  .notif-item.critical { border-left:3px solid var(--danger); }
+  .notif-item.critical .notif-title { color:var(--danger); }
+
+  /* 빈 상태 */
+  .empty-state { padding:60px 20px; text-align:center; }
+  .empty-icon  { width:64px; height:64px; background:var(--bg); border-radius:50%; margin:0 auto 14px; display:flex; align-items:center; justify-content:center; border:1px solid var(--bd); }
+  .empty-icon svg { width:28px; height:28px; stroke:var(--tm); }
+  .empty-title { font-size:14px; font-weight:500; color:var(--ts); margin-bottom:6px; }
+  .empty-desc  { font-size:12px; color:var(--tm); }
+
+  /* 전체 읽음 처리 완료 토스트 */
+  .toast {
+    position:fixed; bottom:calc(var(--bnav) + 16px); left:50%; transform:translateX(-50%);
+    background:#1a1a2e; color:#fff; font-size:12px; padding:10px 20px; border-radius:20px;
+    white-space:nowrap; z-index:300; opacity:0; transition:opacity 0.3s;
+    font-family:'Noto Sans KR',sans-serif;
+  }
+  .toast.show { opacity:1; }
+
+  /* 하단 네비 */
+  .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;height:var(--bnav);background:var(--card);border-top:1px solid var(--bd);display:flex;z-index:100;}
+  .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-decoration:none;color:var(--tm);cursor:pointer;border:none;background:none;font-family:'Noto Sans KR',sans-serif;}
+  .nav-item.active{color:var(--deep);}
+  .nav-item.active .nav-label{font-weight:600;}
+  .nav-icon{width:22px;height:22px;display:flex;align-items:center;justify-content:center;}
+  .nav-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;}
+  .nav-label{font-size:10px;}
+
+  @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  @media(min-width:421px){ .screen{box-shadow:0 0 40px rgba(0,0,0,0.1);} }
+</style>
+</head>
+<body>
+<div class="screen">
+
+  <div class="top-header">
+    <div class="header-row">
+      <button class="back-btn" onclick="history.back()">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="header-title">알림 <span id="unreadBadge" style="font-size:12px; background:#ef4444; color:#fff; border-radius:10px; padding:1px 7px; margin-left:4px; vertical-align:middle;"></span></span>
+      <button class="btn-read-all" onclick="markAllRead()">모두 읽음</button>
+    </div>
+    <div class="tab-row">
+      <button class="tab-btn active" id="tabAll"  onclick="switchTab('all')">전체</button>
+      <button class="tab-btn"        id="tabAlert" onclick="switchTab('alert')">경고</button>
+      <button class="tab-btn"        id="tabCase"  onclick="switchTab('case')">사건</button>
+      <button class="tab-btn"        id="tabSys"   onclick="switchTab('sys')">시스템</button>
+    </div>
+  </div>
+
+  <div class="content" id="contentArea"></div>
+
+  <nav class="bottom-nav">
+    <a href="main" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><span class="nav-label">홈</span></a>
+    <a href="myCase" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><span class="nav-label">사건</span></a>
+    <a href="../askAI" class="nav-item"><div class="nav-icon"><svg width="22" height="22" viewBox="0 0 86 86" fill="none"><path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="43" cy="40" r="11" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="43" cy="40" r="5" fill="currentColor"/><circle cx="43" cy="40" r="2.5" fill="white"/><circle cx="43" cy="22" r="2.8" fill="currentColor"/><circle cx="43" cy="58" r="2.8" fill="currentColor"/><circle cx="28" cy="40" r="2.8" fill="currentColor"/><circle cx="58" cy="40" r="2.8" fill="currentColor"/></svg></div><span class="nav-label">AI</span></a>
+    <a href="board" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><span class="nav-label">커뮤니티</span></a>
+    <a href="mypage" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><span class="nav-label">마이페이지</span></a>
+  </nav>
+</div>
+
+<div class="toast" id="toast">모든 알림을 읽음 처리했습니다</div>
+
+<script>
+// ── DB 연동 알림 ──────────────────────────────────────────────────
+var NOTIFS = [];
+var currentTab = 'all';
+
+// 탭 전환: all / case / sys
+// 헤더 탭 버튼 id: tabAll, tabAlert(=경고→sys), tabCase, tabSys
+function switchTab(tab) {
+  currentTab = tab;
+  ['all','alert','case','sys'].forEach(function(t) {
+    document.getElementById('tab'+(t==='all'?'All':t==='alert'?'Alert':t==='case'?'Case':'Sys'))
+      .classList.toggle('active', t===tab);
+  });
+  loadNotifs();
+}
+
+// ── 알림 목록 로드 ────────────────────────────────────────────────
+function loadNotifs() {
+  document.getElementById('contentArea').innerHTML =
+    '<div style="text-align:center;padding:48px 0;color:var(--tm);font-size:13px;">불러오는 중...</div>';
+
+  // 탭 'alert'는 서버에서 sys 타입으로 처리 (보안 알림)
+  var typeParam = currentTab; // 'alert' 그대로 서버로 전달 (서버에서 sys+critical case 처리)
+
+  fetch('../notifApi?action=list&type=' + typeParam)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        document.getElementById('contentArea').innerHTML =
+          '<div style="text-align:center;padding:48px 0;color:var(--danger);font-size:13px;">' + esc(data.error) + '</div>';
+        return;
+      }
+      NOTIFS = Array.isArray(data) ? data : [];
+      render();
+    })
+    .catch(function() {
+      document.getElementById('contentArea').innerHTML =
+        '<div style="text-align:center;padding:48px 0;color:var(--danger);font-size:13px;">알림을 불러오지 못했습니다.</div>';
+    });
+}
+
+// ── 렌더링 ────────────────────────────────────────────────────────
+function render() {
+  if (!NOTIFS.length) {
+    document.getElementById('contentArea').innerHTML =
+      '<div class="empty-state">' +
+        '<div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>' +
+        '<div class="empty-title">알림이 없습니다</div>' +
+        '<div class="empty-desc">새로운 알림이 오면 여기에 표시됩니다</div>' +
+      '</div>';
+    updateBadge();
+    return;
+  }
+
+  // 오늘(24시간 이내 timeLabel) / 이전 그룹 분리
+  var todayKeywords = ['방금 전', '분 전', '시간 전', '보안 알림'];
+  var todayItems = NOTIFS.filter(function(n) {
+    return todayKeywords.some(function(k) { return (n.timeLabel || '').indexOf(k) >= 0; });
+  });
+  var pastItems = NOTIFS.filter(function(n) {
+    return !todayKeywords.some(function(k) { return (n.timeLabel || '').indexOf(k) >= 0; });
+  });
+
+  var html = '';
+  if (todayItems.length) {
+    html += '<div class="notif-group"><div class="group-label">오늘</div>';
+    todayItems.forEach(function(n) { html += renderItem(n); });
+    html += '</div>';
+  }
+  if (pastItems.length) {
+    html += '<div class="notif-group"><div class="group-label">이전</div>';
+    pastItems.forEach(function(n) { html += renderItem(n); });
+    html += '</div>';
+  }
+
+  document.getElementById('contentArea').innerHTML = html;
+  updateBadge();
+}
+
+// ── 아이템 HTML 생성 ──────────────────────────────────────────────
+function getIconInfo(tag, isCritical) {
+  switch (tag) {
+    case '경고':
+      return {
+        cls: 'ni-red',
+        svg: '<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+      };
+    case '보안':
+      return {
+        cls: isCritical ? 'ni-red' : 'ni-gray',
+        svg: '<svg viewBox="0 0 24 24" fill="none" stroke="'+(isCritical?'#dc2626':'#6b7280')+'" stroke-width="1.8" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
+      };
+    case '새 사건':
+      return {
+        cls: 'ni-blue',
+        svg: '<svg viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'
+      };
+    case '조서':
+      return {
+        cls: 'ni-blue',
+        svg: '<svg viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>'
+      };
+    default:
+      return {
+        cls: 'ni-navy',
+        svg: '<svg viewBox="0 0 24 24" fill="none" stroke="#1a2744" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+      };
+  }
+}
+
+function renderItem(n) {
+  var icon = getIconInfo(n.tag, n.isCritical);
+  return '<div class="notif-item' + (n.isUnread ? ' unread' : '') + (n.isCritical ? ' critical' : '') +
+    '" data-id="' + n.notifId + '" onclick="readItem(' + n.notifId + ',\'' + escUrl(n.link) + '\')">' +
+    (n.isUnread ? '<div class="unread-dot"></div>' : '') +
+    '<div class="notif-icon ' + icon.cls + '">' + icon.svg + '</div>' +
+    '<div class="notif-body">' +
+      '<div class="notif-tag">' + esc(n.tag) + '</div>' +
+      '<div class="notif-title">' + esc(n.title) + '</div>' +
+      '<div class="notif-desc">' + esc(n.description) + '</div>' +
+      '<div class="notif-time">' + esc(n.timeLabel) + '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+// ── 읽음 처리 ─────────────────────────────────────────────────────
+function readItem(id, link) {
+  // 1. 서버에 읽음 처리 요청
+  var params = new URLSearchParams();
+  params.append('action', 'markRead');
+  params.append('notifId', id);
+  fetch('../notifApi', { method: 'POST', body: params });
+
+  // 2. NOTIFS 배열 업데이트
+  var n = NOTIFS.find(function(x) { return x.notifId === id; });
+  if (n) n.isUnread = false;
+
+  // 3. DOM 즉시 업데이트 (해당 아이템만)
+  var items = document.querySelectorAll('.notif-item');
+  items.forEach(function(el) {
+    if (el.getAttribute('data-id') === String(id)) {
+      el.classList.remove('unread');
+      var dot = el.querySelector('.unread-dot');
+      if (dot) dot.remove();
+      var title = el.querySelector('.notif-title');
+      if (title) title.style.fontWeight = '500';
+    }
+  });
+
+  // 4. 헤더 뱃지 갱신
+  updateBadge();
+
+  // 5. 링크 이동 (caseRelationMap → boardView 자동 변환)
+  if (link) {
+    var dest = link.replace(
+      /caseRelationMap(\?caseId=)/,
+      'boardView$1'
+    );
+    setTimeout(function() { location.href = dest; }, 120);
+  }
+}
+
+// ── 전체 읽음 ─────────────────────────────────────────────────────
+function markAllRead() {
+  var params = new URLSearchParams();
+  params.append('action', 'markAllRead');
+  fetch('../notifApi', { method: 'POST', body: params });
+
+  NOTIFS.forEach(function(n) { n.isUnread = false; });
+  render();
+
+  var t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 2000);
+}
+
+// ── 뱃지 갱신 ────────────────────────────────────────────────────
+function updateBadge() {
+  var cnt = NOTIFS.filter(function(n) { return n.isUnread; }).length;
+  var el = document.getElementById('unreadBadge');
+  el.textContent = cnt > 0 ? cnt : '';
+  el.style.display = cnt > 0 ? '' : 'none';
+}
+
+// ── XSS 방지 유틸 ────────────────────────────────────────────────
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escUrl(s) {
+  return String(s || '').replace(/'/g, "\\'");
+}
+
+// ── 초기 로드 ────────────────────────────────────────────────────
+loadNotifs();
+</script>
+</body>
+</html>

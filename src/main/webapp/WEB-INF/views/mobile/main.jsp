@@ -1,0 +1,547 @@
+﻿<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>POL-MATE | 대시보드</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  :root{
+    --deep:#0d1a33; --navy:#1a2744; --mid:#243358;
+    --gold:#f0c040; --gold2:#e6b830;
+    --blue:#4a7cdc; --danger:#dc2626;
+    --tp:#1a1a2e; --ts:#6b7280; --tm:#9ca3af;
+    --bg:#f0f2f8; --card:#ffffff; --bd:#e2e5ee;
+    --success:#16a34a; --success-bg:#f0fdf4; --success-bd:#bbf7d0;
+    --warn-bg:#fffbeb; --warn-text:#92400e;
+    --danger-bg:#fef2f2; --danger-bd:#fecaca;
+    --info-bg:#eff6ff; --info-text:#1e40af;
+    --bnav:64px;
+  }
+  html,body{height:100%;font-family:'Noto Sans KR',sans-serif;background:var(--bg);overflow-x:hidden;}
+
+  .screen{
+    width:100%;max-width:420px;min-height:100vh;
+    display:flex;flex-direction:column;margin:0 auto;background:var(--bg);
+    position:relative;
+  }
+
+  /* ══ TOP HEADER ══ */
+  .top-header{
+    background:var(--deep);
+    padding:52px 20px 0;
+    position:sticky;top:0;z-index:10;
+  }
+
+  .header-main{
+    display:flex;justify-content:space-between;align-items:center;
+    padding-bottom:16px;
+  }
+
+  .greeting-sub{font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:2px;}
+  .greeting-name{
+    font-family:'Space Grotesk','Noto Sans KR',sans-serif;
+    font-size:18px;font-weight:700;color:#fff;letter-spacing:0.3px;
+  }
+
+  .header-icons{display:flex;gap:8px;align-items:center;}
+
+  .icon-btn{
+    width:36px;height:36px;border-radius:50%;
+    background:rgba(255,255,255,0.08);
+    border:1px solid rgba(255,255,255,0.12);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    position:relative;transition:background 0.15s;
+  }
+  .icon-btn:active{background:rgba(255,255,255,0.18);}
+  .icon-btn svg{width:17px;height:17px;stroke:#fff;}
+
+  .notif-dot{
+    position:absolute;top:5px;right:5px;
+    width:7px;height:7px;border-radius:50%;
+    background:#ef4444;border:1.5px solid var(--deep);
+  }
+
+  .avatar-btn{
+    width:36px;height:36px;border-radius:50%;cursor:pointer;
+    overflow:hidden;border:1.5px solid rgba(255,255,255,0.25);
+    background:var(--navy);
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  /* ══ 헤더 하단 골드라인 ══ */
+  .header-gold-line{
+    height:1.5px;
+    background:linear-gradient(90deg,transparent,var(--gold) 30%,var(--gold) 70%,transparent);
+    opacity:0.25;margin:0 -20px;
+  }
+
+  /* ══ 경고 배너 ══ */
+  .alert-strip{
+    background:var(--deep);padding:10px 20px 14px;
+  }
+  .alert-banner{
+    background:rgba(240,192,64,0.1);
+    border:1px solid rgba(240,192,64,0.25);
+    border-radius:12px;padding:10px 14px;
+    display:flex;gap:10px;align-items:flex-start;cursor:pointer;
+    transition:background 0.15s;
+  }
+  .alert-banner:active{background:rgba(240,192,64,0.18);}
+  .alert-pulse{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--gold);margin-top:3px;flex-shrink:0;
+    animation:pulse 2s infinite;
+  }
+  .alert-text{font-size:12px;color:rgba(255,255,255,0.85);line-height:1.6;}
+  .alert-text strong{color:var(--gold);}
+
+  /* ══ 스크롤 콘텐츠 ══ */
+  .content{flex:1;overflow-y:auto;padding-bottom:calc(var(--bnav) + 16px);}
+
+  /* ══ 화이트 카드 브릿지 ══ */
+  .wave-bridge{background:var(--deep);padding:0;}
+  .wave-card{
+    background:var(--bg);border-radius:22px 22px 0 0;
+    padding:22px 16px 0;
+    border-top:1px solid var(--bd);
+  }
+
+  /* ══ 섹션 라벨 ══ */
+  .sec-label{
+    font-size:10px;font-weight:500;color:var(--tm);
+    text-transform:uppercase;letter-spacing:0.8px;
+    margin-bottom:10px;display:flex;align-items:center;gap:8px;
+  }
+  .sec-label::after{content:'';flex:1;height:1px;background:var(--bd);}
+
+  /* ══ 메뉴 그리드 ══ */
+  .menu-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:20px;}
+  .menu-row{display:grid;gap:10px;}
+  .menu-row.row3{grid-template-columns:1fr 1fr 1fr;}
+  .menu-row.row2{grid-template-columns:1fr 1fr;}
+
+  .menu-card{
+    background:var(--card);border-radius:16px;padding:16px 14px;
+    cursor:pointer;text-decoration:none;display:block;
+    border:1px solid var(--bd);
+    transition:transform 0.15s,border-color 0.15s;
+    animation:fadeUp 0.35s ease both;
+  }
+  .menu-card:nth-child(1){animation-delay:0.04s;}
+  .menu-card:nth-child(2){animation-delay:0.08s;}
+  .menu-card:nth-child(3){animation-delay:0.12s;}
+  .menu-card:nth-child(4){animation-delay:0.14s;}
+  .menu-card:nth-child(5){animation-delay:0.18s;}
+  .menu-card:active{transform:scale(0.96);}
+  .menu-card:hover{border-color:rgba(13,26,51,0.2);}
+
+  .menu-icon-wrap{
+    width:40px;height:40px;border-radius:12px;
+    margin-bottom:10px;display:flex;align-items:center;justify-content:center;
+  }
+  .menu-icon-wrap svg{width:20px;height:20px;}
+
+  .mi-navy  {background:#e8edf5;}
+  .mi-green {background:var(--success-bg);}
+  .mi-amber {background:#fffbeb;}
+  .mi-purple{background:#f5f3ff;}
+
+  .menu-name{font-size:13px;font-weight:500;margin-bottom:3px;line-height:1.3;}
+  .menu-desc{font-size:10px;color:var(--tm);}
+  .mn-navy  {color:var(--deep);}
+  .mn-green {color:#166534;}
+  .mn-amber {color:#92400e;}
+  .mn-purple{color:#5b21b6;}
+  .mi-teal  {background:#f0fdfa;}
+  .mn-teal  {color:#0f766e;}
+  .mi-red   {background:#fef2f2;}
+  .mn-red   {color:#991b1b;}
+
+  /* ══ 통계 ══ */
+  .stats-row{
+    display:grid;grid-template-columns:repeat(3,1fr);
+    gap:10px;margin-bottom:20px;padding:0 16px;
+  }
+  .stat-card{
+    background:var(--card);border-radius:14px;
+    padding:14px 10px;text-align:center;border:1px solid var(--bd);
+  }
+  .stat-val{
+    font-family:'Space Grotesk','Noto Sans KR',sans-serif;
+    font-size:24px;font-weight:700;color:var(--deep);
+  }
+  .stat-val.red{color:var(--danger);}
+  .stat-lbl{font-size:10px;color:var(--tm);margin-top:3px;}
+
+  /* ══ 최근 사건 ══ */
+  .sec-pad{padding:0 16px;}
+
+  .case-list{display:flex;flex-direction:column;gap:8px;margin-bottom:8px;}
+
+  .case-item{
+    background:var(--card);border-radius:14px;
+    padding:13px 14px;display:flex;
+    justify-content:space-between;align-items:center;
+    border:1px solid var(--bd);cursor:pointer;text-decoration:none;
+    transition:border-color 0.15s,background 0.15s;
+    animation:fadeUp 0.35s ease both;
+  }
+  .case-item:hover{border-color:rgba(13,26,51,0.2);}
+  .case-item:active{background:var(--bg);}
+  .case-item.urgent{border-left:3px solid var(--danger);}
+
+  .case-title{font-size:13px;font-weight:500;color:var(--tp);margin-bottom:3px;}
+  .case-meta {font-size:10px;color:var(--tm);}
+
+  .badge{font-size:10px;font-weight:500;padding:4px 10px;border-radius:20px;white-space:nowrap;flex-shrink:0;}
+  .bw{background:var(--warn-bg);color:var(--warn-text);}
+  .bo{background:var(--success-bg);color:var(--success);}
+  .bi{background:var(--info-bg);color:var(--info-text);}
+  .bd2{background:#f3f4f6;color:var(--tm);}
+  .br{background:var(--danger-bg);color:var(--danger);}
+
+  /* ══ BOTTOM NAV ══ */
+  .bottom-nav{
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:420px;height:64px;
+  background:#ffffff;border-top:1px solid #e2e5ee;
+  display:flex;z-index:100;
+}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-decoration:none;color:#9ca3af;cursor:pointer;border:none;background:none;font-family:'Noto Sans KR',sans-serif;}
+.nav-item.active{color:#0d1a33;}
+.nav-item.active .nav-label{font-weight:600;}
+.nav-icon{width:22px;height:22px;display:flex;align-items:center;justify-content:center;}
+.nav-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;}
+.nav-label{font-size:10px;}
+
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes pulse {0%,100%{opacity:1}50%{opacity:0.35}}
+
+  @media(min-width:421px){.screen{box-shadow:0 0 48px rgba(0,0,0,0.12);}}
+</style>
+</head>
+<body>
+
+<%
+  String userName = (String) session.getAttribute("userName");
+  String loginUser = (String) session.getAttribute("loginUser");
+  if (userName == null) userName = (loginUser != null ? loginUser : "");
+%>
+
+<div class="screen">
+
+  <!-- ══ HEADER ══ -->
+  <div class="top-header">
+    <div class="header-main">
+      <div>
+        <div class="greeting-sub">안녕하세요,</div>
+        <div class="greeting-name"><%= userName %> 수사관</div>
+      </div>
+      <div class="header-icons">
+        <button class="icon-btn" id="bellBtn" onclick="location.href='notifications'">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <span class="notif-dot" id="bellDot" style="display:none;"></span>
+        </button>
+        <a href="mypage" class="avatar-btn">
+          <svg width="28" height="28" viewBox="0 0 86 86" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="#162240"/>
+            <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="#f0c040" stroke-width="2"/>
+            <circle cx="43" cy="40" r="15" fill="none" stroke="#4a7cdc" stroke-width="1.3" stroke-dasharray="4 2.5" opacity="0.6"/>
+            <circle cx="43" cy="40" r="11" fill="#0d1a33"/>
+            <circle cx="43" cy="40" r="6" fill="#4a7cdc" opacity="0.85"/>
+            <circle cx="43" cy="40" r="3" fill="#ffffff"/>
+            <circle cx="43" cy="22" r="2" fill="#f0c040"/>
+            <circle cx="43" cy="58" r="2" fill="#f0c040"/>
+            <circle cx="28" cy="40" r="2" fill="#f0c040"/>
+            <circle cx="58" cy="40" r="2" fill="#f0c040"/>
+            <polygon points="43,8 44.4,12 48.5,12 45.2,14.5 46.6,18.5 43,16 39.4,18.5 40.8,14.5 37.5,12 41.6,12" fill="#f0c040"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+    <div class="header-gold-line"></div>
+  </div>
+
+  <!-- 경고 배너 -->
+  <div class="alert-strip" id="alertStrip"></div>
+
+  <!-- ══ 콘텐츠 ══ -->
+  <div class="content">
+    <div class="wave-bridge">
+      <div class="wave-card">
+
+        <!-- 주요 기능 -->
+        <div class="sec-label">주요 기능</div>
+        <div class="menu-grid">
+
+          <!-- 1행: 조서작성 · AI수사보조 · 사건관리 (3열) -->
+          <div class="menu-row row3">
+
+            <a href="writeTranscript" class="menu-card">
+              <div class="menu-icon-wrap mi-navy">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#1a2744" stroke-width="1.8" stroke-linecap="round">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+              </div>
+              <div class="menu-name mn-navy">조서 작성</div>
+              <div class="menu-desc">STT · 모순</div>
+            </a>
+
+            <a href="../askAI" class="menu-card">
+              <div class="menu-icon-wrap mi-amber">
+                <svg width="20" height="20" viewBox="0 0 86 86" fill="none">
+                  <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="#92400e" opacity="0.15"/>
+                  <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="#92400e" stroke-width="4"/>
+                  <circle cx="43" cy="40" r="6" fill="#b45309" opacity="0.7"/>
+                  <circle cx="43" cy="40" r="3" fill="#92400e"/>
+                  <circle cx="43" cy="22" r="3" fill="#b45309"/>
+                  <circle cx="43" cy="58" r="3" fill="#b45309"/>
+                  <circle cx="28" cy="40" r="3" fill="#b45309"/>
+                  <circle cx="58" cy="40" r="3" fill="#b45309"/>
+                </svg>
+              </div>
+              <div class="menu-name mn-amber">AI 보조</div>
+              <div class="menu-desc">질의응답</div>
+            </a>
+
+            <a href="myCase" class="menu-card">
+              <div class="menu-icon-wrap mi-purple">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#5b21b6" stroke-width="1.8" stroke-linecap="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+              </div>
+              <div class="menu-name mn-purple">사건 관리</div>
+              <div class="menu-desc">이력 · 수정</div>
+            </a>
+
+          </div>
+
+          <!-- 2행: 사건관계망 · 보드조회 · CCTV분석 (3열) -->
+          <div class="menu-row row3">
+
+            <a href="caseRelationMap" class="menu-card">
+              <div class="menu-icon-wrap mi-green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="1.8" stroke-linecap="round">
+                  <circle cx="6" cy="12" r="2.5"/>
+                  <circle cx="18" cy="5" r="2.5"/>
+                  <circle cx="18" cy="19" r="2.5"/>
+                  <line x1="8.4" y1="11.0" x2="15.6" y2="6.5"/>
+                  <line x1="8.4" y1="13.0" x2="15.6" y2="17.5"/>
+                </svg>
+              </div>
+              <div class="menu-name mn-green">사건 관계망</div>
+              <div class="menu-desc">인물 · 관계 시각화</div>
+            </a>
+
+            <a href="boardView" class="menu-card">
+              <div class="menu-icon-wrap mi-teal">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="1.8" stroke-linecap="round">
+                  <circle cx="6"  cy="12" r="2.5"/>
+                  <circle cx="18" cy="5"  r="2.5"/>
+                  <circle cx="18" cy="19" r="2.5"/>
+                  <line x1="8.4" y1="10.9" x2="15.6" y2="6.6"/>
+                  <line x1="8.4" y1="13.1" x2="15.6" y2="17.4"/>
+                </svg>
+              </div>
+              <div class="menu-name mn-teal">보드 조회</div>
+              <div class="menu-desc">사건별 관계망 보드</div>
+            </a>
+
+            <a href="cctvAnalysis" class="menu-card">
+              <div class="menu-icon-wrap mi-red">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#991b1b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M23 7 16 12 23 17V7z"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+              </div>
+              <div class="menu-name mn-red">영상 분석</div>
+              <div class="menu-desc">번호판 탐지</div>
+            </a>
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- 통계 -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-val" id="mainStatActive">—</div>
+        <div class="stat-lbl">진행 사건</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val red" id="mainStatContradiction">—</div>
+        <div class="stat-lbl">모순 탐지</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="mainStatTranscript">—</div>
+        <div class="stat-lbl">작성 조서</div>
+      </div>
+    </div>
+
+    <!-- 최근 사건 -->
+    <div class="sec-pad">
+      <div class="sec-label">최근 사건</div>
+      <div class="case-list" id="recentCaseList">
+        <div style="text-align:center;padding:24px;color:var(--tm);font-size:13px;">불러오는 중...</div>
+      </div>
+    </div>
+
+
+
+  </div><!-- /content -->
+
+  <!-- ══ BOTTOM NAV ══ -->
+  <nav class="bottom-nav">
+  <a href="main" class="nav-item active">
+    <div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+    <span class="nav-label">홈</span>
+  </a>
+  <a href="myCase" class="nav-item">
+    <div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+    <span class="nav-label">사건</span>
+  </a>
+  <a href="../askAI" class="nav-item">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 86 86" fill="none">
+          <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="currentColor" stroke-width="5"/>
+          <circle cx="43" cy="40" r="11" fill="none" stroke="currentColor" stroke-width="3"/>
+          <circle cx="43" cy="40" r="5" fill="currentColor"/>
+          <circle cx="43" cy="40" r="2.5" fill="white"/>
+          <circle cx="43" cy="22" r="2.8" fill="currentColor"/>
+          <circle cx="43" cy="58" r="2.8" fill="currentColor"/>
+          <circle cx="28" cy="40" r="2.8" fill="currentColor"/>
+          <circle cx="58" cy="40" r="2.8" fill="currentColor"/>
+        </svg>
+      </div>
+      <span class="nav-label">AI</span>
+    </a>
+  <a href="board" class="nav-item">
+    <div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+    <span class="nav-label">커뮤니티</span>
+  </a>
+  <a href="mypage" class="nav-item">
+    <div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+    <span class="nav-label">마이페이지</span>
+  </a>
+</nav>
+</div>
+<script>
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── 종 뱃지: 미읽음 알림이 있을 때만 빨간 점 표시 ──────────────
+(function() {
+  fetch('../notifApi?action=unreadCount&_=' + Date.now())
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var dot = document.getElementById('bellDot');
+      if (dot) dot.style.display = (data.count > 0) ? '' : 'none';
+    })
+    .catch(function() {
+      var dot = document.getElementById('bellDot');
+      if (dot) dot.style.display = 'none';
+    });
+})();
+
+// ── 사건 목록: 진행 사건 수, 경고 배너, 최근 사건 ──────────────
+(function() {
+  fetch('../caseApi?action=caseList', {credentials: 'same-origin'})
+    .then(function(r) { return r.json(); })
+    .then(function(cases) {
+      if (!Array.isArray(cases)) return;
+
+      // 진행 사건 수
+      var active = cases.filter(function(c) { return c.status !== '완료'; }).length;
+      var elActive = document.getElementById('mainStatActive');
+      if (elActive) elActive.textContent = active;
+
+      // 경고 배너: 모순탐지 상태 사건
+      var alertCase = cases.find(function(c) { return c.status === '모순탐지'; });
+      var strip = document.getElementById('alertStrip');
+      if (strip && alertCase) {
+        var cid = String(alertCase.id || alertCase.caseId || '');
+        strip.innerHTML = '<div class="alert-banner" onclick="location.href=\'myCase\'">' +
+          '<div class="alert-pulse"></div>' +
+          '<div class="alert-text"><strong>사건 ' + escHtml(cid) + '</strong> — 진술 모순이 탐지되었습니다. 검토가 필요합니다.</div>' +
+          '</div>';
+      }
+
+      // 최근 사건 3건
+      var delays = ['0.05s','0.1s','0.15s'];
+      var recent = cases.slice(0, 3);
+      var list = document.getElementById('recentCaseList');
+      if (!list) return;
+      if (!recent.length) {
+        list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--tm);font-size:13px;">배정된 사건이 없습니다.</div>';
+        return;
+      }
+      list.innerHTML = '';
+      recent.forEach(function(c, i) {
+        var cid = String(c.id || c.caseId || '');
+        var cname = String(c.name || c.caseName || '');
+        var status = String(c.status || '');
+        var date = String(c.date || c.updatedAt || '').substring(0, 10);
+        var isUrgent = status === '모순탐지';
+        var badgeCls = status === '진행중' ? 'bo' : status === '완료' ? 'bi' : isUrgent ? 'bw bd2' : 'bd2';
+        var a = document.createElement('a');
+        a.href = 'myCase';
+        a.className = 'case-item' + (isUrgent ? ' urgent' : '');
+        a.style.animationDelay = delays[i] || '0.15s';
+        a.innerHTML = '<div><div class="case-title">' + escHtml(cid) + ' ' + escHtml(cname) + '</div><div class="case-meta">' + escHtml(date) + '</div></div><span class="badge ' + badgeCls + '">' + escHtml(status) + '</span>';
+        list.appendChild(a);
+      });
+    })
+    .catch(function() {
+      var list = document.getElementById('recentCaseList');
+      if (list) list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--tm);font-size:13px;">사건 목록을 불러오지 못했습니다.</div>';
+    });
+})();
+
+// ── 통계: 모순 탐지 수, 작성 조서 수 ──────────────────────────────
+(function() {
+  fetch('../contradictionApi?action=list&_=' + Date.now())
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var el = document.getElementById('mainStatContradiction');
+      if (!el || !Array.isArray(data)) return;
+      el.textContent = data.filter(function(d) { return d.hasContradiction; }).length;
+    })
+    .catch(function() {});
+
+  fetch('../mypage?action=stats', {credentials: 'same-origin'})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var el = document.getElementById('mainStatTranscript');
+      if (el && data.totalTranscripts != null) el.textContent = data.totalTranscripts;
+    })
+    .catch(function() {});
+})();
+
+// BroadcastChannel: contradictionList 페이지에서 추가/삭제 시 실시간 업데이트
+(function() {
+  try {
+    var ch = new BroadcastChannel('contradictionCount');
+    ch.onmessage = function(e) {
+      if (e.data && e.data.type === 'update') {
+        var el = document.getElementById('mainStatContradiction');
+        if (el) el.textContent = e.data.count;
+      }
+    };
+  } catch(e) {}
+})();
+</script>
+</body>
+</html>

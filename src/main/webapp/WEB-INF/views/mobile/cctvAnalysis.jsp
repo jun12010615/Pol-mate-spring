@@ -1,0 +1,577 @@
+﻿<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%
+    String loginUser = (String) session.getAttribute("loginUser");
+    String userName  = (String) session.getAttribute("userName");
+    String userInitial = (userName != null && userName.length() > 0) ? String.valueOf(userName.charAt(0)) : "경";
+
+    String polMateServBaseUrl = "http://113.198.238.111:5001";
+    try {
+        java.util.Properties props = new java.util.Properties();
+        java.io.InputStream is = application.getResourceAsStream("/WEB-INF/config.properties");
+        if (is != null) {
+            props.load(is);
+            String u = props.getProperty("POL_MATE_SERV_BASE_URL", "").trim();
+            if (!u.isEmpty()) {
+                while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+                polMateServBaseUrl = u;
+            }
+            is.close();
+        }
+    } catch (Exception ignored) {}
+    String safePolMateServBaseUrl = polMateServBaseUrl.replace("\\", "\\\\").replace("'", "\\'");
+%>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>POL-MATE | 영상 분석</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  :root {
+    --deep:#0d1a33; --navy:#1a2744;
+    --accent:#4a7cdc; --danger:#dc2626;
+    --tp:#1a1a2e; --ts:#6b7280; --tm:#9ca3af;
+    --bg:#f0f2f8; --card:#ffffff; --bd:#e2e5ee;
+    --success:#16a34a; --success-bg:#f0fdf4;
+    --bnav:64px;
+  }
+  html,body { height:100%; font-family:'Noto Sans KR',sans-serif; background:var(--bg); overflow-x:hidden; }
+  .screen { width:100%; max-width:420px; min-height:100vh; margin:0 auto; background:var(--bg); display:flex; flex-direction:column; }
+
+  /* ── 헤더 ── */
+  .top-header {
+    background:var(--deep); padding:52px 20px 16px;
+    display:flex; align-items:center; gap:12px; flex-shrink:0;
+  }
+  .back-btn {
+    width:36px; height:36px; border-radius:50%;
+    background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.14);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+  }
+  .back-btn svg { width:18px; height:18px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; }
+  .header-title { font-size:16px; font-weight:600; color:#fff; flex:1; }
+  .header-badge { font-size:10px; background:rgba(74,124,220,0.35); color:#93c5fd; border-radius:6px; padding:3px 9px; font-weight:500; }
+
+  /* ── 콘텐츠 ── */
+  .content { flex:1; overflow-y:auto; padding:16px 16px calc(var(--bnav) + 24px); display:flex; flex-direction:column; gap:14px; }
+
+  /* ── 카드 ── */
+  .card { background:var(--card); border-radius:16px; border:1px solid var(--bd); padding:16px; }
+  .card-title { font-size:13px; font-weight:600; color:var(--navy); margin-bottom:13px; display:flex; align-items:center; gap:7px; }
+  .card-title svg { width:15px; height:15px; stroke:var(--navy); fill:none; stroke-width:2; stroke-linecap:round; flex-shrink:0; }
+  .card-title .ct-right { margin-left:auto; font-size:10px; font-weight:400; color:var(--tm); }
+
+  /* ── 번호판 입력 ── */
+  .plate-input-wrap { position:relative; }
+  .plate-input {
+    width:100%; padding:13px 40px 13px 14px;
+    border:1.5px solid var(--bd); border-radius:11px;
+    font-size:16px; font-family:'Space Grotesk','Noto Sans KR',sans-serif;
+    font-weight:700; letter-spacing:3px; outline:none;
+    color:var(--tp); background:#f8faff; text-transform:uppercase;
+    transition:border-color 0.15s, background 0.15s;
+  }
+  .plate-input:focus { border-color:var(--accent); background:#fff; }
+  .plate-input::placeholder { color:var(--tm); letter-spacing:0.5px; font-weight:400; font-size:12px; }
+  .plate-clear {
+    position:absolute; right:11px; top:50%; transform:translateY(-50%);
+    width:20px; height:20px; border-radius:50%; background:var(--tm);
+    border:none; cursor:pointer; align-items:center; justify-content:center; display:none;
+  }
+  .plate-clear svg { width:10px; height:10px; stroke:#fff; fill:none; stroke-width:2.5; stroke-linecap:round; }
+  .plate-hint { font-size:11px; color:var(--tm); margin-top:6px; line-height:1.6; }
+  .plate-hint strong { color:var(--ts); }
+
+  /* ── 영상 목록 ── */
+  .video-list { display:flex; flex-direction:column; gap:8px; }
+
+  /* ── 업로드 존 ── */
+  .upload-zone {
+    border:2px dashed var(--bd); border-radius:12px; padding:18px 16px;
+    text-align:center; cursor:pointer; transition:all 0.2s; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; gap:5px; margin-top:8px;
+  }
+  .upload-zone:hover { border-color:var(--accent); background:#eff6ff; }
+  .upload-icon-box { width:36px; height:36px; background:var(--navy); border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:2px; }
+  .upload-icon-box svg { width:18px; height:18px; stroke:#fff; fill:none; stroke-width:1.8; stroke-linecap:round; }
+  .upload-text { font-size:13px; font-weight:500; color:var(--tp); }
+  .upload-sub  { font-size:11px; color:var(--tm); }
+  #videoInput  { display:none; }
+
+  /* ── 영상 아이템 ── */
+  .video-item {
+    display:flex; align-items:center; gap:10px;
+    background:#f8faff; border:1px solid var(--bd); border-radius:12px;
+    padding:11px 12px; animation:fadeUp 0.22s ease both;
+    transition:border-color 0.2s, background 0.2s;
+  }
+  .video-item.analyzing { border-color:var(--accent); background:#eff6ff; }
+  .video-item.done      { border-color:var(--success); background:var(--success-bg); }
+  .video-item.vierror   { border-color:var(--danger);  background:#fef2f2; }
+
+  .vi-thumb {
+    width:42px; height:42px; border-radius:9px; background:var(--bd);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden;
+  }
+  .vi-thumb svg { width:18px; height:18px; stroke:var(--ts); fill:none; stroke-width:1.8; stroke-linecap:round; }
+  .vi-thumb img { width:42px; height:42px; object-fit:cover; border-radius:9px; }
+
+  .vi-info { flex:1; min-width:0; }
+  .vi-name { font-size:12px; font-weight:500; color:var(--tp); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .vi-size { font-size:10px; color:var(--tm); margin-top:1px; }
+  .vi-status { font-size:10px; margin-top:3px; }
+  .vi-status.idle      { color:var(--tm); }
+  .vi-status.analyzing { color:var(--accent); }
+  .vi-status.done      { color:var(--success); font-weight:500; }
+  .vi-status.vierror   { color:var(--danger); }
+
+  .vi-del {
+    width:26px; height:26px; border-radius:50%; background:var(--bd);
+    border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .vi-del svg { width:12px; height:12px; stroke:var(--ts); fill:none; stroke-width:2.5; stroke-linecap:round; }
+
+  .vi-progress { height:4px; background:var(--bd); border-radius:2px; margin-top:5px; overflow:hidden; display:none; }
+  .vi-progress.show { display:block; }
+  .vi-progress-fill { height:100%; background:var(--accent); border-radius:2px; transition:width 0.4s; width:0%; }
+
+  /* ── 분석 버튼 ── */
+  .btn-analyze {
+    width:100%; padding:14px; background:var(--navy); color:#fff; border:none;
+    border-radius:13px; font-size:14px; font-weight:500; font-family:'Noto Sans KR',sans-serif;
+    cursor:pointer; transition:opacity 0.15s; display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn-analyze:active { opacity:0.85; }
+  .btn-analyze:disabled { opacity:0.4; cursor:not-allowed; }
+  .btn-analyze svg { width:16px; height:16px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; }
+
+  /* ── 전체 진행 ── */
+  .global-progress { display:none; background:var(--card); border:1px solid var(--bd); border-radius:14px; padding:14px 16px; }
+  .global-progress.show { display:block; }
+  .gp-label { font-size:12px; color:var(--ts); margin-bottom:8px; display:flex; justify-content:space-between; }
+  .gp-label span { font-weight:600; color:var(--tp); }
+  .gp-bar-bg { height:6px; background:var(--bd); border-radius:3px; overflow:hidden; }
+  .gp-bar-fill { height:100%; background:var(--accent); border-radius:3px; transition:width 0.4s; width:0%; }
+
+  /* ── 결과 ── */
+  .result-section { display:none; flex-direction:column; gap:10px; }
+  .result-section.show { display:flex; }
+
+  .result-summary { background:var(--navy); border-radius:13px; padding:13px 15px; display:flex; align-items:center; gap:10px; }
+  .result-summary svg { width:16px; height:16px; stroke:#fff; fill:none; stroke-width:2; flex-shrink:0; }
+  .rs-text { font-size:12px; color:#e2e8f0; line-height:1.6; }
+  .rs-text strong { color:#fff; }
+
+  .result-group { background:var(--card); border:1px solid var(--bd); border-radius:14px; overflow:hidden; }
+  .rg-header {
+    padding:11px 14px; background:var(--bg); border-bottom:1px solid var(--bd);
+    display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; color:var(--navy);
+  }
+  .rg-header svg { width:13px; height:13px; stroke:var(--navy); fill:none; stroke-width:2; stroke-linecap:round; flex-shrink:0; }
+  .rg-fname { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rg-count { font-size:10px; font-weight:500; background:var(--accent); color:#fff; border-radius:10px; padding:2px 8px; white-space:nowrap; flex-shrink:0; }
+  .rg-count.zero { background:var(--bd); color:var(--tm); }
+
+  .result-item {
+    display:flex; align-items:center; gap:12px;
+    padding:12px 14px; border-bottom:1px solid var(--bd); animation:fadeUp 0.22s ease both;
+  }
+  .result-item:last-child { border-bottom:none; }
+
+  .ri-time-box {
+    background:var(--deep); border-radius:8px; padding:6px 10px;
+    text-align:center; flex-shrink:0; min-width:54px;
+  }
+  .ri-time { font-family:'Space Grotesk',sans-serif; font-size:13px; font-weight:700; color:#fff; letter-spacing:0.5px; }
+  .ri-time-lbl { font-size:9px; color:rgba(255,255,255,0.45); margin-top:1px; }
+
+  .ri-plate-wrap { flex:1; min-width:0; }
+  .ri-plate {
+    display:inline-block;
+    font-family:'Space Grotesk','Noto Sans KR',sans-serif;
+    font-size:15px; font-weight:700; letter-spacing:2.5px;
+    color:var(--deep); background:#fffbeb;
+    border:1.5px solid #f0c040; border-radius:6px; padding:3px 10px; margin-bottom:3px;
+  }
+  .ri-match { font-size:10px; font-weight:600; color:var(--success); margin-left:4px; }
+  .ri-conf  { font-size:10px; color:var(--tm); }
+
+  .ri-thumb { width:52px; height:36px; border-radius:7px; object-fit:cover; background:var(--bd); flex-shrink:0; border:1px solid var(--bd); }
+
+  .result-empty { text-align:center; padding:22px 0; font-size:13px; color:var(--tm); }
+
+  /* ── 바텀 네비 ── */
+  .bottom-nav { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:420px; height:var(--bnav); background:var(--card); border-top:1px solid var(--bd); display:flex; z-index:100; }
+  .nav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; text-decoration:none; color:var(--tm); cursor:pointer; border:none; background:none; font-family:'Noto Sans KR',sans-serif; }
+  .nav-item.active { color:var(--deep); }
+  .nav-item.active .nav-label { font-weight:600; }
+  .nav-icon { width:22px; height:22px; display:flex; align-items:center; justify-content:center; }
+  .nav-icon svg { width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; }
+  .nav-label { font-size:10px; }
+
+  @keyframes fadeUp { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes spin   { to{transform:rotate(360deg)} }
+  .spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin 0.7s linear infinite; }
+  @media(min-width:421px){ .screen{box-shadow:0 0 40px rgba(0,0,0,0.1);} }
+</style>
+</head>
+<body>
+<div class="screen">
+
+  <!-- 헤더 -->
+  <div class="top-header">
+    <button class="back-btn" onclick="history.back()">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="header-title">영상 분석</div>
+    <span class="header-badge">번호판 탐지</span>
+  </div>
+
+  <div class="content">
+
+    <!-- ① 번호판 검색 조건 -->
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><rect x="1" y="6" width="22" height="12" rx="2"/><line x1="7" y1="10" x2="7" y2="14"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="17" y1="10" x2="17" y2="14"/></svg>
+        번호판 검색 조건
+      </div>
+      <div class="plate-input-wrap">
+        <input type="text" class="plate-input" id="plateInput"
+               placeholder="예: 12가3456  또는  가34  (일부 입력 가능)"
+               maxlength="20" oninput="onPlateInput(this)" autocomplete="off" spellcheck="false">
+        <button class="plate-clear" id="plateClear" onclick="clearPlate()">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="plate-hint">번호판 <strong>일부만</strong> 입력해도 검색됩니다 · 번호판 입력 후 분석이 가능합니다</div>
+    </div>
+
+    <!-- ② 영상 업로드 -->
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        영상 파일
+        <span class="ct-right" id="videoCount">0개 선택됨</span>
+      </div>
+      <div class="video-list" id="videoList"></div>
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('videoInput').click()">
+        <div class="upload-icon-box">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div class="upload-text">영상 파일 추가</div>
+        <div class="upload-sub">MP4 · MOV · AVI · MKV · 최대 500MB/개 · 다중 선택 가능</div>
+      </div>
+      <input type="file" id="videoInput" accept="video/*" multiple onchange="onFilesSelect(this)">
+    </div>
+
+    <!-- ③ 분석 시작 -->
+    <button class="btn-analyze" id="analyzeBtn" onclick="startAnalysis()" disabled>
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      번호판 분석 시작
+    </button>
+
+    <!-- ④ 전체 진행 -->
+    <div class="global-progress" id="globalProgress">
+      <div class="gp-label">전체 진행률 <span id="gpPct">0%</span></div>
+      <div class="gp-bar-bg"><div class="gp-bar-fill" id="gpBar"></div></div>
+    </div>
+
+    <!-- ⑤ 결과 -->
+    <div class="result-section" id="resultSection">
+      <div class="result-summary">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
+        <div class="rs-text" id="summaryText">분석 완료</div>
+      </div>
+      <div id="resultGroups"></div>
+    </div>
+
+  </div>
+
+  <!-- 바텀 네비 -->
+    <nav class="bottom-nav">
+    <a href="main" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><span class="nav-label">홈</span></a>
+    <a href="myCase" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><span class="nav-label">사건</span></a>
+    <a href="../askAI" class="nav-item"><div class="nav-icon"><svg width="22" height="22" viewBox="0 0 86 86" fill="none"><path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="43" cy="40" r="11" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="43" cy="40" r="5" fill="currentColor"/><circle cx="43" cy="40" r="2.5" fill="white"/><circle cx="43" cy="22" r="2.8" fill="currentColor"/><circle cx="43" cy="58" r="2.8" fill="currentColor"/><circle cx="28" cy="40" r="2.8" fill="currentColor"/><circle cx="58" cy="40" r="2.8" fill="currentColor"/></svg></div><span class="nav-label">AI</span></a>
+    <a href="board" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><span class="nav-label">커뮤니티</span></a>
+    <a href="mypage" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><span class="nav-label">마이페이지</span></a>
+  </nav>
+</div>
+
+<script>
+var PYTHON_SERVER = '<%= safePolMateServBaseUrl %>';
+var videoFiles = []; // { file, id, status, jobId, results, pollTimer }
+var uidSeq = 0;
+
+/* ── 번호판 입력 ─────────────────────── */
+function onPlateInput(el) {
+  document.getElementById('plateClear').style.display = el.value ? 'flex' : 'none';
+  syncUI();
+}
+function clearPlate() {
+  var el = document.getElementById('plateInput');
+  el.value = '';
+  document.getElementById('plateClear').style.display = 'none';
+  el.focus();
+}
+
+/* ── 파일 선택 ─────────────────────── */
+function onFilesSelect(input) {
+  Array.from(input.files).forEach(function(file) {
+    var id = 'v' + (++uidSeq);
+    var vf = { file:file, id:id, status:'idle', jobId:null, results:null, pollTimer:null };
+    videoFiles.push(vf);
+    appendVideoItem(vf);
+  });
+  input.value = '';
+  syncUI();
+}
+
+function appendVideoItem(vf) {
+  var list = document.getElementById('videoList');
+  var mb = (vf.file.size / 1024 / 1024).toFixed(1);
+  var div = document.createElement('div');
+  div.className = 'video-item';
+  div.id = 'vi_' + vf.id;
+  div.innerHTML =
+    '<div class="vi-thumb" id="th_'+vf.id+'">' +
+      '<svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>' +
+    '</div>' +
+    '<div class="vi-info">' +
+      '<div class="vi-name">' + esc(vf.file.name) + '</div>' +
+      '<div class="vi-size">' + mb + ' MB</div>' +
+      '<div class="vi-status idle" id="vs_'+vf.id+'">대기 중</div>' +
+      '<div class="vi-progress" id="vp_'+vf.id+'"><div class="vi-progress-fill" id="vf_'+vf.id+'"></div></div>' +
+    '</div>' +
+    '<button class="vi-del" onclick="removeVideo(\''+vf.id+'\')">' +
+      '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+    '</button>';
+  list.appendChild(div);
+  makeThumbnail(vf);
+}
+
+function makeThumbnail(vf) {
+  var url = URL.createObjectURL(vf.file);
+  var v = document.createElement('video');
+  v.preload = 'metadata'; v.muted = true; v.src = url;
+  v.onloadeddata = function() {
+    v.currentTime = Math.min(1, v.duration * 0.1);
+  };
+  v.onseeked = function() {
+    var c = document.createElement('canvas'); c.width=42; c.height=42;
+    c.getContext('2d').drawImage(v, 0, 0, 42, 42);
+    var th = document.getElementById('th_'+vf.id);
+    if (th) { th.innerHTML=''; var img=document.createElement('img'); img.src=c.toDataURL('image/jpeg',0.75); img.alt=''; th.appendChild(img); }
+    URL.revokeObjectURL(url);
+  };
+  v.onerror = function() { URL.revokeObjectURL(url); };
+}
+
+function removeVideo(id) {
+  var idx = videoFiles.findIndex(function(v){return v.id===id;});
+  if (idx<0) return;
+  if (videoFiles[idx].pollTimer) clearInterval(videoFiles[idx].pollTimer);
+  videoFiles.splice(idx, 1);
+  var el = document.getElementById('vi_'+id);
+  if (el) el.remove();
+  syncUI();
+}
+
+function syncUI() {
+  document.getElementById('videoCount').textContent = videoFiles.length + '개 선택됨';
+  var plate = document.getElementById('plateInput').value.trim();
+  var plate = document.getElementById("plateInput").value.trim();
+  var canStart = videoFiles.length > 0 && plate;
+  document.getElementById('analyzeBtn').disabled = !canStart;
+}
+
+/* ── 분석 시작 ─────────────────────── */
+function startAnalysis() {
+  var plate = document.getElementById('plateInput').value.trim();
+
+  if (!plate) {
+    alert('번호판을 입력해주세요.');
+    document.getElementById('plateInput').focus();
+    return;
+  }
+
+  // 완료/오류 영상을 idle로 리셋
+  videoFiles.forEach(function(vf) {
+    if (vf.status === 'done' || vf.status === 'vierror') {
+      if (vf.pollTimer) clearInterval(vf.pollTimer);
+      vf.jobId = null; vf.results = null; vf.pollTimer = null;
+      setStatus(vf, 'idle', '대기 중');
+      var pg = document.getElementById('vp_' + vf.id);
+      if (pg) pg.classList.remove('show');
+      var pf = document.getElementById('vf_' + vf.id);
+      if (pf) pf.style.width = '0%';
+    }
+  });
+
+  var targets = videoFiles.filter(function(v){return v.status==='idle';});
+  if (!targets.length) return;
+
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('globalProgress').classList.add('show');
+  document.getElementById('resultSection').classList.remove('show');
+  document.getElementById('resultGroups').innerHTML = '';
+  updateGlobalPct();
+
+  targets.forEach(function(vf) {
+    setStatus(vf, 'analyzing', '업로드 중...');
+    doUpload(vf, plate);
+  });
+}
+
+function doUpload(vf, plate) {
+  var fd = new FormData();
+  fd.append('video', vf.file);
+  fd.append('plate', plate);
+  fd.append('mode', 'plate');
+
+  fetch(PYTHON_SERVER + '/cctv/analyze', { method:'POST', body:fd })
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if (!d.success) { setStatus(vf,'vierror','업로드 실패: '+(d.error||'')); checkAllDone(); return; }
+      vf.jobId = d.jobId;
+      setStatus(vf,'analyzing','분석 중...');
+      setFill(vf, 5);
+      pollStatus(vf);
+    })
+    .catch(function(){ setStatus(vf,'vierror','서버 연결 실패'); checkAllDone(); });
+}
+
+function pollStatus(vf) {
+  vf.pollTimer = setInterval(function() {
+    fetch(PYTHON_SERVER + '/cctv/status/' + vf.jobId)
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if (!d.success) { clearInterval(vf.pollTimer); setStatus(vf,'vierror',d.error||'조회 실패'); checkAllDone(); return; }
+        var pct = d.progress || 0;
+        setFill(vf, pct);
+        setStatus(vf,'analyzing','분석 중... '+pct+'%');
+        updateGlobalPct();
+        if (d.status==='done') {
+          clearInterval(vf.pollTimer);
+          vf.results = d.results || [];
+          setFill(vf, 100);
+          setStatus(vf,'done','완료 · '+vf.results.length+'건 탐지');
+          checkAllDone();
+        } else if (d.status==='error') {
+          clearInterval(vf.pollTimer);
+          setStatus(vf,'vierror',d.error||'분석 오류');
+          checkAllDone();
+        }
+      })
+      .catch(function(){});
+  }, 1500);
+}
+
+/* ── 상태 헬퍼 ─────────────────────── */
+function setStatus(vf, status, text) {
+  vf.status = status;
+  var el = document.getElementById('vi_'+vf.id);
+  if (el) el.className = 'video-item ' + (status==='idle'?'':status);
+  var st = document.getElementById('vs_'+vf.id);
+  if (st) { st.className='vi-status '+(status==='vierror'?'vierror':status); st.textContent=text; }
+  if (status==='analyzing') { var pg=document.getElementById('vp_'+vf.id); if(pg) pg.classList.add('show'); }
+}
+function setFill(vf, pct) {
+  var f = document.getElementById('vf_'+vf.id);
+  if (f) f.style.width = pct+'%';
+}
+
+function updateGlobalPct() {
+  if (!videoFiles.length) return;
+  var sum = 0;
+  videoFiles.forEach(function(vf) {
+    if (vf.status==='done'||vf.status==='vierror') { sum+=100; return; }
+    var f=document.getElementById('vf_'+vf.id);
+    sum += f ? parseFloat(f.style.width||'0') : 0;
+  });
+  var pct = Math.round(sum / videoFiles.length);
+  document.getElementById('gpBar').style.width = pct+'%';
+  document.getElementById('gpPct').textContent = pct+'%';
+}
+
+function checkAllDone() {
+  var allDone = videoFiles.every(function(v){return v.status==='done'||v.status==='vierror';});
+  if (!allDone) return;
+  document.getElementById('globalProgress').classList.remove('show');
+  renderResults();
+  syncUI();
+}
+
+/* ── 결과 렌더 ─────────────────────── */
+function renderResults() {
+  var plate  = document.getElementById('plateInput').value.trim().replace(/\s/g,'');
+  var groups = document.getElementById('resultGroups');
+  groups.innerHTML = '';
+  var totalHits=0, doneCount=0, errCount=0;
+
+  videoFiles.forEach(function(vf) {
+    if (vf.status==='vierror') { errCount++; return; }
+    doneCount++;
+    var hits = (vf.results||[]).length;
+    totalHits += hits;
+
+    var grp = document.createElement('div');
+    grp.className = 'result-group';
+    grp.innerHTML =
+      '<div class="rg-header">' +
+        '<svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>' +
+        '<span class="rg-fname">'+esc(vf.file.name)+'</span>' +
+        '<span class="rg-count'+(hits===0?' zero':'')+'">'+(hits===0?'미탐지':hits+'건')+'</span>' +
+      '</div>';
+
+    var body = document.createElement('div');
+    if (hits===0) {
+      body.innerHTML='<div class="result-empty">해당 번호판이 탐지되지 않았습니다.</div>';
+    } else {
+      (vf.results||[]).forEach(function(r, i) {
+        var plateStr = (r.plate||'').replace(/\s/g,'');
+        var isMatch  = plate && plateStr.includes(plate);
+        var item = document.createElement('div');
+        item.className = 'result-item';
+        item.style.animationDelay = (i*0.04)+'s';
+        item.innerHTML =
+          '<div class="ri-time-box">' +
+            '<div class="ri-time">'+esc(r.timestamp)+'</div>' +
+            '<div class="ri-time-lbl">시점</div>' +
+          '</div>' +
+          '<div class="ri-plate-wrap">' +
+            '<div>' +
+              '<span class="ri-plate">'+esc(r.plate||'?')+'</span>' +
+              (isMatch?'<span class="ri-match">✓ 일치</span>':'') +
+            '</div>' +
+            '<div class="ri-conf">'+(r.confidence?'신뢰도 '+r.confidence+'%':'번호판 인식')+'</div>' +
+          '</div>';
+        if (r.thumbUrl) {
+          var img=document.createElement('img'); img.className='ri-thumb'; img.src=r.thumbUrl; img.alt='';
+          item.appendChild(img);
+        }
+        body.appendChild(item);
+      });
+    }
+    grp.appendChild(body);
+    groups.appendChild(grp);
+  });
+
+  /* 요약 */
+  var msg = '영상 <strong>'+doneCount+'개</strong> 분석 완료 · 번호판 <strong>'+totalHits+'건</strong> 탐지';
+  if (plate) msg += ' · 검색어: <strong>'+esc(plate)+'</strong>';
+  if (errCount) msg += ' · 오류 <strong>'+errCount+'건</strong>';
+  document.getElementById('summaryText').innerHTML = msg;
+
+  var sec = document.getElementById('resultSection');
+  sec.classList.add('show');
+  setTimeout(function(){ sec.scrollIntoView({behavior:'smooth',block:'start'}); }, 100);
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
