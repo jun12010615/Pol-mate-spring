@@ -180,6 +180,85 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
     opacity: 0; transition: all 0.25s; z-index: 500; white-space: nowrap;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* === 신뢰도 스코어 === */
+.score-badge {
+    display: inline-flex; align-items: center; padding: 2px 8px;
+    border-radius: 10px; font-size: 10px; font-weight: 600; white-space: nowrap; flex-shrink: 0;
+}
+.score-high { background: #f0fdf4; color: #16a34a; }
+.score-mid  { background: #fffbeb; color: #92400e; }
+.score-low  { background: #fef2f2; color: #dc2626; }
+.score-btn {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 6px;
+    border: 1px solid #e2e5ee; background: transparent; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: #9ca3af; transition: all 0.13s; margin-left: 4px;
+}
+.score-btn:hover { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
+.score-total-card {
+    border: 1.5px solid #e2e5ee; border-radius: 12px; padding: 18px 20px;
+    margin-bottom: 20px; display: flex; align-items: center; gap: 20px; background: #f9fafb;
+}
+.score-total-num { font-size: 48px; font-weight: 700; line-height: 1; font-family: 'Space Grotesk', sans-serif; }
+.score-total-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 3px; }
+.score-total-grade { font-size: 14px; font-weight: 500; color: #1a1a2e; }
+.score-bars { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
+.score-row-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.score-row-label { font-size: 12px; font-weight: 500; color: #374151; }
+.score-row-val { font-size: 12px; font-weight: 600; color: #1a1a2e; font-family: 'Space Grotesk', sans-serif; }
+.score-bar-track { height: 5px; background: #f0f2f8; border-radius: 3px; overflow: hidden; }
+.score-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+.fill-high { background: #16a34a; }
+.fill-mid  { background: #f59e0b; }
+.fill-low  { background: #dc2626; }
+.score-row-reason { font-size: 11px; color: #9ca3af; margin-top: 5px; line-height: 1.45; }
+.score-empty-state { padding: 32px 20px; text-align: center; color: #9ca3af; font-size: 13px; }
+.score-loading-state { padding: 32px 20px; text-align: center; color: #9ca3af; font-size: 13px; line-height: 1.7; }
+.btn-analyze {
+    width: 100%; padding: 10px; background: #0d1a33; color: #fff; border: none;
+    border-radius: 10px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
+    font-weight: 500; cursor: pointer; transition: background 0.13s; margin-top: 4px;
+}
+.btn-analyze:hover:not(:disabled) { background: #1a2744; }
+.btn-analyze:disabled { background: #9ca3af; cursor: not-allowed; }
+
+/* === 채점기준 도움말 === */
+.help-wrap { position: relative; display: inline-flex; align-items: center; }
+.help-btn {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 1.5px solid #d1d5db; background: #f9fafb;
+    color: #6b7280; font-size: 10px; font-weight: 700;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1; padding: 0; transition: all 0.13s; flex-shrink: 0;
+}
+.help-btn:hover { border-color: #0d1a33; color: #0d1a33; background: #eff6ff; }
+.help-popover {
+    display: none; position: absolute; top: calc(100% + 8px); left: 0;
+    width: 300px; background: #fff; border: 1.5px solid #e2e5ee;
+    border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    padding: 16px; z-index: 600;
+}
+.help-popover.open { display: block; }
+.help-popover-title {
+    font-size: 11px; font-weight: 600; color: #1a1a2e;
+    text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px;
+}
+.help-criterion { margin-bottom: 12px; }
+.help-criterion:last-of-type { margin-bottom: 8px; }
+.help-criterion-name {
+    font-size: 12px; font-weight: 600; color: #0d1a33; margin-bottom: 3px;
+    display: flex; align-items: center; gap: 6px;
+}
+.help-criterion-range {
+    font-size: 10px; font-weight: 400; color: #9ca3af;
+    font-family: 'Space Grotesk', sans-serif;
+}
+.help-criterion-desc { font-size: 11px; color: #6b7280; line-height: 1.55; }
+.help-total-note {
+    font-size: 10px; color: #9ca3af; padding-top: 8px;
+    border-top: 1px solid #f0f2f8; margin-top: 4px;
+}
 </style>
 </head>
 <body>
@@ -298,10 +377,53 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 
 <div class="toast" id="toast"></div>
 
+<div class="modal-backdrop" id="scoreModal" onclick="closeScoreModal()">
+    <div class="modal" style="width:500px;max-width:96vw;" onclick="event.stopPropagation()">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px;">
+            <div style="flex:1;">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                    <span style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.7px;">진술 신뢰도 분석</span>
+                    <div class="help-wrap">
+                        <button class="help-btn" onclick="toggleHelp(event)" title="채점 기준 보기">?</button>
+                        <div class="help-popover" id="helpPopover">
+                            <div class="help-popover-title">채점 기준 안내</div>
+                            <div class="help-criterion">
+                                <div class="help-criterion-name">일관성 <span class="help-criterion-range">0 – 100점</span></div>
+                                <div class="help-criterion-desc">진술 내부에서 동일 사건·행위에 대한 주장이 앞뒤로 모순 없이 일치하는 정도. 부정·긍정 표현이 같은 행위에 혼재하면 감점.</div>
+                            </div>
+                            <div class="help-criterion">
+                                <div class="help-criterion-name">구체성 <span class="help-criterion-range">0 – 100점</span></div>
+                                <div class="help-criterion-desc">날짜·시각·장소·인물·행위가 얼마나 구체적으로 기술됐는지. "어딘가에서", "언제쯤" 등 모호한 표현이 많을수록 감점.</div>
+                            </div>
+                            <div class="help-criterion">
+                                <div class="help-criterion-name">감정 안정성 <span class="help-criterion-range">0 – 100점</span></div>
+                                <div class="help-criterion-desc">진술 전반의 어조가 차분하고 중립적인 정도. 과도한 흥분·방어적 표현·감정적 과장이 빈번할수록 감점.</div>
+                            </div>
+                            <div class="help-criterion">
+                                <div class="help-criterion-name">시간 정합성 <span class="help-criterion-range">0 – 100점</span></div>
+                                <div class="help-criterion-desc">사건 진행 순서와 시간대가 논리적으로 맞는지. 시간 역행·공백·불가능한 이동 시간 등이 있으면 감점.</div>
+                            </div>
+                            <div class="help-total-note">종합 점수는 4개 기준의 단순 평균입니다.</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="scoreDocTitle" style="font-size:15px;font-weight:500;color:#1a1a2e;"></div>
+            </div>
+            <button class="detail-close" onclick="closeScoreModal()" style="flex-shrink:0;margin-top:2px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div id="scoreModalContent"></div>
+        <button class="btn-analyze" id="btnAnalyze" onclick="runScoreAnalysis()">신뢰도 분석 실행</button>
+    </div>
+</div>
+
 <script>
 var _cases = [];
 var _currentFilter = 'all';
 var _currentCaseId = null;
+var _docScores = {};
+var _currentScoreTranscriptId = null;
 
 function badgeClass(status) {
     if (status === '진행중') return 'b-jinhaeng';
@@ -397,16 +519,32 @@ function openDetail(caseId) {
             }).join('');
 
             var docs = c.docs || [];
+            _docScores = {};
             var docEl = document.getElementById('dpDocList');
             if (docs.length === 0) {
                 docEl.innerHTML = '<div class="empty-state">조서가 없습니다</div>';
             } else {
                 docEl.innerHTML = docs.map(function(doc) {
+                    _docScores[doc.id] = doc;
                     var contra = doc.contradiction ? 'has-contra' : '';
+                    var scBadge;
+                    if (doc.scored) {
+                        var sc = doc.totalScore;
+                        var scCls = sc >= 70 ? 'score-high' : sc >= 40 ? 'score-mid' : 'score-low';
+                        scBadge = '<span id="score-badge-' + doc.id + '" class="score-badge ' + scCls + '" style="margin-right:4px">' + sc + '점</span>';
+                    } else {
+                        scBadge = '<span id="score-badge-' + doc.id + '" class="score-badge" style="display:none"></span>';
+                    }
+                    var docTitle = (doc.name || '미입력') + (doc.type ? ' ' + doc.type : '') + ' 진술조서';
+                    var safeTitle = docTitle.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                     return '<a href="' + _ctx + '/desktop/writeTranscript?transcriptId=' + (doc.id||'') + '" class="doc-item ' + contra + '">'
                         + '<div class="doc-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>'
                         + '<div style="flex:1"><div class="doc-name">' + (doc.name || '조서 #' + doc.id) + '</div>'
                         + '<div class="doc-meta">' + (doc.date || '') + (doc.contradiction ? ' &nbsp;▸ 모순 탐지' : '') + '</div></div>'
+                        + scBadge
+                        + '<button class="score-btn" title="신뢰도 분석" onclick="event.preventDefault();event.stopPropagation();openScoreModal(' + (doc.id||0) + ',\'' + safeTitle + '\')">'
+                        + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>'
+                        + '</button>'
                         + '</a>';
                 }).join('');
             }
@@ -494,6 +632,123 @@ function showToast(msg) {
     t.textContent = msg;
     t.classList.add('show');
     setTimeout(function() { t.classList.remove('show'); }, 2500);
+}
+
+function toggleHelp(e) {
+    e.stopPropagation();
+    var pop = document.getElementById('helpPopover');
+    pop.classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+    var pop = document.getElementById('helpPopover');
+    if (pop && pop.classList.contains('open') && !pop.contains(e.target)) {
+        pop.classList.remove('open');
+    }
+});
+
+function openScoreModal(transcriptId, docTitle) {
+    _currentScoreTranscriptId = transcriptId;
+    document.getElementById('scoreDocTitle').textContent = docTitle;
+    var btn = document.getElementById('btnAnalyze');
+    btn.disabled = false;
+    var doc = _docScores[transcriptId];
+    if (doc && doc.scored) {
+        renderScoreResult({
+            total: doc.totalScore, consistency: doc.consistency,
+            specificity: doc.specificity, emotion: doc.emotion, temporal: doc.temporal,
+            reasons: { consistency: doc.cReason, specificity: doc.sReason, emotion: doc.eReason, temporal: doc.tReason }
+        });
+        btn.textContent = '재분석';
+    } else {
+        document.getElementById('scoreModalContent').innerHTML =
+            '<div class="score-empty-state">아직 분석된 신뢰도 점수가 없습니다.</div>';
+        btn.textContent = '신뢰도 분석 실행';
+    }
+    document.getElementById('scoreModal').classList.add('open');
+}
+
+function closeScoreModal() {
+    document.getElementById('scoreModal').classList.remove('open');
+    document.getElementById('helpPopover').classList.remove('open');
+    _currentScoreTranscriptId = null;
+}
+
+function renderScoreResult(data) {
+    var total = data.total || 0;
+    var grade = total >= 70 ? '신뢰도 높음' : total >= 40 ? '검토 필요' : '신뢰도 낮음';
+    var numColor = total >= 70 ? '#16a34a' : total >= 40 ? '#d97706' : '#dc2626';
+    var bars = [
+        { label: '일관성',     val: data.consistency || 0, reason: (data.reasons||{}).consistency || '' },
+        { label: '구체성',     val: data.specificity  || 0, reason: (data.reasons||{}).specificity || '' },
+        { label: '감정 안정성', val: data.emotion     || 0, reason: (data.reasons||{}).emotion     || '' },
+        { label: '시간 정합성', val: data.temporal    || 0, reason: (data.reasons||{}).temporal    || '' }
+    ];
+    var html = '<div class="score-total-card">'
+        + '<div class="score-total-num" style="color:' + numColor + '">' + total + '</div>'
+        + '<div><div class="score-total-label">종합 신뢰도</div><div class="score-total-grade">' + grade + '</div></div>'
+        + '</div><div class="score-bars">';
+    bars.forEach(function(b) {
+        var fc = b.val >= 70 ? 'fill-high' : b.val >= 40 ? 'fill-mid' : 'fill-low';
+        html += '<div>'
+            + '<div class="score-row-header"><span class="score-row-label">' + b.label + '</span><span class="score-row-val">' + b.val + '점</span></div>'
+            + '<div class="score-bar-track"><div class="score-bar-fill ' + fc + '" style="width:' + b.val + '%"></div></div>'
+            + (b.reason ? '<div class="score-row-reason">' + b.reason + '</div>' : '')
+            + '</div>';
+    });
+    html += '</div>';
+    document.getElementById('scoreModalContent').innerHTML = html;
+}
+
+function runScoreAnalysis() {
+    if (!_currentScoreTranscriptId) return;
+    var btn = document.getElementById('btnAnalyze');
+    btn.disabled = true;
+    btn.textContent = '분석 중...';
+    document.getElementById('scoreModalContent').innerHTML =
+        '<div class="score-loading-state">AI가 진술을 분석하는 중입니다...<br><small>약 30~60초 소요됩니다</small></div>';
+    var fd = new FormData();
+    fd.append('action', 'scoreTranscript');
+    fd.append('transcriptId', _currentScoreTranscriptId);
+    fetch(_ctx + '/caseApi', { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            btn.disabled = false;
+            if (d.success) {
+                var doc = _docScores[_currentScoreTranscriptId];
+                if (doc) {
+                    doc.scored = true; doc.totalScore = d.total;
+                    doc.consistency = d.consistency; doc.specificity = d.specificity;
+                    doc.emotion = d.emotion; doc.temporal = d.temporal;
+                    doc.cReason = (d.reasons||{}).consistency || '';
+                    doc.sReason = (d.reasons||{}).specificity || '';
+                    doc.eReason = (d.reasons||{}).emotion     || '';
+                    doc.tReason = (d.reasons||{}).temporal    || '';
+                }
+                renderScoreResult(d);
+                updateScoreBadge(_currentScoreTranscriptId, d.total);
+                btn.textContent = '재분석';
+                showToast('신뢰도 분석이 완료되었습니다.');
+            } else {
+                document.getElementById('scoreModalContent').innerHTML =
+                    '<div class="score-empty-state">' + (d.message || '분석에 실패했습니다.') + '</div>';
+                btn.textContent = '다시 시도';
+            }
+        })
+        .catch(function() {
+            btn.disabled = false;
+            btn.textContent = '다시 시도';
+            document.getElementById('scoreModalContent').innerHTML =
+                '<div class="score-empty-state">오류가 발생했습니다.</div>';
+        });
+}
+
+function updateScoreBadge(transcriptId, score) {
+    var badge = document.getElementById('score-badge-' + transcriptId);
+    if (!badge) return;
+    var cls = score >= 70 ? 'score-high' : score >= 40 ? 'score-mid' : 'score-low';
+    badge.className = 'score-badge ' + cls;
+    badge.textContent = score + '점';
+    badge.style.display = '';
 }
 
 loadCases();

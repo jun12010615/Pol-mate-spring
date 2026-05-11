@@ -342,6 +342,24 @@ def _sse_line(obj: dict) -> str:
     return "data: " + json.dumps(obj, ensure_ascii=False) + "\n\n"
 
 
+def _score_reliability_prompt(stmt_name: str, stmt_type: str, text: str) -> str:
+    return f"""형사 진술 신뢰도를 평가하라. JSON만 출력하라. 다른 설명 금지.
+
+진술자: {stmt_name} ({stmt_type})
+
+[진술]
+{text}
+
+4가지 기준 (각 0-100 정수):
+1. consistency(일관성): 진술 내에서 사실 관계가 일관적이고 자기모순이 없는가
+2. specificity(구체성): 시간·장소·인물·행위 등 구체적 정보가 충분한가
+3. emotion(감정안정성): 진술 어조가 차분하고 안정적인가 (흥분·방어적·과장 표현이 적을수록 높음)
+4. temporal(시간정합성): 진술의 시간 순서와 시간대가 논리적으로 일치하는가
+
+출력 형식 (JSON만, 다른 문장 절대 금지):
+{{"consistency":<정수>,"specificity":<정수>,"emotion":<정수>,"temporal":<정수>,"reasons":{{"consistency":"<평가근거 한 문장>","specificity":"<평가근거 한 문장>","emotion":"<평가근거 한 문장>","temporal":"<평가근거 한 문장>"}}}}"""
+
+
 def _relation_map_prompt(case_id: str, case_name: str, persons_meta: str, transcript_block: str) -> str:
     return f"""조서에서 인물(persons)과 관계(edges)만 뽑아 JSON 객체 하나만 출력한다. 설명·마크다운·코드펜스는 쓰지 마라.
 
@@ -1425,6 +1443,55 @@ def cctv_status(job_id):
 # ════════════════════════════════════════════════════════════════════════════
 # [섹션 7] 공통 라우트
 # ════════════════════════════════════════════════════════════════════════════
+
+@app.route("/score/reliability", methods=["POST"])
+def score_reliability():
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "요청 데이터가 없습니다."}), 400
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"success": False, "error": "진술 내용이 없습니다."}), 400
+    stmt_name = (data.get("stmtName") or "미입력").strip()
+    stmt_type = (data.get("stmtType") or "진술자").strip()
+    prompt = _score_reliability_prompt(stmt_name, stmt_type, text)
+    try:
+        raw = call_ollama(prompt, expect_json=True)
+    except Exception as ex:
+        return jsonify({"success": False, "error": f"모델 호출 실패: {ex}"}), 502
+    parsed = _extract_json_object(raw)
+    if not parsed:
+        return jsonify({"success": False, "error": "모델 응답 파싱 실패"}), 502
+
+    def clamp(v):
+        try:
+            return max(0, min(100, int(v)))
+        except Exception:
+            return 50
+
+    consistency = clamp(parsed.get("consistency", 50))
+    specificity = clamp(parsed.get("specificity", 50))
+    emotion     = clamp(parsed.get("emotion",     50))
+    temporal    = clamp(parsed.get("temporal",    50))
+    total       = (consistency + specificity + emotion + temporal) // 4
+    reasons = parsed.get("reasons") or {}
+    if not isinstance(reasons, dict):
+        reasons = {}
+    return jsonify({
+        "success":     True,
+        "consistency": consistency,
+        "specificity": specificity,
+        "emotion":     emotion,
+        "temporal":    temporal,
+        "total":       total,
+        "reasons": {
+            "consistency": str(reasons.get("consistency") or ""),
+            "specificity": str(reasons.get("specificity") or ""),
+            "emotion":     str(reasons.get("emotion")     or ""),
+            "temporal":    str(reasons.get("temporal")    or ""),
+        }
+    })
+
 
 @app.route("/health", methods=["GET"])
 def health():

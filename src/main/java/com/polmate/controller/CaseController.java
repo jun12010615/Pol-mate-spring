@@ -49,6 +49,7 @@ public class CaseController {
             case "docStats":       handleDocStats(res, loginUser);               break;
             case "myDept":         handleMyDept(res, loginUser);                 break;
             case "transcriptText": handleTranscriptText(res, loginUser, transcriptId); break;
+            case "getScore":       handleGetScore(res, loginUser, transcriptId);       break;
             default: res.getWriter().write("{\"error\":\"알 수 없는 action\"}");
         }
     }
@@ -75,6 +76,7 @@ public class CaseController {
             case "caseStatus":          handleCaseStatus(res, loginUser, caseId, status);  break;
             case "transcriptSave":      handleTranscriptSave(res, loginUser, caseId, nvl(stmtType, ""), nvl(stmtName, ""), nvl(originalText, "")); break;
             case "transcriptSummarize": handleTranscriptSummarize(res, loginUser, transcriptId); break;
+            case "scoreTranscript":     handleScoreTranscript(res, loginUser, transcriptId);     break;
             default: res.getWriter().write("{\"error\":\"알 수 없는 action\"}");
         }
     }
@@ -162,8 +164,12 @@ public class CaseController {
             ps = conn.prepareStatement(
                 "SELECT t.transcript_id, t.stmt_type, t.stmt_name, t.has_contradiction, " +
                 "       t.created_at, t.user_id, u.user_name, u.user_rank, " +
-                "       CHAR_LENGTH(IFNULL(t.original_text,'')) AS text_len " +
+                "       CHAR_LENGTH(IFNULL(t.original_text,'')) AS text_len, " +
+                "       ts.total_score, ts.consistency_score, ts.specificity_score, " +
+                "       ts.emotion_score, ts.temporal_score, " +
+                "       ts.consistency_reason, ts.specificity_reason, ts.emotion_reason, ts.temporal_reason " +
                 "FROM transcripts t LEFT JOIN users u ON t.user_id = u.user_id " +
+                "LEFT JOIN transcript_scores ts ON t.transcript_id = ts.transcript_id " +
                 "WHERE t.case_id = ? ORDER BY t.created_at DESC");
             ps.setString(1, caseId); rs = ps.executeQuery();
             JSONArray docs = new JSONArray();
@@ -179,6 +185,20 @@ public class CaseController {
                 d.put("writerRank",   nvl(rs.getString("user_rank"), ""));
                 Timestamp dts = rs.getTimestamp("created_at");
                 d.put("date", dts != null ? DATE_FMT.format(dts) : "");
+                Object totalObj = rs.getObject("total_score");
+                boolean scored = totalObj != null;
+                d.put("scored", scored);
+                if (scored) {
+                    d.put("totalScore",  ((Number) totalObj).intValue());
+                    d.put("consistency", rs.getInt("consistency_score"));
+                    d.put("specificity", rs.getInt("specificity_score"));
+                    d.put("emotion",     rs.getInt("emotion_score"));
+                    d.put("temporal",    rs.getInt("temporal_score"));
+                    d.put("cReason",     nvl(rs.getString("consistency_reason"), ""));
+                    d.put("sReason",     nvl(rs.getString("specificity_reason"), ""));
+                    d.put("eReason",     nvl(rs.getString("emotion_reason"),     ""));
+                    d.put("tReason",     nvl(rs.getString("temporal_reason"),    ""));
+                }
                 docs.put(d);
             }
             detail.put("docs", docs); detail.put("docCount", docs.length());
@@ -531,6 +551,147 @@ public class CaseController {
         } catch (Exception e) {
             e.printStackTrace(); res.getWriter().write("{\"error\":\"부서 정보 조회 중 오류가 발생했습니다.\"}");
         } finally { closeAll(conn, ps, rs); }
+    }
+
+    private void handleGetScore(HttpServletResponse res, String loginUser, String idStr) throws IOException {
+        if (isEmpty(idStr)) { res.getWriter().write("{\"error\":\"transcriptId가 필요합니다.\"}"); return; }
+        int transcriptId;
+        try { transcriptId = Integer.parseInt(idStr); }
+        catch (NumberFormatException e) { res.getWriter().write("{\"error\":\"잘못된 transcriptId\"}"); return; }
+        Connection conn = null; PreparedStatement ps = null; ResultSet rs = null;
+        try {
+            conn = dataSource.getConnection();
+            ps = conn.prepareStatement(
+                "SELECT ts.total_score, ts.consistency_score, ts.specificity_score, ts.emotion_score, ts.temporal_score, " +
+                "       ts.consistency_reason, ts.specificity_reason, ts.emotion_reason, ts.temporal_reason, ts.scored_at " +
+                "FROM transcript_scores ts " +
+                "JOIN transcripts t ON t.transcript_id = ts.transcript_id " +
+                "JOIN cases c ON c.case_id = t.case_id " +
+                "WHERE ts.transcript_id = ? " +
+                "AND c.dept_id = (SELECT me.dept_id FROM users me WHERE me.user_id = ?)");
+            ps.setInt(1, transcriptId); ps.setString(2, loginUser); rs = ps.executeQuery();
+            if (!rs.next()) { res.getWriter().write("{\"scored\":false}"); return; }
+            JSONObject r = new JSONObject();
+            r.put("scored",      true);
+            r.put("total",       rs.getInt("total_score"));
+            r.put("consistency", rs.getInt("consistency_score"));
+            r.put("specificity", rs.getInt("specificity_score"));
+            r.put("emotion",     rs.getInt("emotion_score"));
+            r.put("temporal",    rs.getInt("temporal_score"));
+            JSONObject reasons = new JSONObject();
+            reasons.put("consistency", nvl(rs.getString("consistency_reason"), ""));
+            reasons.put("specificity", nvl(rs.getString("specificity_reason"), ""));
+            reasons.put("emotion",     nvl(rs.getString("emotion_reason"),     ""));
+            reasons.put("temporal",    nvl(rs.getString("temporal_reason"),    ""));
+            r.put("reasons", reasons);
+            Timestamp st = rs.getTimestamp("scored_at");
+            r.put("scoredAt", st != null ? DATE_FMT.format(st) : "");
+            res.getWriter().write(r.toString());
+        } catch (Exception e) {
+            e.printStackTrace(); res.getWriter().write("{\"error\":\"점수 조회 중 오류가 발생했습니다.\"}");
+        } finally { closeAll(conn, ps, rs); }
+    }
+
+    private void handleScoreTranscript(HttpServletResponse res, String loginUser, String idStr) throws IOException {
+        if (isEmpty(idStr)) { res.getWriter().write("{\"error\":\"transcriptId가 필요합니다.\"}"); return; }
+        int transcriptId;
+        try { transcriptId = Integer.parseInt(idStr); }
+        catch (NumberFormatException e) { res.getWriter().write("{\"error\":\"잘못된 transcriptId\"}"); return; }
+        Connection conn = null; PreparedStatement ps = null; ResultSet rs = null;
+        try {
+            conn = dataSource.getConnection();
+            ps = conn.prepareStatement(
+                "SELECT t.original_text, t.stmt_type, t.stmt_name, t.case_id " +
+                "FROM transcripts t JOIN cases c ON t.case_id = c.case_id " +
+                "WHERE t.transcript_id = ? " +
+                "AND c.dept_id = (SELECT me.dept_id FROM users me WHERE me.user_id = ?)");
+            ps.setInt(1, transcriptId); ps.setString(2, loginUser); rs = ps.executeQuery();
+            if (!rs.next()) { writeResult(res, false, "조서를 찾을 수 없거나 접근 권한이 없습니다."); return; }
+            String originalText = rs.getString("original_text");
+            String stmtType     = nvl(rs.getString("stmt_type"), "진술자");
+            String stmtName     = nvl(rs.getString("stmt_name"), "미입력");
+            String caseId       = nvl(rs.getString("case_id"),   "미입력");
+            rs.close(); ps.close(); ps = null; rs = null;
+
+            if (originalText == null || originalText.trim().isEmpty()) {
+                writeResult(res, false, "분석할 진술 본문이 없습니다."); return;
+            }
+
+            JSONObject body = new JSONObject();
+            body.put("text",     originalText);
+            body.put("stmtType", stmtType);
+            body.put("stmtName", stmtName);
+            body.put("caseNum",  caseId);
+
+            JSONObject scoreResult = callScoreReliability(body);
+            if (scoreResult == null) { writeResult(res, false, "신뢰도 분석 서버 호출에 실패했습니다."); return; }
+
+            int consistency = scoreResult.optInt("consistency", 50);
+            int specificity = scoreResult.optInt("specificity", 50);
+            int emotion     = scoreResult.optInt("emotion",     50);
+            int temporal    = scoreResult.optInt("temporal",    50);
+            int total       = scoreResult.optInt("total",       (consistency + specificity + emotion + temporal) / 4);
+            JSONObject reasons = scoreResult.optJSONObject("reasons");
+            if (reasons == null) reasons = new JSONObject();
+
+            ps = conn.prepareStatement(
+                "INSERT INTO transcript_scores " +
+                "(transcript_id, consistency_score, specificity_score, emotion_score, temporal_score, total_score, " +
+                " consistency_reason, specificity_reason, emotion_reason, temporal_reason, scored_at) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,NOW()) " +
+                "ON DUPLICATE KEY UPDATE " +
+                "consistency_score=VALUES(consistency_score), specificity_score=VALUES(specificity_score), " +
+                "emotion_score=VALUES(emotion_score), temporal_score=VALUES(temporal_score), " +
+                "total_score=VALUES(total_score), consistency_reason=VALUES(consistency_reason), " +
+                "specificity_reason=VALUES(specificity_reason), emotion_reason=VALUES(emotion_reason), " +
+                "temporal_reason=VALUES(temporal_reason), scored_at=NOW()");
+            ps.setInt(1, transcriptId);
+            ps.setInt(2, consistency); ps.setInt(3, specificity);
+            ps.setInt(4, emotion);     ps.setInt(5, temporal);    ps.setInt(6, total);
+            ps.setString(7,  reasons.optString("consistency", ""));
+            ps.setString(8,  reasons.optString("specificity", ""));
+            ps.setString(9,  reasons.optString("emotion",     ""));
+            ps.setString(10, reasons.optString("temporal",    ""));
+            ps.executeUpdate();
+
+            JSONObject out = new JSONObject();
+            out.put("success",     true);
+            out.put("total",       total);
+            out.put("consistency", consistency);
+            out.put("specificity", specificity);
+            out.put("emotion",     emotion);
+            out.put("temporal",    temporal);
+            out.put("reasons",     reasons);
+            res.getWriter().write(out.toString());
+        } catch (Exception e) {
+            e.printStackTrace(); writeResult(res, false, "신뢰도 분석 중 오류가 발생했습니다.");
+        } finally { closeAll(conn, ps, rs); }
+    }
+
+    private JSONObject callScoreReliability(JSONObject body) {
+        HttpURLConnection hc = null;
+        try {
+            String baseUrl = polMateServBaseUrl;
+            while (baseUrl.endsWith("/")) baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+            URL url = new URL(baseUrl + "/score/reliability");
+            hc = (HttpURLConnection) url.openConnection();
+            hc.setRequestMethod("POST");
+            hc.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            hc.setDoOutput(true); hc.setConnectTimeout(15000); hc.setReadTimeout(120000);
+            byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
+            try (OutputStream os = hc.getOutputStream()) { os.write(bytes); }
+            int code = hc.getResponseCode();
+            InputStream inStream = (code >= 200 && code < 300) ? hc.getInputStream() : hc.getErrorStream();
+            if (inStream == null) return null;
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(inStream, StandardCharsets.UTF_8))) {
+                String line; while ((line = br.readLine()) != null) sb.append(line);
+            }
+            JSONObject j = new JSONObject(sb.toString());
+            return j.optBoolean("success", false) ? j : null;
+        } catch (Exception e) {
+            e.printStackTrace(); return null;
+        } finally { if (hc != null) hc.disconnect(); }
     }
 
     private String callPolMateSummarize(JSONObject body) {
