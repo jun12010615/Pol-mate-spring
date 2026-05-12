@@ -1,14 +1,5 @@
-﻿<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%
-  String loginUser = (String) session.getAttribute("loginUser");
-  String userName = (String) session.getAttribute("userName");
-  if (userName == null) userName = loginUser != null ? loginUser : "";
-
-  String paramCaseId = request.getParameter("caseId") != null ? request.getParameter("caseId") : "";
-  String safeCaseIdAttr = paramCaseId.replace("&", "&amp;").replace("\"", "&quot;").replace("'", "&#39;").replace("<", "&lt;");
-%>
-<!DOCTYPE html>
-<html lang="ko">
+﻿<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -187,7 +178,7 @@ html,body { height:100%; font-family:'Noto Sans KR',sans-serif; background:var(-
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
       <div class="header-text">
-        <div class="header-title" id="pageTitle"><%= paramCaseId.isEmpty() ? "관계망 편집" : paramCaseId %></div>
+        <div class="header-title" id="pageTitle" th:text="${param.caseId != null && !param.caseId.isEmpty() ? param.caseId : '관계망 편집'}">관계망 편집</div>
         <div class="header-sub">인물 · 관계선 편집 및 보드 저장</div>
       </div>
     </div>
@@ -280,7 +271,7 @@ html,body { height:100%; font-family:'Noto Sans KR',sans-serif; background:var(-
     <nav class="bottom-nav">
     <a href="main" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><span class="nav-label">홈</span></a>
     <a href="myCase" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><span class="nav-label">조서</span></a>
-    <a href="../askAI" class="nav-item active"><div class="nav-icon"><svg width="22" height="22" viewBox="0 0 86 86" fill="none"><path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="43" cy="40" r="11" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="43" cy="40" r="5" fill="currentColor"/><circle cx="43" cy="40" r="2.5" fill="white"/><circle cx="43" cy="22" r="2.8" fill="currentColor"/><circle cx="43" cy="58" r="2.8" fill="currentColor"/><circle cx="28" cy="40" r="2.8" fill="currentColor"/><circle cx="58" cy="40" r="2.8" fill="currentColor"/></svg></div><span class="nav-label">AI</span></a>
+    <a href="/askAI" class="nav-item active"><div class="nav-icon"><svg width="22" height="22" viewBox="0 0 86 86" fill="none"><path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="43" cy="40" r="11" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="43" cy="40" r="5" fill="currentColor"/><circle cx="43" cy="40" r="2.5" fill="white"/><circle cx="43" cy="22" r="2.8" fill="currentColor"/><circle cx="43" cy="58" r="2.8" fill="currentColor"/><circle cx="28" cy="40" r="2.8" fill="currentColor"/><circle cx="58" cy="40" r="2.8" fill="currentColor"/></svg></div><span class="nav-label">AI</span></a>
     <a href="board" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><span class="nav-label">커뮤니티</span></a>
     <a href="mypage" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><span class="nav-label">마이페이지</span></a>
   </nav>
@@ -362,7 +353,7 @@ html,body { height:100%; font-family:'Noto Sans KR',sans-serif; background:var(-
 </div>
 
 <div id="toast"></div>
-<div id="_boardEditPageBoot" hidden data-case-id="<%= safeCaseIdAttr %>" data-case-name=""></div>
+<div id="_boardEditPageBoot" hidden th:attr="data-case-id=${param.caseId ?:''}" data-case-name=""></div>
 
 <script>
 // ── 상태: data-* 에서 사건 ID·이름 로드 (스크립트 안에 퍼센트+등호 조합을 쓰면 JSP가 표현식으로 오인식함) ──
@@ -564,7 +555,7 @@ window.addEventListener('load', function() {
 });
 
 function loadFromDb() {
-  fetch('../boardApi?action=load&caseId=' + encodeURIComponent(currentCaseId))
+  fetch('/boardApi?action=load&caseId=' + encodeURIComponent(currentCaseId))
     .then(function(r){ return r.json(); })
     .then(function(data) {
       if (data.success && data.boardExists) {
@@ -592,7 +583,7 @@ function loadFromDb() {
 
 function checkDbExists() {
   if (!currentCaseId) return;
-  fetch('../boardApi?action=load&caseId=' + encodeURIComponent(currentCaseId))
+  fetch('/boardApi?action=load&caseId=' + encodeURIComponent(currentCaseId))
     .then(function(r){ return r.json(); })
     .then(function(d){ boardExistsInDb = !!(d.success && d.boardExists); updateSaveBtn(); })
     .catch(function(){});
@@ -922,7 +913,7 @@ function doSave() {
     showToast('저장 시간 초과. 다시 시도해 주세요.');
   }, 10000);
 
-  fetch('../boardApi?action=save', {
+  fetch('/boardApi?action=save', {
     method:'POST',
     headers:{'Content-Type':'application/json; charset=UTF-8'},
     body: JSON.stringify({
@@ -1425,3 +1416,4 @@ function showToast(msg) {
 </script>
 </body>
 </html>
+

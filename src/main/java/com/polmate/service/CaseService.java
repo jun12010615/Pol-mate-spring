@@ -104,7 +104,7 @@ public class CaseService {
     public Map<String, Object> createCase(String userId, String caseId, String caseName,
                                           String suspect, String charge) {
         Map<String, Object> result = new HashMap<>();
-        if (!caseId.matches("^\\d{4}-\\d{4}$")) {
+        if (caseId == null || !caseId.matches("^\\d{4}-\\d{4}$")) {
             result.put("success", false); result.put("message", "사건번호 형식이 올바르지 않습니다. (예: 2024-0312)"); return result;
         }
         if (caseRepo.existsById(caseId)) {

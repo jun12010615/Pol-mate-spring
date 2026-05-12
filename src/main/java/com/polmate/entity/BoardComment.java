@@ -1,6 +1,7 @@
 package com.polmate.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 import lombok.*;
 import java.time.LocalDateTime;
 
@@ -23,8 +24,7 @@ public class BoardComment {
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
-    @Column(name = "anonymous")
-    private int anonymous;
+    @CreationTimestamp
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

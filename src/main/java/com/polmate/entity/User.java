@@ -1,6 +1,7 @@
 package com.polmate.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 import lombok.*;
 import java.time.LocalDateTime;
 
@@ -45,6 +46,8 @@ public class User {
 
     @Column(name = "night_mode")
     private boolean nightMode;
+
+    @CreationTimestamp
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

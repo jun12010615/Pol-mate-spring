@@ -1,6 +1,5 @@
-﻿<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<!DOCTYPE html>
-<html lang="ko">
+﻿<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -456,19 +455,15 @@
     .drawer { max-width: 420px; }
   }
 </style>
+<script th:inline="javascript">
+var _loginUser=/*[[${session.loginUser?:""}]]*/"";
+var _userName=/*[[${session.userName?:""}]]*/"";
+var _userRank=/*[[${session.userRank?:""}]]*/"";
+var _userOrg=/*[[${session.userOrg?:""}]]*/"";
+var _userPhone=/*[[${session.userPhone?:""}]]*/"";
+</script>
 </head>
 <body>
-
-<%
-  String userId    = (String) session.getAttribute("loginUser");
-  String userName  = (String) session.getAttribute("userName");
-  String userRank  = (String) session.getAttribute("userRank");
-  String userOrg   = (String) session.getAttribute("userOrg");
-  String userPhone = (String) session.getAttribute("userPhone");
-  if (userId == null) userId = ""; if (userName == null) userName = "";
-  if (userRank == null) userRank = ""; if (userOrg == null) userOrg = "";
-  if (userPhone == null) userPhone = "";
-%>
 
 <div class="screen">
 
@@ -483,13 +478,13 @@
   <!-- ── 프로필 카드 ── -->
   <div class="profile-band">
     <div class="profile-card">
-      <div class="avatar-lg"><%= userName.length() >= 2 ? userName.substring(0,2) : userName %></div>
+      <div class="avatar-lg" th:text="${#strings.length(session.userName?:'') >= 2 ? #strings.substring(session.userName?:'', 0, 2) : (session.userName?:'')}"></div>
       <div class="profile-info">
-        <div class="profile-name"><%= userName %> <%= userRank %></div>
-        <div class="profile-rank"><%= userOrg %></div>
+        <div class="profile-name" th:text="${(session.userName?:'') + ' ' + (session.userRank?:'')}"></div>
+        <div class="profile-rank" th:text="${session.userOrg?:''}"></div>
         <div class="profile-badge">
           <span class="badge-dot"></span>
-          <span>접속 중 · <%= userId %></span>
+          <span th:text="'접속 중 · ' + (session.loginUser?:'')"></span>
         </div>
       </div>
     </div>
@@ -719,7 +714,7 @@
     <div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
     <span class="nav-label">사건</span>
   </a>
-  <a href="../askAI" class="nav-item">
+  <a href="/askAI" class="nav-item">
       <div class="nav-icon">
         <svg width="22" height="22" viewBox="0 0 86 86" fill="none">
           <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="currentColor" stroke-width="5"/>
@@ -762,17 +757,17 @@
 
         <div style="background:var(--bg);border-radius:12px;padding:14px 16px;border:1px solid var(--border);">
           <div style="font-size:10px;color:var(--text-muted);font-weight:500;letter-spacing:0.5px;margin-bottom:4px;">이름</div>
-          <div style="font-size:14px;color:var(--text-primary);font-weight:500;"><%= userName %></div>
+          <div style="font-size:14px;color:var(--text-primary);font-weight:500;" th:text="${session.userName?:''}"></div>
         </div>
 
         <div style="background:var(--bg);border-radius:12px;padding:14px 16px;border:1px solid var(--border);">
           <div style="font-size:10px;color:var(--text-muted);font-weight:500;letter-spacing:0.5px;margin-bottom:4px;">계급</div>
-          <div style="font-size:14px;color:var(--text-primary);font-weight:500;"><%= userRank != null ? userRank : "-" %></div>
+          <div style="font-size:14px;color:var(--text-primary);font-weight:500;" th:text="${session.userRank?:'-'}"></div>
         </div>
 
         <div style="background:var(--bg);border-radius:12px;padding:14px 16px;border:1px solid var(--border);">
           <div style="font-size:10px;color:var(--text-muted);font-weight:500;letter-spacing:0.5px;margin-bottom:4px;">소속 기관</div>
-          <div style="font-size:14px;color:var(--text-primary);font-weight:500;"><%= userOrg != null ? userOrg : "-" %></div>
+          <div style="font-size:14px;color:var(--text-primary);font-weight:500;" th:text="${session.userOrg?:'-'}"></div>
         </div>
 
         <div style="background:var(--bg);border-radius:12px;padding:14px 16px;border:1px solid var(--border);" id="viewDeptRow">
@@ -782,12 +777,12 @@
 
         <div style="background:var(--bg);border-radius:12px;padding:14px 16px;border:1px solid var(--border);">
           <div style="font-size:10px;color:var(--text-muted);font-weight:500;letter-spacing:0.5px;margin-bottom:4px;">연락처</div>
-          <div style="font-size:14px;color:var(--text-primary);font-weight:500;"><%= userPhone != null && !userPhone.isEmpty() ? userPhone : "-" %></div>
+          <div style="font-size:14px;color:var(--text-primary);font-weight:500;" th:text="${(session.userPhone!=null && !session.userPhone.isEmpty()) ? session.userPhone : '-'}"></div>
         </div>
 
         <div style="background:var(--bg);border-radius:12px;padding:14px 16px;border:1px solid var(--border);">
           <div style="font-size:10px;color:var(--text-muted);font-weight:500;letter-spacing:0.5px;margin-bottom:4px;">아이디</div>
-          <div style="font-size:14px;color:var(--text-primary);font-weight:500;"><%= userId %></div>
+          <div style="font-size:14px;color:var(--text-primary);font-weight:500;" th:text="${session.loginUser?:''}"></div>
         </div>
 
       </div>
@@ -808,31 +803,35 @@
     <div class="drawer-body">
       <div class="d-field">
         <label class="d-label">이름</label>
-        <input type="text" class="d-input" id="editName" value="<%= userName %>">
+        <input type="text" class="d-input" id="editName" th:value="${session.userName?:''}">
       </div>
       <div class="d-field">
         <label class="d-label">계급</label>
         <select class="d-input" id="editRank">
-          <% String[] ranks = {"순경","경장","경사","경위","경감","경정","총경","경무관"}; %>
-          <% for(String r : ranks) { %>
-            <option <%= r.equals(userRank) ? "selected" : "" %>><%= r %></option>
-          <% } %>
+          <option value="순경" th:selected="${session.userRank == '순경'}">순경</option>
+          <option value="경장" th:selected="${session.userRank == '경장'}">경장</option>
+          <option value="경사" th:selected="${session.userRank == '경사'}">경사</option>
+          <option value="경위" th:selected="${session.userRank == '경위'}">경위</option>
+          <option value="경감" th:selected="${session.userRank == '경감'}">경감</option>
+          <option value="경정" th:selected="${session.userRank == '경정'}">경정</option>
+          <option value="총경" th:selected="${session.userRank == '총경'}">총경</option>
+          <option value="경무관" th:selected="${session.userRank == '경무관'}">경무관</option>
         </select>
       </div>
       <div class="d-field">
         <label class="d-label">소속 기관</label>
         <select class="d-input" id="editOrg" onchange="onOrgChange()">
           <option value="">선택하세요</option>
-          <option <%= "서울경찰청".equals(userOrg) ? "selected" : "" %>>서울경찰청</option>
-          <option <%= "부산지방경찰청".equals(userOrg) ? "selected" : "" %>>부산지방경찰청</option>
-          <option <%= "인천지방경찰청".equals(userOrg) ? "selected" : "" %>>인천지방경찰청</option>
-          <option <%= "경기남부경찰청".equals(userOrg) ? "selected" : "" %>>경기남부경찰청</option>
-          <option <%= "경기북부경찰청".equals(userOrg) ? "selected" : "" %>>경기북부경찰청</option>
-          <option <%= "대구지방경찰청".equals(userOrg) ? "selected" : "" %>>대구지방경찰청</option>
-          <option <%= "광주지방경찰청".equals(userOrg) ? "selected" : "" %>>광주지방경찰청</option>
-          <option <%= "대전지방경찰청".equals(userOrg) ? "selected" : "" %>>대전지방경찰청</option>
-          <option <%= "울산지방경찰청".equals(userOrg) ? "selected" : "" %>>울산지방경찰청</option>
-          <option <%= "기타".equals(userOrg) ? "selected" : "" %>>기타</option>
+          <option th:selected="${session.userOrg == '서울경찰청'}">서울경찰청</option>
+          <option th:selected="${session.userOrg == '부산지방경찰청'}">부산지방경찰청</option>
+          <option th:selected="${session.userOrg == '인천지방경찰청'}">인천지방경찰청</option>
+          <option th:selected="${session.userOrg == '경기남부경찰청'}">경기남부경찰청</option>
+          <option th:selected="${session.userOrg == '경기북부경찰청'}">경기북부경찰청</option>
+          <option th:selected="${session.userOrg == '대구지방경찰청'}">대구지방경찰청</option>
+          <option th:selected="${session.userOrg == '광주지방경찰청'}">광주지방경찰청</option>
+          <option th:selected="${session.userOrg == '대전지방경찰청'}">대전지방경찰청</option>
+          <option th:selected="${session.userOrg == '울산지방경찰청'}">울산지방경찰청</option>
+          <option th:selected="${session.userOrg == '기타'}">기타</option>
         </select>
       </div>
       <div class="d-field">
@@ -843,11 +842,11 @@
       </div>
       <div class="d-field">
         <label class="d-label">연락처</label>
-        <input type="tel" class="d-input" id="editPhone" value="<%= userPhone %>">
+        <input type="tel" class="d-input" id="editPhone" th:value="${session.userPhone?:''}">
       </div>
       <div class="d-field">
         <label class="d-label">아이디 (변경 불가)</label>
-        <input type="text" class="d-input" value="<%= userId %>" disabled>
+        <input type="text" class="d-input" th:value="${session.loginUser?:''}" disabled>
       </div>
       <button class="d-btn" onclick="saveProfile()">저장</button>
       <button class="d-btn-cancel" onclick="closeDrawer('profileDrawer')">취소</button>
@@ -1115,6 +1114,31 @@
 </div>
 
 
+<!-- ════════════════════════════════════ -->
+<!-- 드로어: 회원탈퇴                      -->
+<!-- ════════════════════════════════════ -->
+<div class="overlay" id="withdrawDrawer" onclick="closeOnBg(event,'withdrawDrawer')">
+  <div class="drawer">
+    <div class="drawer-handle"></div>
+    <div class="drawer-title" style="color:var(--danger);">회원탈퇴</div>
+    <div class="drawer-body">
+      <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px; line-height:1.6;">
+        탈퇴 시 모든 사건·조서·활동 이력이 <b>영구 삭제</b>됩니다.<br>
+        본인 확인을 위해 비밀번호를 입력해 주세요.
+      </p>
+      <div class="d-field">
+        <label class="d-label">비밀번호 확인</label>
+        <input type="password" class="d-input" id="withdrawPw" placeholder="현재 비밀번호 입력">
+      </div>
+      <p id="withdrawMsg" style="font-size:11px; color:var(--danger); margin-bottom:10px; display:none;"></p>
+      <button class="d-btn" id="withdrawBtn" onclick="submitWithdraw()"
+              style="background:var(--danger);">탈퇴하기</button>
+      <button class="d-btn-cancel" onclick="closeDrawer('withdrawDrawer')">취소</button>
+    </div>
+  </div>
+</div>
+
+
 <style>
   .period-btn {
     flex: 1; padding: 8px 0; font-size: 12px; font-family: 'Noto Sans KR', sans-serif;
@@ -1200,7 +1224,7 @@ function closeOnBg(e, id) {
 var currentDeptId   = null;
 var currentDeptName = null;
 document.addEventListener('DOMContentLoaded', function() {
-  fetch('../mypage?action=load')
+  fetch('/mypage?action=load')
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.user) return;
@@ -1218,8 +1242,8 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       // 현재 dept_id 저장 (프로필 드로어에서 부서 선택값 복원용)
       if (data.user) {
-        currentDeptId   = data.user.deptId   || null;
-        currentDeptName = data.user.userDept  || null;
+        currentDeptId   = data.user.dept_id   || null;
+        currentDeptName = data.user.dept_name  || null;
         // 프로필 정보 보기 드로어의 부서명 세팅
         var deptEl = document.getElementById('viewDeptName');
         if (deptEl) deptEl.textContent = currentDeptName || '-';
@@ -1259,7 +1283,7 @@ function onOrgChange() {
     return;
   }
 
-  fetch('../mypage?action=getDepts&org=' + encodeURIComponent(org))
+  fetch('/mypage?action=getDepts&org=' + encodeURIComponent(org))
     .then(function(r) { return r.json(); })
     .then(function(depts) {
       deptSel.innerHTML = '<option value="">부서 선택 (선택)</option>';
@@ -1293,7 +1317,7 @@ function openProfileDrawer() {
   deptSel.innerHTML = '<option value="">불러오는 중...</option>';
   deptSel.disabled = true;
 
-  fetch('../mypage?action=getDepts&org=' + encodeURIComponent(org))
+  fetch('/mypage?action=getDepts&org=' + encodeURIComponent(org))
     .then(function(r) { return r.json(); })
     .then(function(depts) {
       deptSel.innerHTML = '<option value="">부서 선택 (선택)</option>';
@@ -1322,7 +1346,7 @@ function saveProfile() {
   params.append('userPhone', document.getElementById('editPhone').value.trim());
   params.append('deptId',    document.getElementById('editDept').value || '');
 
-  fetch('../mypage', { method: 'POST', body: params })
+  fetch('/mypage', { method: 'POST', body: params })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.success) {
@@ -1340,7 +1364,7 @@ function saveProfile() {
 // ── 부서 변경 후 통계·이력·카운트 전체 갱신 ──────────────────────
 function reloadAfterDeptChange() {
   // ① 상단 통계 띠 재로드 (작성 조서 수 & 진행 사건 수)
-  fetch('../mypage?action=load&_=' + Date.now())
+  fetch('/mypage?action=load&_=' + Date.now())
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.user) return;
@@ -1350,8 +1374,8 @@ function reloadAfterDeptChange() {
       document.getElementById('menuHistoryCount').textContent = s.totalTranscripts + '건';
 
       // 현재 dept 정보 갱신
-      currentDeptId   = data.user.deptId  || null;
-      currentDeptName = data.user.userDept || null;
+      currentDeptId   = data.user.dept_id  || null;
+      currentDeptName = data.user.dept_name || null;
       // 프로필 뷰 드로어 부서명 갱신
       var deptEl = document.getElementById('viewDeptName');
       if (deptEl) deptEl.textContent = currentDeptName || '-';
@@ -1393,7 +1417,7 @@ function changePw() {
   params.append('newPw',  nw);
   params.append('newPwCf',nwcf);
 
-  fetch('../mypage', { method: 'POST', body: params })
+  fetch('/mypage', { method: 'POST', body: params })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.success) {
@@ -1439,9 +1463,9 @@ function submitWithdraw() {
 
   var params = new URLSearchParams();
   params.append('action', 'withdraw');
-  params.append('password', pw);
+  params.append('userPw', pw);
 
-  fetch('../mypage', { method: 'POST', body: params })
+  fetch('/mypage', { method: 'POST', body: params })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.success) {
@@ -1466,7 +1490,7 @@ function confirmLogout() {
   if (confirm('로그아웃 하시겠습니까?')) {
     var params = new URLSearchParams();
     params.append('action', 'logout');
-    fetch('../mypage', { method: 'POST', body: params })
+    fetch('/mypage', { method: 'POST', body: params })
       .then(function() { location.href = 'login'; })
       .catch(function() { location.href = 'login'; });
   }
@@ -1477,7 +1501,7 @@ function loadHistory() {
   var container = document.getElementById('historyList');
   container.innerHTML = '<p style="padding:20px; text-align:center; color:var(--text-muted); font-size:13px;">불러오는 중...</p>';
 
-  fetch('../mypage?action=history')
+  fetch('/mypage?action=history')
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var list = data.history;
@@ -1522,7 +1546,7 @@ function loadHistory() {
 
 // ── 모순탐지 목록 카운트 로드 ─────────────────────────────────────
 function loadContraCount() {
-  fetch('../contradictionApi?action=list&_=' + Date.now())
+  fetch('/contradictionApi?action=list&_=' + Date.now())
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!Array.isArray(data)) return;
@@ -1556,7 +1580,7 @@ var _currentPeriod = 'week';
 
 function loadStats(period) {
   _currentPeriod = period || 'week';
-  fetch('../mypage?action=stats&period=' + _currentPeriod + '&_=' + Date.now())
+  fetch('/mypage?action=stats&period=' + _currentPeriod + '&_=' + Date.now())
     .then(function(r) { return r.json(); })
     .then(function(data) { renderStats(data); })
     .catch(function(e) { console.error('통계 로드 실패', e); });
@@ -1789,14 +1813,15 @@ function escHtml(s) {
 function saveSettings() {
   var params = new URLSearchParams();
   params.append('action',             'saveSettings');
-  params.append('notifContradiction', document.getElementById('toggleContradiction').checked ? '1' : '0');
-  params.append('notifRelation',      document.getElementById('toggleRelation').checked      ? '1' : '0');
-  params.append('nightMode',          document.getElementById('toggleNightMode').checked     ? '1' : '0');
+  params.append('notifContradiction', document.getElementById('toggleContradiction').checked ? 'true' : 'false');
+  params.append('notifRelation',      document.getElementById('toggleRelation').checked      ? 'true' : 'false');
+  params.append('nightMode',          document.getElementById('toggleNightMode').checked     ? 'true' : 'false');
 
-  fetch('../mypage', { method: 'POST', body: params })
+  fetch('/mypage', { method: 'POST', body: params })
     .catch(function(e) { console.error('설정 저장 실패', e); });
 }
 </script>
 
 </body>
 </html>
+

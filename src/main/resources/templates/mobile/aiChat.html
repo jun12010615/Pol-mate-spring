@@ -1,7 +1,5 @@
-﻿<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="java.util.*, java.text.*" %>
-<!DOCTYPE html>
-<html lang="ko">
+﻿<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -213,30 +211,6 @@
 </head>
 <body>
 
-<%
-  // 서블릿에서 전달된 값
-  String result    = (String) request.getAttribute("result");
-  String prevMsg   = (String) request.getAttribute("userMsg");
-  String category  = (String) request.getAttribute("category");
-  Boolean ollamaOk = (Boolean) request.getAttribute("ollamaOk");
-
-  boolean hasResult  = (result != null && !result.isEmpty());
-  boolean isOffline  = (hasResult && result.startsWith("[OFFLINE]"));
-  boolean isError    = (hasResult && result.startsWith("[오류]"));
-
-  // 현재 시간
-  java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm");
-  String nowTime = sdf.format(new java.util.Date());
-
-  // 세션에서 사용자 이름 가져오기
-  HttpSession userSession = request.getSession(false);
-  String userName = "";
-  if (userSession != null) {
-    Object nameObj = userSession.getAttribute("userName");
-    if (nameObj != null) userName = nameObj.toString();
-  }
-  String userInitial = userName.length() >= 1 ? String.valueOf(userName.charAt(0)) : "U";
-%>
 
 <div class="screen">
 
@@ -248,16 +222,8 @@
     <div class="header-center">
       <div class="header-title">AI 수사 보조</div>
       <div class="header-status">
-        <% if (Boolean.TRUE.equals(ollamaOk)) { %>
-          <div class="status-dot on"></div>
-          <span class="status-text on">Ollama 연결됨 · gemma3:1b</span>
-        <% } else if (hasResult && isOffline) { %>
-          <div class="status-dot off"></div>
-          <span class="status-text off">Ollama 오프라인</span>
-        <% } else { %>
-          <div class="status-dot on"></div>
-          <span class="status-text on">gemma3:1b 대기 중</span>
-        <% } %>
+        <div class="status-dot on"></div>
+        <span class="status-text on">gemma3:1b 대기 중</span>
       </div>
     </div>
     <button class="btn-clear" onclick="clearChat()">대화 초기화</button>
@@ -270,13 +236,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
       <div class="cat-row" id="catRow" onscroll="updateArrows()">
-        <button class="cat-chip <%= (category == null || category.isEmpty()) ? "active" : "" %>" onclick="setCategory(this,'')">전체</button>
-        <button class="cat-chip <%= "미란다".equals(category) ? "active" : "" %>" onclick="setCategory(this,'미란다')">미란다 원칙</button>
-        <button class="cat-chip <%= "체포구속".equals(category) ? "active" : "" %>" onclick="setCategory(this,'체포구속')">체포·구속</button>
-        <button class="cat-chip <%= "조서작성".equals(category) ? "active" : "" %>" onclick="setCategory(this,'조서작성')">조서 작성</button>
-        <button class="cat-chip <%= "압수수색".equals(category) ? "active" : "" %>" onclick="setCategory(this,'압수수색')">압수·수색</button>
-        <button class="cat-chip <%= "증거".equals(category) ? "active" : "" %>" onclick="setCategory(this,'증거')">증거법</button>
-        <button class="cat-chip <%= "인권".equals(category) ? "active" : "" %>" onclick="setCategory(this,'인권')">피의자 인권</button>
+        <button class="cat-chip active" id="catAll" onclick="setCategory(this,'')">전체</button>
+        <button class="cat-chip" onclick="setCategory(this,'미란다')">미란다 원칙</button>
+        <button class="cat-chip" onclick="setCategory(this,'체포구속')">체포·구속</button>
+        <button class="cat-chip" onclick="setCategory(this,'조서작성')">조서 작성</button>
+        <button class="cat-chip" onclick="setCategory(this,'압수수색')">압수·수색</button>
+        <button class="cat-chip" onclick="setCategory(this,'증거')">증거법</button>
+        <button class="cat-chip" onclick="setCategory(this,'인권')">피의자 인권</button>
       </div>
       <button class="cat-arrow right" id="catRight" onclick="scrollCat(1)">
         <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
@@ -287,11 +253,10 @@
   <!-- 채팅창 -->
   <div class="chat-wrap" id="chatWrap">
 
-    <div class="date-divider"><span><%= new java.text.SimpleDateFormat("yyyy년 M월 d일").format(new java.util.Date()) %></span></div>
+    <div class="date-divider"><span id="todayDate"></span></div>
 
     <!-- 웰컴 메시지 -->
-    <% if (!hasResult) { %>
-    <div>
+    <div id="welcomeWrap">
       <div class="welcome-card">
         <div class="welcome-logo">
           <div class="logo-dot">
@@ -299,7 +264,7 @@
           </div>
           <span class="logo-name">POL-MATE AI</span>
         </div>
-        <div class="welcome-text">안녕하세요, <%= userName %> 수사관님.<br>형사사법 절차, 법령 해석, 수사 기법 등<br>무엇이든 질문하세요.</div>
+        <div class="welcome-text" id="welcomeText">안녕하세요, 수사관님.<br>형사사법 절차, 법령 해석, 수사 기법 등<br>무엇이든 질문하세요.</div>
         <div class="suggest-label">추천 질문</div>
         <div class="suggest-list">
           <button class="suggest-btn" onclick="fillInput('피의자가 묵비권을 행사할 때 수사관의 대처 방법은?')">
@@ -321,45 +286,6 @@
         </div>
       </div>
     </div>
-    <% } %>
-
-    <!-- 이전 대화 결과 (서블릿 응답) -->
-    <% if (hasResult && prevMsg != null && !prevMsg.isEmpty()) { %>
-
-      <!-- Ollama 오프라인 배너 -->
-      <% if (isOffline) { %>
-      <div class="offline-banner">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        <span>Ollama 서버 미연결. 터미널에서 <strong>ollama run gemma3:1b</strong> 실행 후 재시도하세요.</span>
-      </div>
-      <% } %>
-
-      <!-- 사용자 버블 -->
-      <div class="msg-row user">
-        <div>
-          <div class="bubble user"><%= prevMsg.replace("<","&lt;").replace(">","&gt;") %></div>
-          <div class="bubble-meta"><%= nowTime %></div>
-        </div>
-        <div class="avatar-sm avatar-user"><%= userInitial %></div>
-      </div>
-
-      <!-- AI 버블 -->
-      <div class="msg-row">
-        <div class="avatar-sm avatar-ai">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-        </div>
-        <div>
-          <% if (category != null && !category.isEmpty()) { %>
-            <div class="cat-tag"><%= category %></div>
-          <% } %>
-          <div class="bubble ai <%= isError || isOffline ? "error" : "" %>">
-            <%= result.replace("<","&lt;").replace(">","&gt;").replace("\n","<br>") %>
-          </div>
-          <div class="bubble-meta"><%= nowTime %> · gemma3:1b</div>
-        </div>
-      </div>
-
-    <% } %>
 
     <!-- 로딩 placeholder (JS 제어) -->
     <div id="typingRow" class="msg-row" style="display:none;">
@@ -376,7 +302,7 @@
   <!-- 입력창 -->
   <div class="input-area">
     <form id="chatForm">
-      <input type="hidden" name="category" id="categoryInput" value="<%= category != null ? category : "" %>">
+      <input type="hidden" name="category" id="categoryInput" th:value="${param.category ?:''}">
       <div class="input-row">
         <textarea
           name="userMsg"
@@ -402,7 +328,7 @@
     <div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
     <span class="nav-label">사건</span>
   </a>
-  <a href="../askAI" class="nav-item active">
+  <a href="/askAI" class="nav-item active">
       <div class="nav-icon">
         <svg width="22" height="22" viewBox="0 0 86 86" fill="none">
           <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="currentColor" stroke-width="5"/>
@@ -430,7 +356,7 @@
 
 
 <script>
-var selectedCategory = '<%= category != null ? category : "" %>';
+var selectedCategory = _initCategory;
 
 // ── 카테고리 좌우 스크롤
 function scrollCat(dir) {
@@ -484,7 +410,7 @@ function handleSubmit() {
       '<div class="bubble user">' + escaped + '</div>' +
       '<div class="bubble-meta" style="text-align:right;">' + timeStr + '</div>' +
     '</div>' +
-    '<div class="avatar-sm avatar-user"><%= userInitial %></div>';
+    '<div class="avatar-sm avatar-user">' + _userInitial + '</div>';
   document.getElementById('chatWrap').insertBefore(userRow, document.getElementById('typingRow'));
 
   // 입력창 비우기
@@ -501,7 +427,7 @@ function handleSubmit() {
   params.append('userMsg', msg);
   params.append('category', category);
 
-  fetch('../askAI', { method: 'POST', body: params })
+  fetch('/askAI', { method: 'POST', body: params })
     .then(function(res) {
       document.getElementById('typingRow').style.display = 'none';
 
@@ -605,3 +531,4 @@ window.addEventListener('load', function() {
 </script>
 </body>
 </html>
+

@@ -197,15 +197,21 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
                         </div>
                         <svg class="menu-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
                     </div>
-                    <div class="danger-zone">
-                        <div>
-                            <div style="font-size:13px; font-weight:500; color:#dc2626;">로그아웃</div>
-                            <div style="font-size:11px; color:#9ca3af; margin-top:2px;">현재 세션을 종료합니다.</div>
+                    <div class="danger-zone" style="flex-direction:column; gap:10px; align-items:stretch;">
+                        <div style="display:flex; align-items:center; justify-content:space-between;">
+                            <div>
+                                <div style="font-size:13px; font-weight:500; color:#dc2626;">로그아웃</div>
+                                <div style="font-size:11px; color:#9ca3af; margin-top:2px;">현재 세션을 종료합니다.</div>
+                            </div>
+                            <button class="btn-logout" onclick="confirmLogout()">로그아웃</button>
                         </div>
-                        <form th:action="@{/mypage}" method="post" onsubmit="return confirm('로그아웃 하시겠습니까?');">
-                            <input type="hidden" name="action" value="logout">
-                            <button type="submit" class="btn-logout">로그아웃</button>
-                        </form>
+                        <div style="border-top:1px solid #fecaca; padding-top:10px; display:flex; align-items:center; justify-content:space-between;">
+                            <div>
+                                <div style="font-size:13px; font-weight:500; color:#dc2626;">회원탈퇴</div>
+                                <div style="font-size:11px; color:#9ca3af; margin-top:2px;">계정 및 모든 데이터를 영구 삭제합니다.</div>
+                            </div>
+                            <button class="btn-logout" onclick="confirmWithdraw()">탈퇴하기</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -239,6 +245,26 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
     </div>
 </div>
 
+<div class="modal-backdrop" id="withdrawModal">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-title" style="color:#dc2626;">회원탈퇴</div>
+        <p style="font-size:13px; color:#6b7280; margin-bottom:16px; line-height:1.6;">
+            탈퇴 시 모든 사건·조서·활동 이력이 <b>영구 삭제</b>됩니다.<br>
+            본인 확인을 위해 비밀번호를 입력해 주세요.
+        </p>
+        <div class="form-field">
+            <label class="form-label">비밀번호 확인</label>
+            <input type="password" class="form-input" id="withdrawPw" placeholder="현재 비밀번호 입력">
+        </div>
+        <p id="withdrawMsg" style="font-size:11px; color:#dc2626; margin-top:4px; display:none;"></p>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeWithdrawModal()">취소</button>
+            <button class="btn-confirm" id="withdrawBtn" onclick="submitWithdraw()"
+                    style="background:#dc2626;">탈퇴하기</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -247,12 +273,12 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
         .then(function(r) { return r.json(); })
         .then(function(d) {
             var u = d.user || {};
-            if (document.getElementById('infoPhone')) document.getElementById('infoPhone').textContent = u.userPhone || '-';
-            if (document.getElementById('infoEmail')) document.getElementById('infoEmail').textContent = u.userEmail || '-';
+            if (document.getElementById('infoPhone')) document.getElementById('infoPhone').textContent = u.user_phone || '-';
+            if (document.getElementById('infoEmail')) document.getElementById('infoEmail').textContent = u.user_email || '-';
             var s = d.stats || {};
-            if (document.getElementById('statCase')) document.getElementById('statCase').textContent = s.totalCases != null ? s.totalCases : '-';
-            if (document.getElementById('statTranscript')) document.getElementById('statTranscript').textContent = s.completedTranscripts != null ? s.completedTranscripts : '-';
-            if (document.getElementById('statBoard')) document.getElementById('statBoard').textContent = '-';
+            if (document.getElementById('statCase'))       document.getElementById('statCase').textContent       = s.totalCases        != null ? s.totalCases        : '-';
+            if (document.getElementById('statTranscript')) document.getElementById('statTranscript').textContent = s.totalTranscripts   != null ? s.totalTranscripts   : '-';
+            if (document.getElementById('statBoard'))      document.getElementById('statBoard').textContent      = '-';
         }).catch(function() {});
 })();
 
@@ -260,17 +286,15 @@ function openPwModal()  { document.getElementById('pwModal').classList.add('open
 function closePwModal() { document.getElementById('pwModal').classList.remove('open'); ['curPw','newPw','newPwCf'].forEach(function(id){document.getElementById(id).value='';}); }
 
 function submitPwChange() {
-    var cur   = document.getElementById('curPw').value;
-    var np    = document.getElementById('newPw').value;
-    var npcf  = document.getElementById('newPwCf').value;
+    var cur  = document.getElementById('curPw').value;
+    var np   = document.getElementById('newPw').value;
+    var npcf = document.getElementById('newPwCf').value;
     if (!cur) { showToast('현재 비밀번호를 입력해 주세요.'); return; }
     if (!np || np.length < 8) { showToast('새 비밀번호를 8자 이상 입력해 주세요.'); return; }
     if (np !== npcf) { showToast('새 비밀번호가 일치하지 않습니다.'); return; }
     var fd = new FormData();
     fd.append('action', 'changePassword');
-    fd.append('curPw', cur);
-    fd.append('newPw', np);
-    fd.append('newPwCf', npcf);
+    fd.append('curPw', cur); fd.append('newPw', np); fd.append('newPwCf', npcf);
     fetch('/mypage', {method:'POST', body:fd, credentials:'same-origin'})
         .then(function(r){return r.json();})
         .then(function(d){
@@ -279,12 +303,59 @@ function submitPwChange() {
         }).catch(function(){ showToast('서버 통신 오류가 발생했습니다.'); });
 }
 
-function showToast(msg) {
-    var t = document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
-    setTimeout(function(){t.classList.remove('show');}, 2500);
+function confirmLogout() {
+    if (!confirm('로그아웃 하시겠습니까?')) return;
+    var fd = new FormData();
+    fd.append('action', 'logout');
+    fetch('/mypage', {method:'POST', body:fd, credentials:'same-origin'})
+        .then(function() { location.href = '/desktop/login'; })
+        .catch(function() { location.href = '/desktop/login'; });
 }
 
-document.getElementById('pwModal').addEventListener('click', function(e){if(e.target===this)closePwModal();});
+function confirmWithdraw() {
+    document.getElementById('withdrawPw').value = '';
+    document.getElementById('withdrawMsg').style.display = 'none';
+    document.getElementById('withdrawModal').classList.add('open');
+}
+
+function closeWithdrawModal() {
+    document.getElementById('withdrawModal').classList.remove('open');
+}
+
+function submitWithdraw() {
+    var pw  = document.getElementById('withdrawPw').value;
+    var msg = document.getElementById('withdrawMsg');
+    var btn = document.getElementById('withdrawBtn');
+    msg.style.display = 'none';
+    if (!pw) { msg.textContent = '비밀번호를 입력해 주세요.'; msg.style.display = 'block'; return; }
+    btn.disabled = true; btn.textContent = '처리 중...';
+    var fd = new FormData();
+    fd.append('action', 'withdraw'); fd.append('userPw', pw);
+    fetch('/mypage', {method:'POST', body:fd, credentials:'same-origin'})
+        .then(function(r){return r.json();})
+        .then(function(d){
+            if (d.success) {
+                alert('탈퇴가 완료되었습니다.');
+                location.href = '/desktop/login';
+            } else {
+                msg.textContent = d.message || '탈퇴 처리에 실패했습니다.';
+                msg.style.display = 'block';
+                btn.disabled = false; btn.textContent = '탈퇴하기';
+            }
+        }).catch(function(){
+            msg.textContent = '오류가 발생했습니다. 다시 시도해 주세요.';
+            msg.style.display = 'block';
+            btn.disabled = false; btn.textContent = '탈퇴하기';
+        });
+}
+
+function showToast(msg) {
+    var t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+    setTimeout(function(){ t.classList.remove('show'); }, 2500);
+}
+
+document.getElementById('pwModal').addEventListener('click', function(e){ if(e.target===this) closePwModal(); });
+document.getElementById('withdrawModal').addEventListener('click', function(e){ if(e.target===this) closeWithdrawModal(); });
 </script>
 </body>
 </html>

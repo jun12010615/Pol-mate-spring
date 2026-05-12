@@ -48,12 +48,15 @@ public class MypageController {
                 break;
             }
             case "history": {
-                // TranscriptService는 CaseService에 포함 — JdbcTemplate으로 직접 처리
-                res.getWriter().print("{\"history\":[]}");
+                List<Map<String, Object>> history = userService.getHistory(userId);
+                Map<String, Object> histResult = new HashMap<>();
+                histResult.put("history", history);
+                res.getWriter().print(gson.toJson(histResult));
                 break;
             }
             case "stats": {
-                res.getWriter().print(gson.toJson(userService.getStats(userId)));
+                String p = (period != null && !period.isEmpty()) ? period : "all";
+                res.getWriter().print(gson.toJson(userService.getStatsForPeriod(userId, p)));
                 break;
             }
             default:

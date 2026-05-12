@@ -1,27 +1,5 @@
-﻿<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%
-    String loginUser = (String) session.getAttribute("loginUser");
-    String userName  = (String) session.getAttribute("userName");
-    String userInitial = (userName != null && userName.length() > 0) ? String.valueOf(userName.charAt(0)) : "경";
-
-    String polMateServBaseUrl = "http://113.198.238.111:5001";
-    try {
-        java.util.Properties props = new java.util.Properties();
-        java.io.InputStream is = application.getResourceAsStream("/WEB-INF/config.properties");
-        if (is != null) {
-            props.load(is);
-            String u = props.getProperty("POL_MATE_SERV_BASE_URL", "").trim();
-            if (!u.isEmpty()) {
-                while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
-                polMateServBaseUrl = u;
-            }
-            is.close();
-        }
-    } catch (Exception ignored) {}
-    String safePolMateServBaseUrl = polMateServBaseUrl.replace("\\", "\\\\").replace("'", "\\'");
-%>
-<!DOCTYPE html>
-<html lang="ko">
+﻿<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -216,6 +194,9 @@
   .spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin 0.7s linear infinite; }
   @media(min-width:421px){ .screen{box-shadow:0 0 40px rgba(0,0,0,0.1);} }
 </style>
+<script th:inline="javascript">
+var _polMateServBase=/*[[${@environment.getProperty('polmate.serv.base-url') ?:'http://localhost:5001'}]]*/"";
+</script>
 </head>
 <body>
 <div class="screen">
@@ -293,14 +274,14 @@
     <nav class="bottom-nav">
     <a href="main" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><span class="nav-label">홈</span></a>
     <a href="myCase" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><span class="nav-label">사건</span></a>
-    <a href="../askAI" class="nav-item"><div class="nav-icon"><svg width="22" height="22" viewBox="0 0 86 86" fill="none"><path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="43" cy="40" r="11" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="43" cy="40" r="5" fill="currentColor"/><circle cx="43" cy="40" r="2.5" fill="white"/><circle cx="43" cy="22" r="2.8" fill="currentColor"/><circle cx="43" cy="58" r="2.8" fill="currentColor"/><circle cx="28" cy="40" r="2.8" fill="currentColor"/><circle cx="58" cy="40" r="2.8" fill="currentColor"/></svg></div><span class="nav-label">AI</span></a>
+    <a href="/askAI" class="nav-item"><div class="nav-icon"><svg width="22" height="22" viewBox="0 0 86 86" fill="none"><path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="43" cy="40" r="11" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="43" cy="40" r="5" fill="currentColor"/><circle cx="43" cy="40" r="2.5" fill="white"/><circle cx="43" cy="22" r="2.8" fill="currentColor"/><circle cx="43" cy="58" r="2.8" fill="currentColor"/><circle cx="28" cy="40" r="2.8" fill="currentColor"/><circle cx="58" cy="40" r="2.8" fill="currentColor"/></svg></div><span class="nav-label">AI</span></a>
     <a href="board" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><span class="nav-label">커뮤니티</span></a>
     <a href="mypage" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><span class="nav-label">마이페이지</span></a>
   </nav>
 </div>
 
 <script>
-var PYTHON_SERVER = '<%= safePolMateServBaseUrl %>';
+var PYTHON_SERVER = _polMateServBase;
 var videoFiles = []; // { file, id, status, jobId, results, pollTimer }
 var uidSeq = 0;
 
@@ -575,3 +556,4 @@ function esc(s) {
 </script>
 </body>
 </html>
+

@@ -2,7 +2,6 @@ plugins {
     id 'org.springframework.boot' version '3.3.5'
     id 'io.spring.dependency-management' version '1.1.6'
     id 'java'
-    id 'war'
 }
 
 group = 'com.polmate'
@@ -27,12 +26,6 @@ dependencies {
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
-
-    // JSP 지원 (Thymeleaf 전환 완료 전까지 유지)
-    providedRuntime 'org.springframework.boot:spring-boot-starter-tomcat'
-    runtimeOnly 'org.apache.tomcat.embed:tomcat-embed-jasper'
-    implementation 'jakarta.servlet.jsp.jstl:jakarta.servlet.jsp.jstl-api:3.0.0'
-    runtimeOnly 'org.glassfish.web:jakarta.servlet.jsp.jstl:3.0.1'
 
     // MySQL
     runtimeOnly 'com.mysql:mysql-connector-j'

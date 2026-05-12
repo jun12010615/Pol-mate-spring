@@ -1,6 +1,7 @@
 package com.polmate.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 import lombok.*;
 import java.time.LocalDateTime;
 
@@ -37,6 +38,8 @@ public class Notification {
 
     @Column(name = "is_critical")
     private boolean isCritical;
+
+    @CreationTimestamp
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

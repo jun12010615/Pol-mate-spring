@@ -108,7 +108,7 @@ public class BoardService {
     @Transactional
     public void addComment(String userId, Integer postId, String content) {
         commentRepo.save(BoardComment.builder()
-            .postId(postId).userId(userId).content(content.trim()).anonymous(0).build());
+            .postId(postId).userId(userId).content(content.trim()).build());
     }
 
     // ── 댓글 삭제 ────────────────────────────────────────────────

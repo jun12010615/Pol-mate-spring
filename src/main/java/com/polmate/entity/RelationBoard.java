@@ -1,6 +1,8 @@
 package com.polmate.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 import lombok.*;
 import java.time.LocalDateTime;
 
@@ -26,9 +28,12 @@ public class RelationBoard {
     @Column(name = "updated_by")
     private String updatedBy;
 
+    @CreationTimestamp
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 }

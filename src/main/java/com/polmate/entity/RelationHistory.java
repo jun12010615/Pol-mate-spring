@@ -1,6 +1,7 @@
 package com.polmate.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 import lombok.*;
 import java.time.LocalDateTime;
 
@@ -22,6 +23,8 @@ public class RelationHistory {
 
     @Column(name = "action")
     private String action;
+
+    @CreationTimestamp
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

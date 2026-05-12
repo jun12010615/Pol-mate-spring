@@ -1,6 +1,7 @@
 package com.polmate.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 import lombok.*;
 import java.time.LocalDateTime;
 
@@ -34,6 +35,8 @@ public class ContradictionResult {
 
     @Column(name = "stmt_text", columnDefinition = "TEXT")
     private String stmtText;
+
+    @CreationTimestamp
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

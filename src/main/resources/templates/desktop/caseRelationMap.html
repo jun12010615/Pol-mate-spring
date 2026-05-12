@@ -284,7 +284,6 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 </div><!-- /pm-layout -->
 
 <div class="toast" id="toast"></div>
-<div id="_boot" hidden th:attr="data-case-id=${param.caseId ?: ''}"></div>
 
 <script>
 var RELATION_MAP_URL = POL_MATE_SERV_BASE.replace(/\/$/, '') + '/relation_map';
@@ -883,8 +882,7 @@ function showToast(msg) {
 
 /* ── Case panel AJAX ── */
 function loadCasePanel() {
-    var boot = document.getElementById('_boot');
-    var initCaseId = boot ? boot.getAttribute('data-case-id') : '';
+    var initCaseId = _initCaseId || '';
     var panel = document.getElementById('panel-cases');
     fetch('/caseApi?action=caseList', {credentials: 'same-origin'})
         .then(function(r) { return r.json(); })

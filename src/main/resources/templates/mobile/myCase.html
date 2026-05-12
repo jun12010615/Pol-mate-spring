@@ -1,33 +1,14 @@
-﻿<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%
-    String loginUser = (String) session.getAttribute("loginUser");
-    String userName  = (String) session.getAttribute("userName");
-    String paramCaseId = request.getParameter("caseId") != null ? request.getParameter("caseId") : "";
-    String safeParamCaseIdJs = paramCaseId.replace("\\", "\\\\").replace("'", "\\'");
-
-    String polMateServBaseUrl = "http://113.198.238.111:5001";
-    try {
-        java.util.Properties props = new java.util.Properties();
-        java.io.InputStream is = application.getResourceAsStream("/WEB-INF/config.properties");
-        if (is != null) {
-            props.load(is);
-            String u = props.getProperty("POL_MATE_SERV_BASE_URL", "").trim();
-            if (!u.isEmpty()) {
-                while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
-                polMateServBaseUrl = u;
-            }
-            is.close();
-        }
-    } catch (Exception ignored) {}
-    String safePolMateServBaseUrl = polMateServBaseUrl.replace("\\", "\\\\").replace("'", "\\'");
-%>
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>POL-MATE | 사건 관리</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script th:inline="javascript">
+var _polMateServBase = /*[[${@environment.getProperty('polmate.serv.base-url') ?: 'http://localhost:5001'}]]*/ '';
+var _initCaseId = /*[[${param.caseId ?: ''}]]*/ '';
+</script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   :root {
@@ -122,8 +103,6 @@
   .case-meta { display:flex; gap:14px; flex-wrap:wrap; }
   .meta-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-muted); }
   .meta-item svg { width:12px; height:12px; stroke:var(--text-muted); }
-
-
 
   /* 빈 상태 */
   .empty-state { padding:48px 20px; text-align:center; }
@@ -320,7 +299,6 @@
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         오래된순
       </button>
-
     </div>
     <div class="case-list" id="caseList"></div>
     </div>
@@ -334,7 +312,7 @@
     <div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
     <span class="nav-label">사건</span>
     </a>
-    <a href="../askAI" class="nav-item">
+    <a href="/askAI" class="nav-item">
       <div class="nav-icon">
         <svg width="22" height="22" viewBox="0 0 86 86" fill="none">
           <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="currentColor" stroke-width="5"/>
@@ -466,7 +444,6 @@
             <button class="status-btn" data-val="모순탐지" onclick="selectStatus(this)">모순탐지</button>
           </div>
         </div>
-
         <button onclick="submitEditCase()" style="width:100%;padding:14px;background:var(--navy);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:500;font-family:'Noto Sans KR',sans-serif;cursor:pointer;">저장하기</button>
       </div>
     </div>
@@ -526,6 +503,11 @@
 var CASES = [], currentFilter = 'all', currentSort = 'date_desc', currentCaseId = null, editCaseId = null, selectedStatus = '';
 var BADGE_CLS = { '검토필요':'badge-warn','진행중':'badge-ok','완료':'badge-done','모순탐지':'badge-danger' };
 var mDocScores = {}, mCurrentScoreId = null;
+var POL_MATE_SERV_BASE = _polMateServBase;
+var ANALYZE_STREAM_URL = POL_MATE_SERV_BASE + '/analyze/stream';
+var contraTypeSession = 0;
+var contraStreamAbort = null;
+var contraHasContradictionFromServer = null;
 
 function setFilter(el, val) {
   document.querySelectorAll('.chip').forEach(function(c){c.classList.remove('active');});
@@ -544,7 +526,7 @@ function sortedCases(list) {
   var arr = list.slice();
   if (currentSort === 'date_asc') {
     arr.sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
-  } else { // date_desc (기본)
+  } else {
     arr.sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
   }
   return arr;
@@ -558,7 +540,7 @@ document.getElementById('searchInput').addEventListener('input', function(){
 function loadCaseList() {
   var kw = document.getElementById('searchInput').value.trim();
   document.getElementById('caseList').innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--text-muted);font-size:13px;">불러오는 중...</div>';
-  fetch('../caseApi?action=caseList&status=' + encodeURIComponent(currentFilter) + '&keyword=' + encodeURIComponent(kw))
+  fetch('/caseApi?action=caseList&status=' + encodeURIComponent(currentFilter) + '&keyword=' + encodeURIComponent(kw))
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(data){
       if(data.error){ document.getElementById('caseList').innerHTML='<div class="empty-state"><div class="empty-title" style="color:var(--danger)">'+data.error+'</div></div>'; return; }
@@ -604,7 +586,7 @@ function openCase(id) {
   document.getElementById('drawerActions').innerHTML='';
   document.getElementById('caseDrawer').classList.add('open');
   document.body.style.overflow='hidden';
-  fetch('../caseApi?action=caseDetail&caseId='+encodeURIComponent(id))
+  fetch('/caseApi?action=caseDetail&caseId='+encodeURIComponent(id))
     .then(function(r){return r.json();})
     .then(function(c){
       if(c.error){showToast(c.error);closeDrawer('caseDrawer');return;}
@@ -674,7 +656,6 @@ function renderDrawerActions(c){
     '<button class="action-btn" onclick="closeDrawer(\'caseDrawer\')" style="border:none;cursor:pointer;"><svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.8" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>닫기</span></button>';
 }
 
-// ── 관계망으로 이동 (현재 사건 + 선택된 조서 전달) ──────────────
 function goRelationMap() {
   var url = 'caseRelationMap?caseId=' + encodeURIComponent(currentCaseId);
   if (checkedDocs.length > 0) {
@@ -691,10 +672,9 @@ function openTranscriptPopup(idx){
     renderTranscriptSummary(d.summaryText||'');
   } else {
     document.getElementById('popupBody').innerHTML='<div class="popup-empty">불러오는 중...</div>';
-    // 요약은 DB 업데이트 완료 시점부터만 보이도록 숨김
     var sumWrapLoading=document.getElementById('popupSummary');
     if(sumWrapLoading) sumWrapLoading.style.display='none';
-    fetch('../caseApi?action=transcriptText&transcriptId='+d.id).then(function(r){return r.json();}).then(function(res){
+    fetch('/caseApi?action=transcriptText&transcriptId='+d.id).then(function(r){return r.json();}).then(function(res){
       d.originalText=res.text||'';
       d.summaryText=res.summary||'';
       document.getElementById('popupBody').innerHTML=d.originalText?'<span>'+escHtml(d.originalText)+'</span>':'<div class="popup-empty">저장된 진술 내용이 없습니다.</div>';
@@ -723,11 +703,6 @@ function renderTranscriptSummary(summary){
   }
 }
 
-var POL_MATE_SERV_BASE='<%= safePolMateServBaseUrl %>';
-var ANALYZE_STREAM_URL=POL_MATE_SERV_BASE+'/analyze/stream';
-var contraTypeSession=0;
-var contraStreamAbort=null;
-var contraHasContradictionFromServer=null;
 function removeContraCaret(caret){if(caret&&caret.parentNode)caret.parentNode.removeChild(caret);}
 function consumeAnalyzeStream(response,session){
   return new Promise(function(resolve,reject){
@@ -825,7 +800,6 @@ function runContradiction(){
   contraTypeSession++;
   contraHasContradictionFromServer=null;
   contraSavePosting=false;
-  // 저장 푸터 초기화 (자동 저장 실패 시에만 표시)
   document.getElementById('contraSaveFooter').style.display='none';
   var hint=document.getElementById('contraSaveHint');
   if(hint)hint.style.display='none';
@@ -839,7 +813,7 @@ function runContradiction(){
   document.getElementById('contraPopupTitle').textContent='모순 분석 중...';
   document.getElementById('contraPopupBody').innerHTML='<div class="contra-loading"><div class="contra-buffer-spinner"></div><div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:8px;">조서를 불러오는 중</div><div style="font-size:12px;">선택한 '+checkedDocs.length+'개 조서를 준비합니다.</div><div style="margin-top:8px;font-size:11px;color:var(--text-muted);">'+titles.join(', ')+'</div></div>';
   document.getElementById('contraPopup').classList.add('open');
-  var fp=checkedDocs.map(function(id){var d=currentDocs.find(function(x){return x.id===id;});if(d&&d.originalText!==undefined)return Promise.resolve(d);return fetch('../caseApi?action=transcriptText&transcriptId='+id).then(function(r){return r.json();}).then(function(res){if(d)d.originalText=res.text||'';return d;});});
+  var fp=checkedDocs.map(function(id){var d=currentDocs.find(function(x){return x.id===id;});if(d&&d.originalText!==undefined)return Promise.resolve(d);return fetch('/caseApi?action=transcriptText&transcriptId='+id).then(function(r){return r.json();}).then(function(res){if(d)d.originalText=res.text||'';return d;});});
   Promise.all(fp).then(function(docs){
     var ordered=checkedDocs.map(function(id){return docs.find(function(x){return x&&x.id===id;});}).filter(Boolean);
     if(ordered.length<2) throw new Error('조서를 불러오지 못했습니다.');
@@ -888,7 +862,6 @@ function closeContraPopup(e){
 
 var contraSavePosting=false;
 
-/** 분석 출력의 statement_x 표기를 조서N(1-base)으로 통일 */
 function normalizeStatementLabels(s){
   return String(s||'').replace(/statement_([a-z]+)/gi, function(_, letters){
     var n = 0;
@@ -902,7 +875,6 @@ function normalizeStatementLabels(s){
   });
 }
 
-/** polmate_serv _pass1_prompt 소제목(시간순 정리된 사건 흐름 / 진술자의 알리바이 요약 / 모순점 분석) 표시 — contradictionList.jsp와 동일 색 */
 function stripAnalyzeSectionNumberPrefix(trimmed){
   return String(trimmed||'').replace(/^\d+[\).]\s*/, '');
 }
@@ -924,7 +896,6 @@ function formatContradictionAnalyzeHtml(plain){
   return parts.join('<br>');
 }
 
-/** contradictionList.jsp·writeTranscript.jsp와 동일 기준 (저장 시 플래그 정확도) */
 function inferHasContradictionFromAiText(ai){
   var s=String(ai||'');
   if(!s.trim())return false;
@@ -949,7 +920,6 @@ function inferHasContradictionFromAiText(ai){
 function buildContraSavePayload(){
   var bodyEl=document.getElementById('contraPopupBody');
   var textSpan=bodyEl.querySelector('.contra-type-text');
-  // 저장 시 줄바꿈 보존: textContent는 <br>를 붙여버려 상세창에서 한 줄로 보일 수 있음
   var aiResult=textSpan?(textSpan.innerText||textSpan.textContent):(bodyEl?(bodyEl.innerText||bodyEl.textContent):'');
   aiResult=normalizeStatementLabels(aiResult);
   var stmtNames=checkedDocs.map(function(id){
@@ -960,8 +930,6 @@ function buildContraSavePayload(){
     var d=currentDocs.find(function(x){return x.id===id;});
     return d?(d.type||''):'';
   }).filter(Boolean).join(', ');
-  // 저장 상태 불일치 방지:
-  // 서버 플래그가 false로 오더라도, 본문에 모순 서술이 있으면 true로 보수 판단
   var inferred = inferHasContradictionFromAiText(aiResult);
   var hasContradiction = (typeof contraHasContradictionFromServer==='boolean')
     ? (contraHasContradictionFromServer || inferred)
@@ -989,7 +957,7 @@ function postContraSaveFromMyCase(fields, opts){
   params.append('hasContradiction',fields.hasContradiction?'true':'false');
   params.append('aiResult',fields.aiResult);
   params.append('stmtText','');
-  fetch('../contradictionApi',{
+  fetch('/contradictionApi',{
     method:'POST',
     headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
     body:params.toString()
@@ -1040,7 +1008,6 @@ function attemptAutoPersistContra(streamSession){
   postContraSaveFromMyCase(fields,{ redirect:false, streamSession:streamSession, btn:null });
 }
 
-// ── 모순탐지 결과 수동 재저장 ─────────────────────────────────────
 function saveContraResult(){
   var btn=document.getElementById('contraSaveBtn');
   postContraSaveFromMyCase(buildContraSavePayload(),{ redirect:true, btn:btn, streamSession:null });
@@ -1054,7 +1021,7 @@ function openNewCaseDrawer(){
   document.getElementById('newCaseDrawer').classList.add('open');
   document.body.style.overflow='hidden';
   setTimeout(function(){document.getElementById('newCaseId').focus();},300);
-  fetch('../caseApi?action=myDept').then(function(r){return r.json();}).then(function(d){
+  fetch('/caseApi?action=myDept').then(function(r){return r.json();}).then(function(d){
     if(d.error){document.getElementById('newCaseDeptLabel').textContent='조회 실패';return;}
     document.getElementById('newCaseDeptLabel').textContent=d.label;
     document.getElementById('newCaseDeptLabel').style.color=d.deptId?'var(--navy)':'var(--text-muted)';
@@ -1066,7 +1033,7 @@ function submitNewCase(){
   var ss=document.getElementById('newSuspect').value.trim();
   if(!ci){showToast('사건번호를 입력하세요.');return;} if(!cn){showToast('사건명을 입력하세요.');return;}
   var p=new URLSearchParams();p.append('action','caseCreate');p.append('caseId',ci);p.append('caseName',cn);p.append('suspect',ss);
-  fetch('../caseApi',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()}).then(function(r){return r.json();}).then(function(d){
+  fetch('/caseApi',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()}).then(function(r){return r.json();}).then(function(d){
     if(d.success){closeDrawer('newCaseDrawer');showToast('✓ 사건이 등록됐습니다'+(d.deptLabel?' · '+d.deptLabel:''));loadCaseList();}
     else showToast(d.message||'등록 실패');
   }).catch(function(){showToast('등록 중 오류 발생');});
@@ -1082,7 +1049,7 @@ function selectStatus(btn){document.querySelectorAll('.status-btn').forEach(func
 function submitEditCase(){
   if(!editCaseId) return;
   var p=new URLSearchParams();p.append('action','caseStatus');p.append('caseId',editCaseId);p.append('status',selectedStatus);
-  fetch('../caseApi',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()}).then(function(r){return r.json();}).then(function(d){
+  fetch('/caseApi',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()}).then(function(r){return r.json();}).then(function(d){
     if(d.success){closeDrawer('editDrawer');showToast('✓ 수정됐습니다');loadCaseList();}else showToast(d.message||'수정 실패');
   }).catch(function(){showToast('수정 중 오류 발생');});
 }
@@ -1090,7 +1057,7 @@ function submitEditCase(){
 function confirmDeleteCase(caseId){
   if(!confirm('사건 ['+caseId+']을 삭제할까요?\n관련 조서·관계망 데이터도 모두 삭제됩니다.')) return;
   var p=new URLSearchParams();p.append('action','caseDelete');p.append('caseId',caseId);
-  fetch('../caseApi',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()}).then(function(r){return r.json();}).then(function(d){
+  fetch('/caseApi',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()}).then(function(r){return r.json();}).then(function(d){
     if(d.success){closeDrawer('caseDrawer');showToast('✓ 사건이 삭제됐습니다');loadCaseList();}else showToast(d.message||'삭제 실패');
   }).catch(function(){showToast('삭제 중 오류 발생');});
 }
@@ -1171,7 +1138,7 @@ function runMobileScoreAnalysis() {
   var p = new URLSearchParams();
   p.append('action', 'scoreTranscript');
   p.append('transcriptId', mCurrentScoreId);
-  fetch('../caseApi', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:p.toString() })
+  fetch('/caseApi', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:p.toString() })
     .then(function(r){ return r.json(); })
     .then(function(d) {
       btn.disabled = false;
@@ -1227,9 +1194,8 @@ loadCaseList();
 
 // 알림에서 caseId 파라미터로 직접 진입 시 해당 사건 드로어 자동 오픈
 (function() {
-  var targetId = '<%= safeParamCaseIdJs %>';
+  var targetId = _initCaseId;
   if (!targetId) return;
-  // 카드 렌더링 완료 후 해당 사건 드로어 오픈
   var maxTry = 20, tried = 0;
   var timer = setInterval(function() {
     tried++;

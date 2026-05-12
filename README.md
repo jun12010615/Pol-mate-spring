@@ -3,7 +3,7 @@
 대한민국 경찰청 형사 수사관을 위한 AI 기반 수사 보조 플랫폼입니다.
 진술 모순 탐지, 사건 관계망 시각화, CCTV 번호판 분석, AI 수사 챗봇 기능을 제공합니다.
 
-> 이 저장소는 기존 JSP+Servlet 프로젝트를 **Spring Boot 3.3.5**로 마이그레이션한 버전입니다.
+> 기존 JSP+Servlet 프로젝트를 **Spring Boot 3.3.5 + JPA + Thymeleaf** 구조로 전면 전환 완료.
 
 ---
 
@@ -233,8 +233,10 @@ gradlew bootRun
 Spring Boot가 정상 실행되면 콘솔에 아래 메시지가 출력됩니다:
 
 ```
-Started PolmateApplication in X.XXX seconds
+Started PolmateApplication in X.XXX seconds (process running for X.XXX)
 ```
+
+> Gradle로 빌드만 하려면: `gradlew build -x test`
 
 ---
 
@@ -298,41 +300,132 @@ Pol-mate-spring/
 ├── src/
 │   └── main/
 │       ├── java/com/polmate/
-│       │   ├── PolmateApplication.java       ← Spring Boot 진입점
+│       │   ├── PolmateApplication.java            ← Spring Boot 진입점 (JAR)
 │       │   ├── config/
-│       │   │   └── WebConfig.java            ← AuthInterceptor (로그인 검사)
-│       │   ├── controller/
-│       │   │   ├── PageController.java       ← JSP 페이지 URL 매핑
-│       │   │   ├── LoginController.java      ← /login
-│       │   │   ├── RegisterController.java   ← /register
-│       │   │   ├── FindAccountController.java← /findAccount
-│       │   │   ├── BoardController.java      ← /board
-│       │   │   ├── CaseController.java       ← /caseApi
-│       │   │   ├── ContradictionController.java ← /contradictionApi
-│       │   │   ├── NotificationController.java  ← /notifApi
-│       │   │   ├── MypageController.java     ← /mypage
-│       │   │   ├── RelationBoardController.java ← /boardApi
-│       │   │   ├── SttController.java        ← /stt
-│       │   │   └── AiChatController.java     ← /askAI
-│       │   └── util/
-│       │       └── NotificationUtil.java
-│       ├── resources/
-│       │   └── application.properties
-│       └── webapp/
-│           └── WEB-INF/views/
-│               ├── mobile/                   ← 모바일 JSP
-│               └── desktop/                  ← 데스크탑 JSP (sidebar.jsp, appbar.jsp 포함)
-├── build.gradle
-├── polmate_serv.py                           ← Flask 통합 서버
-├── license_plate_detector.pt                ← YOLO 번호판 감지 모델
-└── ocr_engine/                              ← 한국 번호판 OCR 모델
+│       │   │   └── WebConfig.java                 ← AuthInterceptor (로그인 검사)
+│       │   ├── controller/                        ← REST 컨트롤러 (JSON 반환)
+│       │   │   ├── PageController.java            ← 페이지 URL → 뷰 이름 매핑
+│       │   │   ├── LoginController.java           ← /login
+│       │   │   ├── RegisterController.java        ← /register
+│       │   │   ├── FindAccountController.java     ← /findAccount
+│       │   │   ├── BoardController.java           ← /board
+│       │   │   ├── CaseController.java            ← /caseApi
+│       │   │   ├── ContradictionController.java   ← /contradictionApi
+│       │   │   ├── NotificationController.java    ← /notifApi
+│       │   │   ├── MypageController.java          ← /mypage
+│       │   │   ├── RelationBoardController.java   ← /boardApi
+│       │   │   ├── SttController.java             ← /stt (CLOVA Speech)
+│       │   │   └── AiChatController.java          ← /askAI (Ollama SSE)
+│       │   ├── service/                           ← 비즈니스 로직
+│       │   │   ├── UserService.java
+│       │   │   ├── DepartmentService.java
+│       │   │   ├── NotificationService.java
+│       │   │   ├── CaseService.java
+│       │   │   ├── TranscriptService.java
+│       │   │   ├── BoardService.java
+│       │   │   ├── ContradictionService.java
+│       │   │   └── RelationBoardService.java
+│       │   ├── repository/                        ← JPA Repository 인터페이스 (17개)
+│       │   │   ├── UserRepository.java
+│       │   │   ├── CaseRepository.java
+│       │   │   ├── TranscriptRepository.java
+│       │   │   ├── BoardPostRepository.java
+│       │   │   ├── BoardCommentRepository.java
+│       │   │   ├── NotificationRepository.java
+│       │   │   └── ... (17개 총)
+│       │   └── entity/                            ← JPA Entity (DB 테이블 1:1 매핑, 17개)
+│       │       ├── User.java                      → users
+│       │       ├── Case.java                      → cases
+│       │       ├── Transcript.java                → transcripts
+│       │       ├── TranscriptScore.java           → transcript_scores
+│       │       ├── BoardPost.java                 → board_posts
+│       │       ├── BoardComment.java              → board_comments
+│       │       ├── Notification.java              → notifications
+│       │       ├── ContradictionResult.java       → contradiction_results
+│       │       ├── RelationBoard.java             → relation_boards
+│       │       └── ... (17개 총)
+│       └── resources/
+│           ├── application.properties             ← DB, JPA, 인코딩, 외부서비스 설정
+│           └── templates/                         ← Thymeleaf HTML (모든 뷰)
+│               ├── desktop/                       ← 데스크탑 페이지
+│               │   ├── fragments/
+│               │   │   ├── sidebar.html           ← 공통 사이드바
+│               │   │   └── appbar.html            ← 공통 상단바
+│               │   ├── login.html
+│               │   ├── register.html
+│               │   ├── findAccount.html
+│               │   ├── main.html
+│               │   ├── myCase.html                ← 사건 관리
+│               │   ├── board.html                 ← 커뮤니티 게시판
+│               │   ├── boardView.html             ← 게시글 상세
+│               │   ├── mypage.html
+│               │   ├── notifications.html
+│               │   ├── aiChat.html
+│               │   ├── voiceTranscript.html
+│               │   ├── writeTranscript.html
+│               │   ├── caseRelationMap.html       ← 관계망 시각화
+│               │   └── cctvAnalysis.html
+│               └── mobile/                        ← 모바일 페이지
+│                   ├── login.html
+│                   ├── register.html
+│                   ├── findAccount.html
+│                   ├── main.html
+│                   ├── myCase.html
+│                   ├── caseList.html
+│                   ├── board.html
+│                   ├── boardView.html
+│                   ├── boardEdit.html
+│                   ├── mypage.html
+│                   ├── notifications.html
+│                   ├── contradictionList.html
+│                   ├── aiChat.html
+│                   ├── voiceTranscript.html
+│                   ├── writeTranscript.html
+│                   ├── caseRelationMap.html
+│                   └── cctvAnalysis.html
+├── build.gradle                                   ← JAR 빌드, Gradle 의존성
+├── polmate_serv.py                                ← Flask 통합 서버 (AI/CCTV)
+├── license_plate_detector.pt                     ← YOLO 번호판 감지 모델
+└── ocr_engine/                                   ← 한국 번호판 OCR 모델
+    ├── model.py
+    ├── utils.py
+    ├── modules/
+    └── saved_models/
+        └── korean_plate/
+            ├── best_accuracy.pth
+            └── best_norm_ED.pth
 ```
 
-### 인증 흐름
+### 아키텍처 개요
 
-모든 `/mobile/**`, `/desktop/**` 요청은 `AuthInterceptor`를 통과합니다.
+```
+[브라우저]
+    │ GET /desktop/myCase
+    ▼
+[AuthInterceptor]  ← 세션 검사 (loginUser 없으면 로그인 페이지로 리다이렉트)
+    │
+    ▼
+[PageController]   ← URL → 뷰 이름 매핑 ("desktop/myCase")
+    │
+    ▼
+[Thymeleaf]        ← templates/desktop/myCase.html 렌더링 (세션 변수 주입)
+    │
+    ▼
+[브라우저 JS]      ← fetch('/caseApi?action=caseList') 등 AJAX 호출
+    │
+    ▼
+[CaseController]   ← @RestController, JSON 반환
+    │
+    ▼
+[CaseService]      ← 비즈니스 로직
+    │
+    ▼
+[JPA Repository / JdbcTemplate]  ← DB 처리
+```
+
+**인증**: 모든 `/mobile/**`, `/desktop/**` 요청은 `AuthInterceptor`를 통과합니다.
 세션에 `loginUser`가 없으면 자동으로 로그인 페이지로 리다이렉트됩니다.
-각 JSP 파일에는 세션 체크 코드가 없습니다 — Interceptor가 일괄 처리합니다.
+각 HTML 파일에는 세션 체크 코드를 작성하지 않습니다 — Interceptor가 일괄 처리합니다.
 
 ---
 
@@ -345,7 +438,7 @@ Pol-mate-spring/
 | IntelliJ 실행 버튼 비활성화 | Gradle 미연동 | `build.gradle` 우클릭 → "Link Gradle Project" |
 | DB 연결 오류 | `application.properties` 설정 오류 | datasource URL/계정 확인 |
 | 포트 8080 충돌 | 다른 프로그램이 사용 중 | `server.port=8081` 로 변경하거나 충돌 프로세스 종료 |
-| JSP 한글 깨짐 | 인코딩 설정 누락 | `application.properties`에 `server.servlet.encoding.force=true` 확인 |
+| 한글 깨짐 | 인코딩 설정 누락 | `application.properties`에 `server.servlet.encoding.force=true` 확인 |
 
 ### Flask 서버 관련
 

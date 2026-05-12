@@ -9,7 +9,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -156,6 +159,63 @@ public class UserService {
 
     public Integer getDaysSincePasswordChange(String userId) {
         return userRepo.getDaysSincePasswordChange(userId);
+    }
+
+    public List<Map<String, Object>> getHistory(String userId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT t.transcript_id, t.case_id, c.case_name, t.stmt_type, t.stmt_name, " +
+            "t.created_at, c.status AS case_status " +
+            "FROM transcripts t JOIN cases c ON t.case_id = c.case_id " +
+            "WHERE t.user_id = ? ORDER BY t.created_at DESC LIMIT 50", userId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("transcriptId", row.get("transcript_id"));
+            item.put("caseId",       row.get("case_id"));
+            item.put("caseName",     row.get("case_name"));
+            item.put("stmtType",     row.get("stmt_type"));
+            item.put("stmtName",     row.get("stmt_name"));
+            Object ca = row.get("created_at");
+            item.put("createdAt",    ca != null ? ca.toString() : null);
+            item.put("caseStatus",   row.get("case_status"));
+            result.add(item);
+        }
+        return result;
+    }
+
+    public Map<String, Object> getStatsForPeriod(String userId, String period) {
+        String dateFilter = "";
+        if ("week".equals(period))       dateFilter = " AND t.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
+        else if ("month".equals(period)) dateFilter = " AND t.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
+
+        Map<String, Object> stats = new HashMap<>();
+
+        Map<String, Object> tRow = jdbc.queryForMap(
+            "SELECT COUNT(*) AS total_transcripts, " +
+            "COALESCE(SUM(t.has_contradiction), 0) AS contradiction_count " +
+            "FROM transcripts t WHERE t.user_id = ?" + dateFilter, userId);
+        stats.put("totalTranscripts",   ((Number) tRow.get("total_transcripts")).intValue());
+        stats.put("contradictionCount", ((Number) tRow.get("contradiction_count")).intValue());
+
+        Map<String, Object> caseRow = jdbc.queryForMap(
+            "SELECT COUNT(*) AS total_cases, " +
+            "SUM(CASE WHEN c.status != '완료' THEN 1 ELSE 0 END) AS active_cases " +
+            "FROM cases c WHERE c.dept_id = (SELECT me.dept_id FROM users me WHERE me.user_id = ?)", userId);
+        stats.put("totalCases",  ((Number) caseRow.get("total_cases")).intValue());
+        stats.put("activeCases", ((Number) caseRow.get("active_cases")).intValue());
+
+        stats.put("relationEdges", historyRepo.countByUserId(userId));
+
+        List<Map<String, Object>> monthlyRows = jdbc.queryForList(
+            "SELECT DATE_FORMAT(t.created_at, '%Y-%m') AS month, COUNT(*) AS cnt " +
+            "FROM transcripts t WHERE t.user_id = ?" + dateFilter +
+            " GROUP BY month ORDER BY month", userId);
+        Map<String, Integer> monthly = new LinkedHashMap<>();
+        for (Map<String, Object> mr : monthlyRows) {
+            monthly.put((String) mr.get("month"), ((Number) mr.get("cnt")).intValue());
+        }
+        stats.put("monthly", monthly);
+        return stats;
     }
 
     public Map<String, Object> getStats(String userId) {
