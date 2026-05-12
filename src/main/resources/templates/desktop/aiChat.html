@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POL-MATE | AI 수사 보조</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" th:href="@{/css/polmate.css}">
+<script th:inline="javascript">
+var _ctx = '';
+var USER_INITIAL = /*[[${(session.userName != null and !#strings.isEmpty(session.userName)) ? #strings.substring(session.userName, 0, 1) : 'U'}]]*/ 'U';
+</script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f4f6fb; color: #1a1a2e; -webkit-font-smoothing: antialiased; overflow: hidden; }
+
+/* pm-content를 flex column으로 override해서 채팅 영역이 꽉 차게 */
+.pm-content { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+.chat-header {
+    background: #0d1a33; padding: 14px 24px;
+    display: flex; align-items: center; gap: 14px; flex-shrink: 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.chat-header-title { font-size: 15px; font-weight: 500; color: #fff; }
+.chat-status { display: flex; align-items: center; gap: 5px; margin-top: 3px; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; animation: pulse 2s infinite; }
+.status-text { font-size: 10px; color: #4ade80; }
+.btn-clear { margin-left: auto; background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.18); color: rgba(255,255,255,0.8); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; transition: background 0.13s; white-space: nowrap; }
+.btn-clear:hover { background: rgba(255,255,255,0.18); }
+
+/* 카테고리 칩 */
+.cat-bar { background: #0d1a33; padding: 0 16px 12px; flex-shrink: 0; display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.cat-bar::-webkit-scrollbar { display: none; }
+.cat-chip { flex-shrink: 0; padding: 5px 13px; border-radius: 20px; font-size: 11px; border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.55); background: none; cursor: pointer; white-space: nowrap; font-family: 'Noto Sans KR', sans-serif; transition: all 0.13s; }
+.cat-chip.active { background: rgba(255,255,255,0.18); color: #fff; border-color: rgba(255,255,255,0.38); }
+
+/* 채팅 영역 */
+.chat-wrap { flex: 1; overflow-y: auto; padding: 20px 24px 20px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; }
+
+/* 날짜 구분 */
+.date-divider { display: flex; align-items: center; gap: 10px; }
+.date-divider span { font-size: 10px; color: #9ca3af; white-space: nowrap; }
+.date-divider::before, .date-divider::after { content: ''; flex: 1; height: 1px; background: #e2e5ee; }
+
+/* 웰컴 카드 */
+.welcome-card { background: #fff; border: 1px solid #e2e5ee; border-radius: 16px 16px 16px 4px; padding: 18px; max-width: 560px; animation: fadeUp 0.4s ease both; }
+.welcome-logo { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
+.logo-sq { width: 30px; height: 30px; background: #0d1a33; border-radius: 9px; display: flex; align-items: center; justify-content: center; }
+.logo-sq svg { width: 15px; height: 15px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+.logo-name { font-size: 12px; font-weight: 600; color: #0d1a33; }
+.welcome-text { font-size: 13px; color: #374151; line-height: 1.8; margin-bottom: 14px; }
+.suggest-label { font-size: 10px; color: #9ca3af; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.suggest-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.suggest-btn { background: #f4f6fb; border: 1px solid #e2e5ee; border-radius: 9px; padding: 9px 12px; font-size: 12px; color: #6b7280; text-align: left; cursor: pointer; font-family: 'Noto Sans KR', sans-serif; transition: background 0.13s; display: flex; align-items: center; gap: 6px; }
+.suggest-btn:hover { background: #e8ecf4; }
+.suggest-btn svg { width: 12px; height: 12px; stroke: #4a7cdc; fill: none; stroke-width: 1.8; stroke-linecap: round; flex-shrink: 0; }
+
+/* 메시지 */
+.msg-row { display: flex; align-items: flex-end; gap: 9px; }
+.msg-row.user { flex-direction: row-reverse; }
+.avatar-sm { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.avatar-ai { background: #0d1a33; }
+.avatar-ai svg { width: 14px; height: 14px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+.avatar-user { background: #4a7cdc; color: #fff; }
+.bubble { max-width: 640px; padding: 12px 16px; border-radius: 16px; font-size: 13px; line-height: 1.8; word-break: keep-all; animation: fadeUp 0.2s ease both; }
+.bubble.ai { background: #fff; border: 1px solid #e2e5ee; color: #374151; border-radius: 16px 16px 16px 4px; }
+.bubble.user { background: #0d1a33; color: #fff; border-radius: 16px 16px 4px 16px; white-space: pre-wrap; }
+.bubble.error { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; }
+.cat-tag { font-size: 10px; background: #eff6ff; color: #1e40af; border-radius: 5px; padding: 2px 7px; margin-bottom: 5px; display: inline-block; }
+.bubble-meta { font-size: 10px; color: #9ca3af; margin-top: 4px; padding: 0 4px; }
+.msg-row.user .bubble-meta { text-align: right; }
+.offline-banner { background: #fef3c7; border: 1px solid #fde68a; border-radius: 10px; padding: 9px 13px; display: flex; align-items: center; gap: 9px; font-size: 11px; color: #92400e; line-height: 1.6; max-width: 560px; }
+.offline-banner svg { width: 14px; height: 14px; stroke: #f59e0b; fill: none; flex-shrink: 0; }
+
+/* 로딩 말풍선 */
+.typing-bubble { background: #fff; border: 1px solid #e2e5ee; border-radius: 16px 16px 16px 4px; padding: 14px 16px; display: inline-flex; align-items: center; gap: 5px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: #9ca3af; animation: bounce 1.2s infinite; }
+.dot:nth-child(2) { animation-delay: 0.2s; }
+.dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* 입력 영역 */
+.input-area { background: #fff; border-top: 1px solid #e2e5ee; padding: 12px 24px 14px; flex-shrink: 0; }
+.input-row { display: flex; gap: 10px; align-items: flex-end; max-width: 900px; margin: 0 auto; }
+.input-box { flex: 1; background: #f4f6fb; border: 1.5px solid #e2e5ee; border-radius: 12px; padding: 11px 14px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif; color: #1a1a2e; outline: none; resize: none; max-height: 100px; line-height: 1.6; transition: border-color 0.2s; overflow-y: auto; }
+.input-box:focus { border-color: #4a7cdc; background: #fff; }
+.input-box::placeholder { color: #9ca3af; }
+.send-btn { width: 42px; height: 42px; border-radius: 50%; background: #0d1a33; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: opacity 0.13s; }
+.send-btn:hover { opacity: 0.85; }
+.send-btn:disabled { background: #e2e5ee; cursor: not-allowed; }
+.send-btn svg { width: 16px; height: 16px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+</style>
+</head>
+<body>
+<div class="pm-layout">
+
+<th:block th:replace="~{desktop/fragments/sidebar :: sidebar('ai')}"></th:block>
+<div class="pm-content" style="height:100vh;overflow:hidden;">
+
+<div class="chat-header">
+    <div>
+        <div class="chat-header-title">AI 수사 보조</div>
+        <div class="chat-status"><div class="status-dot"></div><span class="status-text">gemma3:1b 대기 중</span></div>
+    </div>
+    <button class="btn-clear" onclick="clearChat()">대화 초기화</button>
+</div>
+
+<!-- 카테고리 칩 -->
+<div class="cat-bar" id="catBar">
+    <button class="cat-chip active" onclick="setCategory(this, '')">전체</button>
+    <button class="cat-chip" onclick="setCategory(this, '미란다')">미란다 원칙</button>
+    <button class="cat-chip" onclick="setCategory(this, '체포구속')">체포·구속</button>
+    <button class="cat-chip" onclick="setCategory(this, '조서작성')">조서 작성</button>
+    <button class="cat-chip" onclick="setCategory(this, '압수수색')">압수·수색</button>
+    <button class="cat-chip" onclick="setCategory(this, '증거')">증거법</button>
+    <button class="cat-chip" onclick="setCategory(this, '인권')">피의자 인권</button>
+</div>
+
+<!-- 채팅 -->
+<div class="chat-wrap" id="chatWrap">
+    <div class="date-divider"><span th:text="${#temporals.format(#temporals.createNow(), 'yyyy년 M월 d일')}">오늘</span></div>
+
+    <div>
+        <div class="welcome-card">
+            <div class="welcome-logo">
+                <div class="logo-sq"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+                <span class="logo-name">POL-MATE AI</span>
+            </div>
+            <div class="welcome-text">안녕하세요, <span th:text="${session.userName ?: ''}">수사관</span> 수사관님.<br>형사사법 절차, 법령 해석, 수사 기법 등<br>무엇이든 질문하세요.</div>
+            <div class="suggest-label">추천 질문</div>
+            <div class="suggest-grid">
+                <button class="suggest-btn" onclick="fillInput('피의자가 묵비권을 행사할 때 수사관의 대처 방법은?')">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    피의자가 묵비권을 행사할 때 대처 방법은?
+                </button>
+                <button class="suggest-btn" onclick="fillInput('긴급체포 요건과 절차를 설명해줘')">
+                    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    긴급체포 요건과 절차를 설명해줘
+                </button>
+                <button class="suggest-btn" onclick="fillInput('압수수색영장 없이 핸드폰을 확인할 수 있는 경우는?')">
+                    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    영장 없이 핸드폰을 확인할 수 있는 경우는?
+                </button>
+                <button class="suggest-btn" onclick="fillInput('자백의 증거능력이 인정되려면 어떤 조건이 필요한가요?')">
+                    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    자백의 증거능력이 인정되려면?
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="typingRow" class="msg-row" style="display:none;">
+        <div class="avatar-sm avatar-ai"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+        <div class="typing-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+    </div>
+</div>
+
+<!-- 입력 -->
+<div class="input-area">
+    <div class="input-row">
+        <input type="hidden" id="categoryInput" value="">
+        <textarea id="msgInput" class="input-box" rows="1" placeholder="수사 관련 질문을 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="handleSubmit()">
+            <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+    </div>
+</div>
+
+</div><!-- /pm-content -->
+</div><!-- /pm-layout -->
+
+<script>
+var selectedCategory = '';
+
+function setCategory(el, val) {
+    document.querySelectorAll('.cat-chip').forEach(function(c) { c.classList.remove('active'); });
+    el.classList.add('active');
+    selectedCategory = val;
+    document.getElementById('categoryInput').value = val;
+}
+
+function fillInput(text) {
+    var input = document.getElementById('msgInput');
+    input.value = text;
+    autoResize(input);
+    input.focus();
+}
+
+function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function handleSubmit() {
+    var msg = document.getElementById('msgInput').value.trim();
+    if (!msg) return;
+    var category = document.getElementById('categoryInput').value;
+    var now = new Date();
+    var timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+    var escaped = msg.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    var userRow = document.createElement('div');
+    userRow.className = 'msg-row user';
+    userRow.innerHTML =
+        '<div>' +
+            '<div class="bubble user">' + escaped + '</div>' +
+            '<div class="bubble-meta" style="text-align:right;">' + timeStr + '</div>' +
+        '</div>' +
+        '<div class="avatar-sm avatar-user">' + USER_INITIAL + '</div>';
+    document.getElementById('chatWrap').insertBefore(userRow, document.getElementById('typingRow'));
+
+    document.getElementById('msgInput').value = '';
+    document.getElementById('msgInput').style.height = 'auto';
+    document.getElementById('typingRow').style.display = 'flex';
+    document.getElementById('sendBtn').disabled = true;
+    scrollToBottom();
+
+    var params = new URLSearchParams();
+    params.append('userMsg', msg);
+    params.append('category', category);
+
+    fetch('/askAI', { method: 'POST', body: params })
+        .then(function(res) {
+            document.getElementById('typingRow').style.display = 'none';
+
+            var avatarEl = document.createElement('div');
+            avatarEl.className = 'avatar-sm avatar-ai';
+            avatarEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>';
+
+            var bubbleEl = document.createElement('div');
+            bubbleEl.className = 'bubble ai';
+
+            var metaEl = document.createElement('div');
+            metaEl.className = 'bubble-meta';
+
+            var innerDiv = document.createElement('div');
+            if (category) {
+                var tagEl = document.createElement('div');
+                tagEl.className = 'cat-tag';
+                tagEl.textContent = category;
+                innerDiv.appendChild(tagEl);
+            }
+            innerDiv.appendChild(bubbleEl);
+            innerDiv.appendChild(metaEl);
+
+            var aiRow = document.createElement('div');
+            aiRow.className = 'msg-row';
+            aiRow.appendChild(avatarEl);
+            aiRow.appendChild(innerDiv);
+            document.getElementById('chatWrap').insertBefore(aiRow, document.getElementById('typingRow'));
+            scrollToBottom();
+
+            var reader = res.body.getReader();
+            var decoder = new TextDecoder();
+            var buf = '';
+            var fullText = '';
+
+            function pump() {
+                reader.read().then(function(result) {
+                    if (result.done) {
+                        var now2 = new Date();
+                        metaEl.textContent = String(now2.getHours()).padStart(2,'0') + ':' + String(now2.getMinutes()).padStart(2,'0') + ' · gemma3:1b';
+                        document.getElementById('sendBtn').disabled = false;
+                        return;
+                    }
+                    buf += decoder.decode(result.value, { stream: true });
+                    var lines = buf.split('\n\n');
+                    buf = lines.pop();
+                    lines.forEach(function(line) {
+                        if (!line.startsWith('data: ')) return;
+                        var token = line.slice(6);
+                        if (token === '[DONE]') {
+                            var now2 = new Date();
+                            metaEl.textContent = String(now2.getHours()).padStart(2,'0') + ':' + String(now2.getMinutes()).padStart(2,'0') + ' · gemma3:1b';
+                            document.getElementById('sendBtn').disabled = false;
+                            return;
+                        }
+                        if (token.startsWith('[ERROR]')) {
+                            bubbleEl.className = 'bubble error';
+                            bubbleEl.textContent = token.slice(7).trim();
+                            document.getElementById('sendBtn').disabled = false;
+                            return;
+                        }
+                        fullText += token.replace(/\\n/g, '\n');
+                        bubbleEl.innerHTML = fullText.replace(/\n/g, '<br>');
+                        scrollToBottom();
+                    });
+                    pump();
+                }).catch(function() {
+                    document.getElementById('sendBtn').disabled = false;
+                    if (!fullText) appendErrorBubble('응답 수신 중 오류가 발생했습니다.');
+                });
+            }
+            pump();
+        })
+        .catch(function() {
+            document.getElementById('typingRow').style.display = 'none';
+            document.getElementById('sendBtn').disabled = false;
+            appendErrorBubble('AI 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+        });
+}
+
+function appendErrorBubble(msg) {
+    var now = new Date();
+    var t = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+    var row = document.createElement('div');
+    row.className = 'msg-row';
+    row.innerHTML =
+        '<div class="avatar-sm avatar-ai"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>' +
+        '<div><div class="bubble error">' + msg.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>' +
+        '<div class="bubble-meta">' + t + '</div></div>';
+    document.getElementById('chatWrap').insertBefore(row, document.getElementById('typingRow'));
+    scrollToBottom();
+}
+
+function clearChat() {
+    if (confirm('대화 내역을 초기화하시겠습니까?')) {
+        location.reload();
+    }
+}
+
+function scrollToBottom() {
+    var wrap = document.getElementById('chatWrap');
+    wrap.scrollTop = wrap.scrollHeight;
+}
+
+window.addEventListener('load', function() {
+    scrollToBottom();
+    var input = document.getElementById('msgInput');
+    input.addEventListener('focus', function() { setTimeout(scrollToBottom, 200); });
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSubmit();
+        }
+    });
+});
+</script>
+</body>
+</html>

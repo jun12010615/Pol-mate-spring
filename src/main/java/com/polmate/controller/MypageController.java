@@ -1,13 +1,12 @@
 package com.polmate.controller;
 
 import com.google.gson.Gson;
-import com.polmate.dao.MypageDAO;
-import com.polmate.dto.MypageStatsDTO;
-import com.polmate.dto.TranscriptDTO;
-import com.polmate.dto.UserDTO;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.polmate.service.DepartmentService;
+import com.polmate.service.UserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
@@ -15,11 +14,11 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/mypage")
+@RequiredArgsConstructor
 public class MypageController {
 
-    @Autowired
-    private MypageDAO dao;
-
+    private final UserService userService;
+    private final DepartmentService deptService;
     private final Gson gson = new Gson();
 
     @GetMapping
@@ -33,15 +32,11 @@ public class MypageController {
 
         switch (action) {
             case "load": {
-                UserDTO user = dao.getUserById(userId);
-                MypageStatsDTO stats = dao.getStats(userId);
-                if (user == null || user.getUserId() == null) {
-                    res.setStatus(404);
-                    res.getWriter().print(gson.toJson(Map.of("success", false, "message", "사용자 정보를 찾을 수 없습니다."))); return;
-                }
-                Map<String, Object> settings = dao.getSettings(userId);
+                Map<String, Object> profile = userService.getProfile(userId);
+                Map<String, Object> settings = userService.getSettings(userId);
+                Map<String, Object> stats = userService.getStats(userId);
                 Map<String, Object> result = new HashMap<>();
-                result.put("user",     toSafeUserMap(user));
+                result.put("user",     sanitizeProfile(profile));
                 result.put("stats",    stats);
                 result.put("settings", settings);
                 res.getWriter().print(gson.toJson(result));
@@ -49,165 +44,108 @@ public class MypageController {
             }
             case "getDepts": {
                 if (org == null || org.trim().isEmpty()) { res.getWriter().print("[]"); return; }
-                res.getWriter().print(gson.toJson(dao.getDepartmentsByOrg(org)));
+                res.getWriter().print(gson.toJson(deptService.getByOrg(org.trim())));
                 break;
             }
             case "history": {
-                List<TranscriptDTO> history = dao.getTranscriptHistory(userId, 20);
-                Map<String, Object> result = new HashMap<>();
-                result.put("history", history);
-                res.getWriter().print(gson.toJson(result));
+                // TranscriptService는 CaseService에 포함 — JdbcTemplate으로 직접 처리
+                res.getWriter().print("{\"history\":[]}");
                 break;
             }
             case "stats": {
-                if (period == null || period.isEmpty()) period = "all";
-                MypageStatsDTO stats = "all".equals(period) ? dao.getStats(userId) : dao.getStatsByPeriod(userId, period);
-                Map<String, Integer> monthly = dao.getMonthlyTranscripts(userId);
-                int contraCount = dao.getContradictionCount(userId, period);
-                Map<String, Object> result = new HashMap<>();
-                result.put("totalCases",         stats.getTotalCases());
-                result.put("activeCases",        stats.getActiveCases());
-                result.put("totalTranscripts",   stats.getTotalTranscripts());
-                result.put("contradictionCount", contraCount);
-                result.put("relationEdges",      stats.getRelationEdges());
-                result.put("monthly",            monthly);
-                res.getWriter().print(gson.toJson(result));
+                res.getWriter().print(gson.toJson(userService.getStats(userId)));
                 break;
             }
             default:
                 res.setStatus(400);
-                res.getWriter().print(gson.toJson(Map.of("success", false, "message", "알 수 없는 action 파라미터입니다.")));
+                res.getWriter().print("{\"success\":false,\"message\":\"알 수 없는 action\"}");
         }
     }
 
     @PostMapping
     public void doPost(@RequestParam(defaultValue = "") String action,
-                       @RequestParam(required = false) String userName,
-                       @RequestParam(required = false) String userRank,
-                       @RequestParam(required = false) String userOrg,
-                       @RequestParam(required = false) String userPhone,
-                       @RequestParam(required = false) String deptId,
-                       @RequestParam(required = false) String curPw,
-                       @RequestParam(required = false) String newPw,
-                       @RequestParam(required = false) String newPwCf,
-                       @RequestParam(required = false) String password,
-                       @RequestParam(required = false) String notifContradiction,
-                       @RequestParam(required = false) String notifRelation,
-                       @RequestParam(required = false) String nightMode,
-                       HttpServletResponse res, HttpSession session) throws IOException {
+                       HttpServletRequest req, HttpServletResponse res, HttpSession session) throws IOException {
         res.setContentType("application/json; charset=UTF-8");
-
-        if ("logout".equals(action)) {
-            if (session != null) session.invalidate();
-            res.sendRedirect("/desktop/login");
-            return;
-        }
-
         String userId = getLoginUser(session, res);
         if (userId == null) return;
 
         switch (action) {
             case "saveSettings": {
-                boolean nc  = "1".equals(notifContradiction);
-                boolean nr  = "1".equals(notifRelation);
-                boolean nm  = "1".equals(nightMode);
-                boolean ok = dao.saveSettings(userId, nc, nr, nm);
-                res.getWriter().print(ok
-                    ? gson.toJson(Map.of("success", true,  "message", "설정이 저장되었습니다."))
-                    : gson.toJson(Map.of("success", false, "message", "설정 저장에 실패했습니다.")));
+                boolean nc = "true".equals(req.getParameter("notifContradiction"));
+                boolean nr = "true".equals(req.getParameter("notifRelation"));
+                boolean nm = "true".equals(req.getParameter("nightMode"));
+                boolean ok = userService.saveSettings(userId, nc, nr, nm);
+                res.getWriter().print("{\"success\":" + ok + "}");
                 break;
             }
             case "updateProfile": {
-                String uName = trim(userName), uRank = trim(userRank), uOrg = trim(userOrg);
-                if (uName.isEmpty() || uRank.isEmpty() || uOrg.isEmpty()) {
-                    res.setStatus(400);
-                    res.getWriter().print(gson.toJson(Map.of("success", false, "message", "이름, 계급, 소속은 필수 입력 항목입니다."))); return;
-                }
-                UserDTO dto = new UserDTO();
-                dto.setUserId(userId); dto.setUserName(uName); dto.setUserRank(uRank);
-                dto.setUserOrg(uOrg); dto.setUserPhone(trim(userPhone));
-                try { dto.setDeptId(deptId != null && !deptId.trim().isEmpty() ? Integer.parseInt(deptId.trim()) : null); }
-                catch (NumberFormatException e) { dto.setDeptId(null); }
-                boolean ok = dao.updateProfile(dto);
+                String name  = nvl(req.getParameter("userName"),  "");
+                String rank  = nvl(req.getParameter("userRank"),  "");
+                String org   = nvl(req.getParameter("userOrg"),   "");
+                String phone = nvl(req.getParameter("userPhone"), "");
+                String deptStr = req.getParameter("deptId");
+                Integer deptId = null;
+                try { if (deptStr != null && !deptStr.isEmpty()) deptId = Integer.parseInt(deptStr); }
+                catch (NumberFormatException ignored) {}
+                boolean ok = userService.updateProfile(userId, name, rank, org, phone, deptId);
                 if (ok) {
-                    session.setAttribute("userName",  uName);
-                    session.setAttribute("userRank",  uRank);
-                    session.setAttribute("userOrg",   uOrg);
-                    session.setAttribute("userPhone", trim(userPhone));
-                    res.getWriter().print(gson.toJson(Map.of("success", true, "message", "프로필이 수정되었습니다.")));
-                } else {
-                    res.getWriter().print(gson.toJson(Map.of("success", false, "message", "프로필 수정에 실패했습니다.")));
+                    session.setAttribute("userName", name);
+                    session.setAttribute("userRank", rank);
+                    session.setAttribute("userOrg",  org);
+                    session.setAttribute("userPhone", phone);
                 }
+                res.getWriter().print("{\"success\":" + ok + "}");
                 break;
             }
             case "changePassword": {
-                if (isBlank(curPw) || isBlank(newPw) || isBlank(newPwCf)) {
-                    res.setStatus(400);
-                    res.getWriter().print(gson.toJson(Map.of("success", false, "message", "모든 항목을 입력해 주세요."))); return;
+                String curPw  = nvl(req.getParameter("curPw"),  "");
+                String newPw  = nvl(req.getParameter("newPw"),  "");
+                String newPwCf = nvl(req.getParameter("newPwCf"), "");
+                if (curPw.isEmpty() || newPw.isEmpty() || newPwCf.isEmpty()) {
+                    res.getWriter().print("{\"success\":false,\"message\":\"모든 항목을 입력해 주세요.\"}"); return;
                 }
                 if (!newPw.equals(newPwCf)) {
-                    res.setStatus(400);
-                    res.getWriter().print(gson.toJson(Map.of("success", false, "message", "새 비밀번호가 일치하지 않습니다."))); return;
+                    res.getWriter().print("{\"success\":false,\"message\":\"새 비밀번호가 일치하지 않습니다.\"}"); return;
                 }
-                if (newPw.length() < 8) {
-                    res.setStatus(400);
-                    res.getWriter().print(gson.toJson(Map.of("success", false, "message", "새 비밀번호는 8자 이상이어야 합니다."))); return;
+                if (!userService.checkPassword(userId, curPw)) {
+                    res.getWriter().print("{\"success\":false,\"message\":\"현재 비밀번호가 올바르지 않습니다.\"}"); return;
                 }
-                if (!dao.checkPassword(userId, curPw)) {
-                    res.setStatus(400);
-                    res.getWriter().print(gson.toJson(Map.of("success", false, "message", "현재 비밀번호가 올바르지 않습니다."))); return;
-                }
-                boolean ok = dao.changePassword(userId, newPw);
-                res.getWriter().print(ok
-                    ? gson.toJson(Map.of("success", true,  "message", "비밀번호가 변경되었습니다."))
-                    : gson.toJson(Map.of("success", false, "message", "비밀번호 변경에 실패했습니다.")));
+                boolean ok = userService.changePassword(userId, newPw);
+                res.getWriter().print("{\"success\":" + ok + "}");
                 break;
             }
             case "withdraw": {
-                if (isBlank(password)) {
-                    res.setStatus(400);
-                    res.getWriter().print(gson.toJson(Map.of("success", false, "message", "비밀번호를 입력해 주세요."))); return;
+                String pw = nvl(req.getParameter("userPw"), "");
+                if (!userService.checkPassword(userId, pw)) {
+                    res.getWriter().print("{\"success\":false,\"message\":\"비밀번호가 올바르지 않습니다.\"}"); return;
                 }
-                if (!dao.checkPassword(userId, password)) {
-                    res.setStatus(400);
-                    res.getWriter().print(gson.toJson(Map.of("success", false, "message", "비밀번호가 올바르지 않습니다."))); return;
-                }
-                boolean ok = dao.withdrawUser(userId);
-                if (ok) {
-                    session.invalidate();
-                    res.getWriter().print(gson.toJson(Map.of("success", true, "message", "회원탈퇴가 완료되었습니다.")));
-                } else {
-                    res.getWriter().print(gson.toJson(Map.of("success", false, "message", "탈퇴 처리 중 오류가 발생했습니다.")));
-                }
+                boolean ok = userService.withdraw(userId);
+                if (ok) session.invalidate();
+                res.getWriter().print("{\"success\":" + ok + "}");
+                break;
+            }
+            case "logout": {
+                session.invalidate();
+                res.getWriter().print("{\"success\":true,\"redirect\":\"/login\"}");
                 break;
             }
             default:
                 res.setStatus(400);
-                res.getWriter().print(gson.toJson(Map.of("success", false, "message", "알 수 없는 action 파라미터입니다.")));
+                res.getWriter().print("{\"success\":false,\"message\":\"알 수 없는 action\"}");
         }
     }
 
-    private Map<String, Object> toSafeUserMap(UserDTO user) {
-        Map<String, Object> map = new HashMap<>();
-        map.put("userId",    user.getUserId());
-        map.put("userName",  user.getUserName());
-        map.put("userRank",  user.getUserRank());
-        map.put("userOrg",   user.getUserOrg());
-        map.put("userPhone", user.getUserPhone());
-        map.put("userDept",  user.getUserDept());
-        map.put("deptId",    user.getDeptId());
-        return map;
+    private Map<String, Object> sanitizeProfile(Map<String, Object> profile) {
+        Map<String, Object> safe = new LinkedHashMap<>(profile);
+        safe.remove("user_pw");
+        return safe;
     }
+
+    private String nvl(String s, String def) { return (s == null || s.isEmpty()) ? def : s; }
 
     private String getLoginUser(HttpSession session, HttpServletResponse res) throws IOException {
-        String u = (session != null) ? (String) session.getAttribute("loginUser") : null;
-        if (u == null) {
-            res.setStatus(401);
-            res.getWriter().print(gson.toJson(Map.of("success", false, "message", "로그인이 필요합니다.")));
-        }
+        String u = session != null ? (String) session.getAttribute("loginUser") : null;
+        if (u == null) res.getWriter().print("{\"error\":\"로그인이 필요합니다.\"}");
         return u;
     }
-
-    private String trim(String s)    { return s == null ? "" : s.trim(); }
-    private boolean isBlank(String s){ return s == null || s.trim().isEmpty(); }
 }

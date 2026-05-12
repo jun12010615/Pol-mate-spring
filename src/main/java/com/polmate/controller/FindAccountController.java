@@ -1,21 +1,21 @@
 package com.polmate.controller;
 
 import com.google.gson.JsonObject;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.polmate.service.UserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
-import javax.sql.DataSource;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
-import java.sql.*;
 import java.util.Random;
 
 @Controller
 @RequestMapping("/findAccount")
+@RequiredArgsConstructor
 public class FindAccountController {
 
     private static final String SESS_CODE    = "pw_code";
@@ -23,8 +23,8 @@ public class FindAccountController {
     private static final String SESS_EXPIRES = "pw_expires";
     private static final long   CODE_TTL_MS  = 3 * 60 * 1000L;
 
-    @Autowired private DataSource dataSource;
-    @Autowired private JavaMailSender mailSender;
+    private final UserService    userService;
+    private final JavaMailSender mailSender;
 
     @PostMapping
     @ResponseBody
@@ -46,22 +46,21 @@ public class FindAccountController {
         if (email.isEmpty()) return fail("이메일을 입력해 주세요.");
         if (!isValidEmail(email)) return fail("이메일 형식이 올바르지 않습니다.");
 
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                 "SELECT user_id FROM users WHERE user_name = ? AND user_email = ?")) {
-            ps.setString(1, name); ps.setString(2, email);
-            ResultSet rs = ps.executeQuery();
-            if (!rs.next()) return fail("입력하신 이름과 이메일이 일치하는 계정을 찾을 수 없습니다.");
-            String maskedId = maskId(rs.getString("user_id"));
-            sendHtmlMail(email, "[POL-MATE] 아이디 찾기 안내", buildFindIdHtml(name, maskedId));
-            JsonObject jo = new JsonObject();
-            jo.addProperty("success", true);
-            jo.addProperty("maskedEmail", maskEmail(email));
-            return jo.toString();
-        } catch (Exception e) {
-            e.printStackTrace();
-            return fail("서버 오류가 발생했습니다.");
-        }
+        return userService.findByNameAndEmail(name, email)
+            .map(user -> {
+                try {
+                    String maskedId = maskId(user.getUserId());
+                    sendHtmlMail(email, "[POL-MATE] 아이디 찾기 안내", buildFindIdHtml(name, maskedId));
+                    JsonObject jo = new JsonObject();
+                    jo.addProperty("success", true);
+                    jo.addProperty("maskedEmail", maskEmail(email));
+                    return jo.toString();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    return fail("메일 발송 중 오류가 발생했습니다.");
+                }
+            })
+            .orElse(fail("입력하신 이름과 이메일이 일치하는 계정을 찾을 수 없습니다."));
     }
 
     private String handleSendCode(HttpServletRequest req) {
@@ -71,11 +70,10 @@ public class FindAccountController {
         if (email.isEmpty())  return fail("이메일을 입력해 주세요.");
         if (!isValidEmail(email)) return fail("이메일 형식이 올바르지 않습니다.");
 
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                 "SELECT user_id FROM users WHERE user_id = ? AND user_email = ?")) {
-            ps.setString(1, userId); ps.setString(2, email);
-            if (!ps.executeQuery().next()) return fail("아이디 또는 이메일이 일치하지 않습니다.");
+        if (!userService.existsByIdAndEmail(userId, email)) {
+            return fail("아이디 또는 이메일이 일치하지 않습니다.");
+        }
+        try {
             String code = String.format("%06d", new Random().nextInt(1_000_000));
             HttpSession sess = req.getSession();
             sess.setAttribute(SESS_CODE,    code);
@@ -115,17 +113,10 @@ public class FindAccountController {
         if (!newPw.matches(".*[0-9].*"))    return fail("숫자를 포함해야 합니다.");
         if (!newPw.matches(".*[!@#$%^&*()_+\\-=].*")) return fail("특수문자를 포함해야 합니다.");
 
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                 "UPDATE users SET user_pw = ?, password_changed_at = NOW() WHERE user_id = ?")) {
-            ps.setString(1, newPw); ps.setString(2, userId);
-            if (ps.executeUpdate() == 0) return fail("계정을 찾을 수 없습니다.");
-            sess.removeAttribute(SESS_USERID);
-            return ok("비밀번호가 변경되었습니다.");
-        } catch (Exception e) {
-            e.printStackTrace();
-            return fail("서버 오류가 발생했습니다.");
-        }
+        boolean ok = userService.changePassword(userId, newPw);
+        if (!ok) return fail("계정을 찾을 수 없습니다.");
+        sess.removeAttribute(SESS_USERID);
+        return ok("비밀번호가 변경되었습니다.");
     }
 
     private void sendHtmlMail(String to, String subject, String html) throws Exception {
@@ -157,11 +148,13 @@ public class FindAccountController {
     }
 
     private boolean isValidEmail(String e) { return e.matches("^[\\w.+\\-]+@[\\w\\-]+\\.[\\w.]+$"); }
+
     private String maskId(String id) {
         if (id == null || id.length() <= 2) return id;
         int show = (int) Math.ceil(id.length() / 2.0);
         return id.substring(0, show) + "*".repeat(id.length() - show);
     }
+
     private String maskEmail(String email) {
         int at = email.indexOf('@');
         if (at <= 0) return email;
@@ -169,10 +162,12 @@ public class FindAccountController {
         int show = Math.min(2, local.length());
         return local.substring(0, show) + "*".repeat(local.length() - show) + domain;
     }
+
     private String esc(String s) {
         return s == null ? "" : s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;");
     }
+
     private String nvl(String s) { return s == null ? "" : s.trim(); }
-    private String ok(String msg) { JsonObject j = new JsonObject(); j.addProperty("success",true); j.addProperty("message",msg); return j.toString(); }
-    private String fail(String msg) { JsonObject j = new JsonObject(); j.addProperty("success",false); j.addProperty("message",msg); return j.toString(); }
+    private String ok(String msg)   { JsonObject j = new JsonObject(); j.addProperty("success", true);  j.addProperty("message", msg); return j.toString(); }
+    private String fail(String msg) { JsonObject j = new JsonObject(); j.addProperty("success", false); j.addProperty("message", msg); return j.toString(); }
 }

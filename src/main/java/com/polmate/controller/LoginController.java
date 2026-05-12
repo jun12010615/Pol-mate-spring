@@ -1,25 +1,21 @@
 package com.polmate.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.polmate.entity.User;
+import com.polmate.service.UserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.*;
 
-import javax.sql.DataSource;
 import jakarta.servlet.http.HttpSession;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
+import java.util.Optional;
 
 @Controller
 @RequestMapping("/login")
+@RequiredArgsConstructor
 public class LoginController {
 
-    @Autowired
-    private DataSource dataSource;
+    private final UserService userService;
 
     @GetMapping
     public String loginPage() {
@@ -33,60 +29,28 @@ public class LoginController {
             @RequestParam(required = false, defaultValue = "") String redirectTo,
             HttpSession session, Model model) {
 
+        String errorView = "desktop".equals(redirectTo) ? "desktop/login" : "mobile/login";
+
         if (userId == null || userId.trim().isEmpty()
                 || userPw == null || userPw.trim().isEmpty()) {
             model.addAttribute("loginError", "아이디와 비밀번호를 입력해 주세요.");
-            return "mobile/login";
+            return errorView;
         }
 
-        Connection conn = null;
-        PreparedStatement pstmt = null;
-        ResultSet rs = null;
-
-        try {
-            conn = dataSource.getConnection();
-            String sql = "SELECT user_id, user_pw, user_name, user_rank, user_org, user_phone FROM USERS WHERE user_id = ?";
-            pstmt = conn.prepareStatement(sql);
-            pstmt.setString(1, userId.trim());
-            rs = pstmt.executeQuery();
-
-            if (rs.next()) {
-                String dbPw    = rs.getString("user_pw");
-                String dbName  = rs.getString("user_name");
-                String dbRank  = rs.getString("user_rank");
-                String dbOrg   = rs.getString("user_org");
-                String dbPhone = rs.getString("user_phone");
-
-                if (dbPw.equals(userPw)) {
-                    session.setAttribute("loginUser", userId.trim());
-                    session.setAttribute("userName",  dbName);
-                    session.setAttribute("userRank",  dbRank);
-                    session.setAttribute("userOrg",   dbOrg);
-                    session.setAttribute("userPhone", dbPhone);
-                    session.setMaxInactiveInterval(60 * 60);
-
-                    if ("desktop".equals(redirectTo)) {
-                        return "redirect:/desktop/main";
-                    } else {
-                        return "redirect:/mobile/main";
-                    }
-                } else {
-                    model.addAttribute("loginError", "아이디 또는 비밀번호가 올바르지 않습니다.");
-                    return "mobile/login";
-                }
-            } else {
-                model.addAttribute("loginError", "아이디 또는 비밀번호가 올바르지 않습니다.");
-                return "mobile/login";
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            model.addAttribute("loginError", "로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
-            return "mobile/login";
-        } finally {
-            try { if (rs != null) rs.close(); } catch (Exception ignored) {}
-            try { if (pstmt != null) pstmt.close(); } catch (Exception ignored) {}
-            try { if (conn != null) conn.close(); } catch (Exception ignored) {}
+        Optional<User> opt = userService.findById(userId.trim());
+        if (opt.isEmpty() || !userPw.equals(opt.get().getUserPw())) {
+            model.addAttribute("loginError", "아이디 또는 비밀번호가 올바르지 않습니다.");
+            return errorView;
         }
+
+        User user = opt.get();
+        session.setAttribute("loginUser",  user.getUserId());
+        session.setAttribute("userName",   user.getUserName());
+        session.setAttribute("userRank",   user.getUserRank());
+        session.setAttribute("userOrg",    user.getUserOrg());
+        session.setAttribute("userPhone",  user.getUserPhone());
+        session.setMaxInactiveInterval(60 * 60);
+
+        return "desktop".equals(redirectTo) ? "redirect:/desktop/main" : "redirect:/mobile/main";
     }
 }

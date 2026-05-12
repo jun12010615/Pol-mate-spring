@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POL-MATE | 모순 탐지</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" th:href="@{/css/polmate.css}">
+<script>var _ctx = '';</script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f4f6fb; color: #1a1a2e; -webkit-font-smoothing: antialiased; }
+.pm-page { padding: 28px 32px 48px; max-width: 1400px; }
+
+.page-header { margin-bottom: 20px; }
+.page-eyebrow { font-size: 11px; color: #9ca3af; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 3px; }
+.page-title { font-size: 22px; font-weight: 500; }
+
+/* 단계 표시 */
+.step-bar {
+    display: flex; align-items: center;
+    background: #fff; border: 1px solid #e2e5ee; border-radius: 12px;
+    padding: 14px 24px; margin-bottom: 24px;
+}
+.step-node { display: flex; align-items: center; gap: 9px; }
+.step-circle {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid #e2e5ee; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: #9ca3af; background: #f4f6fb;
+    flex-shrink: 0; transition: all 0.25s;
+}
+.step-circle.active { background: #0d1a33; border-color: #0d1a33; color: #fff; }
+.step-circle.done   { background: #4a7cdc; border-color: #4a7cdc; color: #fff; }
+.step-name { font-size: 12px; color: #9ca3af; white-space: nowrap; }
+.step-name.active { color: #0d1a33; font-weight: 500; }
+.step-line { flex: 1; height: 1px; background: #e2e5ee; margin: 0 12px; }
+
+/* 2컬럼 레이아웃 */
+.two-col { display: grid; grid-template-columns: 420px 1fr; gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } }
+
+/* 카드 */
+.card {
+    background: #fff; border: 1px solid #e2e5ee; border-radius: 14px;
+    padding: 20px; margin-bottom: 16px;
+}
+.card:last-child { margin-bottom: 0; }
+.card-label {
+    font-size: 10px; font-weight: 600; color: #9ca3af;
+    text-transform: uppercase; letter-spacing: 0.8px;
+    margin-bottom: 14px; display: flex; align-items: center; gap: 7px;
+}
+.card-label svg { width: 13px; height: 13px; stroke: #9ca3af; fill: none; stroke-width: 1.8; stroke-linecap: round; }
+
+/* 사건 선택 */
+.case-select {
+    width: 100%; padding: 10px 12px;
+    background: #f4f6fb; border: 1.5px solid #e2e5ee; border-radius: 10px;
+    font-size: 13px; font-family: 'Noto Sans KR', sans-serif; color: #1a1a2e;
+    outline: none; transition: border-color 0.15s, background 0.15s;
+    appearance: none; cursor: pointer;
+}
+.case-select:focus { border-color: #0d1a33; background: #fff; }
+
+/* 사건 미리보기 칩 */
+.case-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.case-chip {
+    font-size: 11px; padding: 3px 10px; border-radius: 20px;
+    background: #f4f6fb; border: 1px solid #e2e5ee; color: #6b7280;
+}
+.case-chip.status-진행중 { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
+.case-chip.status-완료   { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+
+/* 조서 목록 */
+.doc-list { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; padding-right: 2px; }
+.doc-item {
+    display: flex; align-items: center; gap: 12px;
+    background: #f4f6fb; border: 1.5px solid #e2e5ee; border-radius: 10px;
+    padding: 11px 13px; cursor: pointer; transition: all 0.13s;
+    user-select: none;
+}
+.doc-item:hover { border-color: #4a7cdc; }
+.doc-item.selected { background: #eff6ff; border-color: #4a7cdc; }
+.doc-check {
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 2px solid #d1d5db; background: #fff; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.13s;
+}
+.doc-item.selected .doc-check { background: #4a7cdc; border-color: #4a7cdc; }
+.doc-check svg { width: 10px; height: 10px; stroke: #fff; fill: none; stroke-width: 2.5; display: none; }
+.doc-item.selected .doc-check svg { display: block; }
+.doc-info { flex: 1; min-width: 0; }
+.doc-name { font-size: 13px; font-weight: 500; color: #1a1a2e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-meta { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+.doc-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 20px; flex-shrink: 0;
+    font-weight: 500;
+}
+.doc-badge.contra { background: #fef2f2; color: #dc2626; }
+.doc-badge.ok     { background: #f0fdf4; color: #16a34a; }
+
+.doc-loading { padding: 24px; text-align: center; font-size: 12px; color: #9ca3af; }
+.doc-empty   { padding: 20px; text-align: center; font-size: 12px; color: #9ca3af; line-height: 1.7; }
+
+/* 선택 카운터 */
+.select-counter {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 13px; border-radius: 9px;
+    background: #f4f6fb; border: 1px solid #e2e5ee;
+    font-size: 12px; color: #6b7280; margin-bottom: 12px;
+    transition: all 0.15s;
+}
+.select-counter.ready { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+.select-counter-count { font-weight: 600; }
+
+/* 분석 버튼 */
+.btn-analyze {
+    width: 100%; background: #0d1a33; color: #fff; border: none;
+    border-radius: 10px; padding: 13px;
+    font-size: 13px; font-weight: 500; font-family: 'Noto Sans KR', sans-serif;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background 0.13s, opacity 0.13s;
+}
+.btn-analyze:hover:not(:disabled) { background: #1a2744; }
+.btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-analyze svg { width: 15px; height: 15px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+
+/* 결과 영역 */
+.result-placeholder {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 400px; text-align: center; gap: 12px;
+}
+.result-placeholder svg { width: 52px; height: 52px; stroke: #d1d5db; fill: none; stroke-width: 1.3; stroke-linecap: round; }
+.result-placeholder p { font-size: 13px; color: #9ca3af; line-height: 1.7; }
+
+/* 로딩 */
+.loading-card { text-align: center; padding: 48px 24px; }
+.spinner { width: 36px; height: 36px; border: 3px solid #e2e5ee; border-top-color: #0d1a33; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+.loading-steps { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; text-align: left; max-width: 260px; margin-left: auto; margin-right: auto; }
+.ls { display: flex; align-items: center; gap: 9px; font-size: 12px; color: #9ca3af; padding: 3px 0; }
+.ls svg { width: 13px; height: 13px; flex-shrink: 0; }
+.ls.active { color: #0d1a33; font-weight: 500; }
+.ls.done   { color: #16a34a; }
+
+/* 결과 배너 */
+.contra-banner { border-radius: 10px; padding: 13px 15px; display: flex; align-items: flex-start; gap: 11px; margin-bottom: 14px; }
+.contra-banner.found    { background: #fef2f2; border: 1px solid #fecaca; }
+.contra-banner.notfound { background: #f0fdf4; border: 1px solid #bbf7d0; }
+.contra-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+.contra-dot.red   { background: #dc2626; animation: dotPulse 1.5s infinite; }
+.contra-dot.green { background: #16a34a; }
+.contra-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.contra-title.red   { color: #b91c1c; }
+.contra-title.green { color: #166534; }
+.contra-desc  { font-size: 11px; color: #6b7280; line-height: 1.6; }
+
+/* 결과 상세 */
+.section-label {
+    font-size: 10px; font-weight: 600; color: #9ca3af;
+    text-transform: uppercase; letter-spacing: 0.7px;
+    margin-bottom: 8px; margin-top: 16px;
+}
+.section-label:first-child { margin-top: 0; }
+.result-box {
+    background: #f4f6fb; border-radius: 9px; border: 1px solid #e2e5ee;
+    padding: 13px; font-size: 12px; color: #374151; line-height: 1.9;
+    white-space: pre-wrap; position: relative;
+    max-height: 220px; overflow-y: auto; word-break: break-word;
+}
+.copy-btn {
+    position: absolute; top: 8px; right: 8px;
+    background: #fff; border: 1px solid #e2e5ee; border-radius: 7px;
+    padding: 4px 9px; font-size: 11px; color: #6b7280;
+    cursor: pointer; font-family: 'Noto Sans KR', sans-serif;
+}
+.copy-btn:hover { border-color: #0d1a33; color: #0d1a33; }
+
+/* 저장 버튼 */
+.btn-save {
+    width: 100%; background: #16a34a; color: #fff; border: none;
+    border-radius: 10px; padding: 13px;
+    font-size: 13px; font-weight: 500; font-family: 'Noto Sans KR', sans-serif;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px;
+    transition: background 0.13s; margin-bottom: 8px;
+}
+.btn-save:hover { background: #15803d; }
+.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-save svg { width: 14px; height: 14px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+.btn-reset {
+    width: 100%; background: #f4f6fb; color: #6b7280;
+    border: 1px solid #e2e5ee; border-radius: 10px;
+    padding: 12px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
+    cursor: pointer; transition: background 0.13s;
+}
+.btn-reset:hover { background: #e5e7eb; }
+
+.toast {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: #1a2744; color: #fff; padding: 10px 22px; border-radius: 10px;
+    font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
+    opacity: 0; transition: all 0.25s; z-index: 500; white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@keyframes spin     { to { transform: rotate(360deg); } }
+@keyframes dotPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes blink    { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* 스트리밍 커서 */
+.result-box.streaming::after {
+    content: '▋'; animation: blink 0.9s step-start infinite;
+    color: #4a7cdc; font-size: 13px;
+}
+
+/* 분석 중 배너 */
+.contra-banner.analyzing { background: #f0f7ff; border: 1px solid #bfdbfe; }
+.contra-dot.pulse { background: #4a7cdc; animation: dotPulse 1.2s infinite; }
+</style>
+</head>
+<body>
+<div class="pm-layout">
+
+<th:block th:replace="~{desktop/fragments/sidebar :: sidebar('contradiction')}"></th:block>
+<div class="pm-content">
+<th:block th:replace="~{desktop/fragments/appbar :: appbar('POL-MATE,수사 도구,모순 탐지')}"></th:block>
+
+<main class="pm-page">
+
+    <div class="page-header">
+        <div class="page-eyebrow">수사 도구</div>
+        <div class="page-title">모순 탐지</div>
+    </div>
+
+    <!-- 단계 표시 -->
+    <div class="step-bar">
+        <div class="step-node">
+            <div class="step-circle active" id="sc1">1</div>
+            <span class="step-name active" id="sn1">사건 선택</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-node">
+            <div class="step-circle" id="sc2">2</div>
+            <span class="step-name" id="sn2">조서 선택</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-node">
+            <div class="step-circle" id="sc3">3</div>
+            <span class="step-name" id="sn3">AI 분석</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-node">
+            <div class="step-circle" id="sc4">4</div>
+            <span class="step-name" id="sn4">결과</span>
+        </div>
+    </div>
+
+    <div class="two-col">
+
+        <!-- ── 왼쪽: 입력 패널 ── -->
+        <div id="inputCol">
+
+            <!-- 사건 선택 -->
+            <div class="card">
+                <div class="card-label">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+                    Step 1 · 사건 선택
+                </div>
+                <select class="case-select" id="caseSelect" onchange="onCaseChange()">
+                    <option value="">-- 불러오는 중... --</option>
+                </select>
+                <div class="case-chips" id="caseChips" style="display:none;">
+                    <span class="case-chip" id="chipSuspect"></span>
+                    <span class="case-chip" id="chipStatus"></span>
+                </div>
+            </div>
+
+            <!-- 조서 선택 -->
+            <div class="card" id="docCard" style="display:none;">
+                <div class="card-label">
+                    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Step 2 · 조서 선택
+                    <span style="font-size:10px;color:#6b7280;font-weight:400;text-transform:none;letter-spacing:0;margin-left:auto;">2개 이상 선택</span>
+                </div>
+
+                <div class="select-counter" id="selectCounter">
+                    <span>선택된 조서</span>
+                    <span class="select-counter-count" id="counterText">0개 선택됨</span>
+                </div>
+
+                <div class="doc-list" id="docList">
+                    <div class="doc-loading">사건을 선택하면 조서 목록이 표시됩니다.</div>
+                </div>
+
+                <button class="btn-analyze" id="btnAnalyze" disabled onclick="startAnalysis()" style="margin-top:14px;">
+                    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    AI 모순 탐지 시작
+                </button>
+            </div>
+
+        </div><!-- /inputCol -->
+
+        <!-- ── 오른쪽: 결과 패널 ── -->
+        <div id="resultCol">
+
+            <!-- 대기 -->
+            <div class="card result-placeholder" id="placeholderCard">
+                <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <p>사건을 선택하고 조서를 2개 이상 선택한 뒤<br>AI 모순 탐지를 시작하세요.</p>
+            </div>
+
+            <!-- 로딩 -->
+            <div class="card loading-card" id="loadingCard" style="display:none;">
+                <div class="spinner"></div>
+                <div style="font-size:14px;font-weight:500;color:#0d1a33;margin-bottom:4px;">AI 분석 중...</div>
+                <div style="font-size:12px;color:#9ca3af;" id="loadingSub">조서 텍스트를 불러오는 중</div>
+                <div class="loading-steps">
+                    <div class="ls" id="ls1">
+                        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        조서 텍스트 로딩
+                    </div>
+                    <div class="ls" id="ls2">
+                        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        Ollama LLM 분석 요청
+                    </div>
+                    <div class="ls" id="ls3">
+                        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        모순 항목 추출
+                    </div>
+                    <div class="ls" id="ls4">
+                        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        결과 정리
+                    </div>
+                </div>
+            </div>
+
+            <!-- 결과 -->
+            <div class="card" id="resultContent" style="display:none;">
+                <!-- 모순 탐지 배너 -->
+                <div class="contra-banner" id="contraBanner">
+                    <div class="contra-dot" id="contraDot"></div>
+                    <div>
+                        <div class="contra-title" id="contraTitle"></div>
+                        <div class="contra-desc"  id="contraDesc"></div>
+                    </div>
+                </div>
+
+                <!-- 분석에 사용된 조서 -->
+                <div class="section-label">분석 조서</div>
+                <div id="analyzedDocs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;"></div>
+
+                <!-- AI 분석 결과 -->
+                <div class="section-label">AI 분석 결과 <span style="font-size:9px;background:#eff6ff;color:#1e40af;border-radius:4px;padding:2px 6px;margin-left:4px;font-weight:400;">gemma3:1b</span></div>
+                <div style="position:relative;">
+                    <div class="result-box" id="aiResultBox"></div>
+                    <button class="copy-btn" onclick="copyResult()">복사</button>
+                </div>
+
+                <!-- 버튼 -->
+                <div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">
+                    <button class="btn-save" id="btnSave" onclick="saveResult()">
+                        <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                        결과 저장하기
+                    </button>
+                    <button class="btn-reset" onclick="resetAll()">새로 분석하기</button>
+                </div>
+            </div>
+
+        </div><!-- /resultCol -->
+
+    </div>
+
+</main>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var _selectedDocs = [];
+var _currentCaseId = '';
+var _aiResult = '';
+var _hasContradiction = false;
+
+// ── 사건 목록 로딩 ──────────────────────────────────
+(function loadCaseOptions() {
+    fetch('/caseApi?action=caseList', {credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var cases = Array.isArray(data) ? data : [];
+            var sel = document.getElementById('caseSelect');
+            if (!cases.length) {
+                sel.innerHTML = '<option value="">등록된 사건이 없습니다</option>';
+                return;
+            }
+            sel.innerHTML = '<option value="">-- 사건을 선택하세요 --</option>' +
+                cases.map(function(c) {
+                    return '<option value="' + c.id + '" data-name="' + (c.name||'').replace(/"/g,'&quot;') + '" data-suspect="' + (c.suspect||'').replace(/"/g,'&quot;') + '" data-status="' + (c.status||'').replace(/"/g,'&quot;') + '">'
+                        + c.id + ' · ' + (c.name||'') + '</option>';
+                }).join('');
+        })
+        .catch(function() {
+            document.getElementById('caseSelect').innerHTML = '<option value="">사건 목록 로드 실패</option>';
+        });
+})();
+
+// ── 사건 선택 ────────────────────────────────────────
+function onCaseChange() {
+    var sel = document.getElementById('caseSelect');
+    var opt = sel.options[sel.selectedIndex];
+    _currentCaseId = sel.value;
+    _selectedDocs = [];
+    updateCounter();
+
+    if (!_currentCaseId) {
+        document.getElementById('docCard').style.display = 'none';
+        document.getElementById('caseChips').style.display = 'none';
+        resetResultPanel();
+        setStep(1);
+        return;
+    }
+
+    var suspect = opt.getAttribute('data-suspect') || '';
+    var status  = opt.getAttribute('data-status')  || '';
+    document.getElementById('chipSuspect').textContent = suspect ? '피의자 ' + suspect : '';
+    document.getElementById('chipStatus').textContent  = status  || '';
+    document.getElementById('chipStatus').className    = 'case-chip status-' + status;
+    document.getElementById('caseChips').style.display = suspect || status ? 'flex' : 'none';
+
+    document.getElementById('docCard').style.display = '';
+    setStep(2);
+    loadDocs(_currentCaseId);
+}
+
+// ── 조서 목록 로딩 ───────────────────────────────────
+function loadDocs(caseId) {
+    var list = document.getElementById('docList');
+    list.innerHTML = '<div class="doc-loading"><div style="width:20px;height:20px;border:2px solid #e2e5ee;border-top-color:#0d1a33;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 8px;"></div>조서 목록 불러오는 중...</div>';
+
+    fetch('/caseApi?action=caseDetail&caseId=' + encodeURIComponent(caseId), {credentials:'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            var docs = d.docs || [];
+            if (!docs.length) {
+                list.innerHTML = '<div class="doc-empty">이 사건에 등록된 조서가 없습니다.<br><a href="/desktop/writeTranscript?caseId=' + encodeURIComponent(caseId) + '" style="color:#4a7cdc;text-decoration:none;">조서 작성하러 가기 →</a></div>';
+                return;
+            }
+            list.innerHTML = docs.map(function(doc) {
+                var badgeHtml = doc.contradiction
+                    ? '<span class="doc-badge contra">모순</span>'
+                    : '<span class="doc-badge ok">정상</span>';
+                return '<div class="doc-item" id="docRow-' + doc.id + '" onclick="toggleDoc(\'' + doc.id + '\',\'' + esc(doc.name) + '\',\'' + esc(doc.type || '') + '\')">'
+                    + '<div class="doc-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>'
+                    + '<div class="doc-info">'
+                    + '<div class="doc-name">' + esc(doc.name) + '</div>'
+                    + '<div class="doc-meta">' + esc(doc.type || '미분류') + ' · ' + esc(doc.date || '') + '</div>'
+                    + '</div>'
+                    + badgeHtml
+                    + '</div>';
+            }).join('');
+        })
+        .catch(function() {
+            list.innerHTML = '<div class="doc-empty">조서 목록을 불러올 수 없습니다.</div>';
+        });
+}
+
+// ── 조서 체크박스 토글 ───────────────────────────────
+function toggleDoc(id, name, type) {
+    var el = document.getElementById('docRow-' + id);
+    var idx = _selectedDocs.findIndex(function(d) { return d.id === id; });
+    if (idx >= 0) {
+        _selectedDocs.splice(idx, 1);
+        el.classList.remove('selected');
+    } else {
+        _selectedDocs.push({id: id, name: name, type: type, text: ''});
+        el.classList.add('selected');
+    }
+    updateCounter();
+}
+
+function updateCounter() {
+    var n = _selectedDocs.length;
+    var counter = document.getElementById('selectCounter');
+    var text = document.getElementById('counterText');
+    var btn = document.getElementById('btnAnalyze');
+    text.textContent = n + '개 선택됨';
+    counter.className = n >= 2 ? 'select-counter ready' : 'select-counter';
+    btn.disabled = n < 2;
+}
+
+// ── 분석 시작 ────────────────────────────────────────
+function startAnalysis() {
+    if (_selectedDocs.length < 2) { showToast('조서를 2개 이상 선택해 주세요.'); return; }
+
+    document.getElementById('placeholderCard').style.display = 'none';
+    document.getElementById('loadingCard').style.display = '';
+    document.getElementById('resultContent').style.display = 'none';
+    document.getElementById('btnAnalyze').disabled = true;
+    setStep(3);
+    resetLoadingSteps();
+
+    setLS(1, 'active');
+    document.getElementById('loadingSub').textContent = '조서 텍스트 불러오는 중...';
+
+    var promises = _selectedDocs.map(function(doc) {
+        return fetch('/caseApi?action=transcriptText&transcriptId=' + encodeURIComponent(doc.id), {credentials:'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) { doc.text = d.text || '(내용 없음)'; return doc; });
+    });
+
+    Promise.all(promises)
+        .then(function(docs) {
+            setLS(1, 'done');
+            setLS(2, 'active');
+            document.getElementById('loadingSub').textContent = 'Ollama AI에 연결 중...';
+            setTimeout(function() { callOllama(docs); }, 300);
+        })
+        .catch(function() {
+            showToast('조서 텍스트를 불러올 수 없습니다.');
+            resetToInput();
+        });
+}
+
+function setLS(n, state) {
+    var el = document.getElementById('ls' + n);
+    if (!el) return;
+    el.classList.remove('active', 'done');
+    if (state === 'active') el.classList.add('active');
+    if (state === 'done')   el.classList.add('done');
+}
+
+function resetLoadingSteps() {
+    [1,2,3,4].forEach(function(i) { setLS(i, ''); });
+}
+
+// ── Ollama 스트리밍 호출 ──────────────────────────────
+function callOllama(docs) {
+    var caseOpt  = document.getElementById('caseSelect');
+    var caseName = caseOpt.options[caseOpt.selectedIndex] ? caseOpt.options[caseOpt.selectedIndex].text : _currentCaseId;
+    var prompt   = buildPrompt(docs, caseName);
+
+    fetch('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({model: 'gemma3:1b', prompt: prompt, stream: true})
+    })
+    .then(function(r) {
+        if (!r.ok || !r.body) throw new Error('stream unavailable');
+        setLS(2, 'done');
+        initStreamResult(docs);
+        return readStream(r.body.getReader());
+    })
+    .then(function() {
+        finalizeResult();
+    })
+    .catch(function() {
+        setLS(2, 'done');
+        initStreamResult(docs);
+        var demo =
+            "【각 조서 핵심 주장 요약】\n" +
+            docs.map(function(d, i) { return "조서"+(i+1)+"("+d.name+"): 진술자의 핵심 주장이 포함되어 있습니다."; }).join("\n") +
+            "\n\n【모순 항목】\n조서 간 시간대 및 위치 정보에 불일치 가능성이 있습니다.\nOllama 미연결 상태이므로 실제 분석을 위해 Ollama를 실행해 주세요.\n\n【추가 확인 필요】\n- 진술자 동선 재확인\n- 목격자 진술 비교\n\n【종합 평가】\n⚠ (Ollama 미연결 — 데모 결과입니다)";
+        simulateStream(demo, function() { finalizeResult(); });
+    });
+}
+
+function buildPrompt(docs, caseName) {
+    var p =
+        "당신은 형사사건 수사관을 보조하는 AI입니다. 반드시 한국어로 답변하세요.\n\n" +
+        "다음은 동일 사건(" + caseName + ")에 대한 " + docs.length + "개의 조서입니다. " +
+        "각 조서를 면밀히 비교하여 모순 및 불일치 항목을 분석해 주세요.\n\n";
+    docs.forEach(function(doc, i) {
+        p += "【조서" + (i+1) + ": " + doc.name + "】\n" + doc.text + "\n\n";
+    });
+    p +=
+        "다음 항목을 분석해 주세요:\n" +
+        "1. 각 조서 핵심 주장 요약 (조서별 1~2줄)\n" +
+        "2. 조서 간 모순 또는 불일치 항목 (있다면 구체적으로 어느 조서와 어느 조서가 다른지 명시)\n" +
+        "3. 추가 확인이 필요한 사항\n" +
+        "4. 종합 평가";
+    return p;
+}
+
+// 결과 패널 초기 세팅 (스트리밍 시작 전)
+function initStreamResult(docs) {
+    document.getElementById('loadingCard').style.display = 'none';
+    document.getElementById('resultContent').style.display = '';
+    setStep(4);
+
+    document.getElementById('analyzedDocs').innerHTML = docs.map(function(d) {
+        return '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#f4f6fb;border:1px solid #e2e5ee;color:#6b7280;">' + esc(d.name) + '</span>';
+    }).join('');
+
+    var banner = document.getElementById('contraBanner');
+    var dot    = document.getElementById('contraDot');
+    var title  = document.getElementById('contraTitle');
+    var desc   = document.getElementById('contraDesc');
+    banner.className  = 'contra-banner analyzing';
+    dot.className     = 'contra-dot pulse';
+    title.className   = 'contra-title';
+    title.textContent = 'AI 분석 중...';
+    desc.textContent  = '조서를 비교 분석하고 있습니다. 잠시 기다려 주세요.';
+
+    _aiResult = '';
+    var box = document.getElementById('aiResultBox');
+    box.textContent = '';
+    box.classList.add('streaming');
+    document.getElementById('btnSave').disabled = true;
+}
+
+// ReadableStream 청크 처리
+function readStream(reader) {
+    var decoder = new TextDecoder('utf-8');
+    var buffer  = '';
+    var box     = document.getElementById('aiResultBox');
+
+    function pump() {
+        return reader.read().then(function(chunk) {
+            if (chunk.done) return;
+            buffer += decoder.decode(chunk.value, {stream: true});
+            var lines = buffer.split('\n');
+            buffer = lines.pop();
+            lines.forEach(function(line) {
+                line = line.trim();
+                if (!line) return;
+                try {
+                    var data = JSON.parse(line);
+                    if (data.response) {
+                        _aiResult += data.response;
+                        box.textContent = _aiResult;
+                        box.scrollTop = box.scrollHeight;
+                    }
+                    if (data.done) return;
+                } catch(e) {}
+            });
+            return pump();
+        });
+    }
+    return pump();
+}
+
+// Ollama 미연결 시 타이핑 효과
+function simulateStream(text, cb) {
+    var box  = document.getElementById('aiResultBox');
+    var i    = 0;
+    var step = 4;
+    function tick() {
+        if (i >= text.length) { cb(); return; }
+        _aiResult += text.substring(i, i + step);
+        box.textContent = _aiResult;
+        box.scrollTop = box.scrollHeight;
+        i += step;
+        setTimeout(tick, 25);
+    }
+    tick();
+}
+
+// 스트리밍 완료 후 결과 확정
+function finalizeResult() {
+    var box = document.getElementById('aiResultBox');
+    box.classList.remove('streaming');
+
+    var keywords = ['모순','불일치','위반','거짓','허위','불명확','상충','엇갈','앞뒤가'];
+    _hasContradiction = keywords.some(function(k) { return _aiResult.includes(k); });
+
+    var banner = document.getElementById('contraBanner');
+    var dot    = document.getElementById('contraDot');
+    var title  = document.getElementById('contraTitle');
+    var desc   = document.getElementById('contraDesc');
+    if (_hasContradiction) {
+        banner.className  = 'contra-banner found';
+        dot.className     = 'contra-dot red';
+        title.className   = 'contra-title red';
+        title.textContent = '모순 항목이 탐지되었습니다';
+        desc.textContent  = 'AI가 선택된 조서에서 불일치 또는 모순된 내용을 발견했습니다.';
+    } else {
+        banner.className  = 'contra-banner notfound';
+        dot.className     = 'contra-dot green';
+        title.className   = 'contra-title green';
+        title.textContent = '명확한 모순이 탐지되지 않았습니다';
+        desc.textContent  = '선택된 조서 내에서 즉각적인 모순은 발견되지 않았으나, 반드시 직접 검토하세요.';
+    }
+
+    document.getElementById('btnAnalyze').disabled = false;
+    document.getElementById('btnSave').disabled = false;
+}
+
+// ── 결과 저장 ────────────────────────────────────────
+function saveResult() {
+    var btn = document.getElementById('btnSave');
+    btn.disabled = true;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" style="width:14px;height:14px;animation:spin 0.7s linear infinite"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg> 저장 중...';
+
+    var stmtNames = _selectedDocs.map(function(d){ return d.name; }).join(' vs ');
+    var stmtText  = _selectedDocs.map(function(d,i){ return '[조서'+(i+1)+': '+d.name+']\n'+d.text; }).join('\n\n');
+
+    var params = new URLSearchParams();
+    params.append('action', 'save');
+    params.append('caseId',          _currentCaseId);
+    params.append('stmtName',        stmtNames);
+    params.append('stmtType',        '조서 비교 분석');
+    params.append('stmtText',        stmtText);
+    params.append('aiResult',        _aiResult);
+    params.append('hasContradiction', _hasContradiction ? 'true' : 'false');
+
+    fetch('/contradictionApi', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
+        body: params.toString()
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            showToast('결과가 저장되었습니다.');
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg> 저장 완료';
+        } else {
+            showToast(data.error || '저장에 실패했습니다.');
+            btn.disabled = false;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg> 결과 저장하기';
+        }
+    })
+    .catch(function() {
+        showToast('서버 연결 오류가 발생했습니다.');
+        btn.disabled = false;
+        btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg> 결과 저장하기';
+    });
+}
+
+// ── 유틸 ─────────────────────────────────────────────
+function setStep(n) {
+    for (var i = 1; i <= 4; i++) {
+        var c = document.getElementById('sc' + i);
+        var s = document.getElementById('sn' + i);
+        if (i < n)      { c.className = 'step-circle done';   s.className = 'step-name'; }
+        else if (i === n) { c.className = 'step-circle active'; s.className = 'step-name active'; }
+        else            { c.className = 'step-circle';        s.className = 'step-name'; }
+    }
+}
+
+function resetResultPanel() {
+    document.getElementById('placeholderCard').style.display = '';
+    document.getElementById('loadingCard').style.display = 'none';
+    document.getElementById('resultContent').style.display = 'none';
+    ['ls1','ls2','ls3','ls4'].forEach(function(id) {
+        var el = document.getElementById(id);
+        el.classList.remove('active','done');
+    });
+}
+
+function resetToInput() {
+    document.getElementById('loadingCard').style.display = 'none';
+    document.getElementById('placeholderCard').style.display = '';
+    document.getElementById('btnAnalyze').disabled = _selectedDocs.length < 2;
+    setStep(_currentCaseId ? 2 : 1);
+}
+
+function resetAll() {
+    _selectedDocs = [];
+    _currentCaseId = '';
+    _aiResult = '';
+    _hasContradiction = false;
+    document.getElementById('caseSelect').value = '';
+    document.getElementById('docCard').style.display = 'none';
+    document.getElementById('caseChips').style.display = 'none';
+    resetResultPanel();
+    setStep(1);
+}
+
+function copyResult() {
+    var t = document.getElementById('aiResultBox').textContent;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(t).then(function() { showToast('분석 결과가 복사되었습니다.'); });
+    }
+}
+
+function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(function() { t.classList.remove('show'); }, 2500);
+}
+</script>
+</body>
+</html>

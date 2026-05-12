@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>POL-MATE | 로그인</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  :root{
+    --deep:#0d1a33; --navy:#1a2744; --mid:#243358;
+    --gold:#f0c040; --blue:#4a7cdc; --danger:#e74c3c;
+    --tp:#1a1a2e; --ts:#6b7280; --tm:#9ca3af;
+    --bg:#f0f2f8; --card:#ffffff; --bd:#e2e5ee;
+  }
+  html,body{height:100%;font-family:'Noto Sans KR',sans-serif;background:var(--bg);overflow-x:hidden;}
+
+  .page-wrapper{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:var(--bg);position:relative;overflow:hidden;
+  }
+  .page-wrapper::before{
+    content:'';position:absolute;top:-150px;right:-150px;
+    width:420px;height:420px;border-radius:50%;
+    background:rgba(13,26,51,0.05);pointer-events:none;
+  }
+  .page-wrapper::after{
+    content:'';position:absolute;bottom:-100px;left:-100px;
+    width:320px;height:320px;border-radius:50%;
+    background:rgba(240,192,64,0.06);pointer-events:none;
+  }
+
+  .screen{
+    width:100%;max-width:420px;min-height:100vh;
+    display:flex;flex-direction:column;
+    background:var(--card);position:relative;overflow:hidden;
+  }
+
+  .login-header{
+    background:var(--deep);padding:60px 32px 48px;
+    text-align:center;position:relative;overflow:hidden;
+  }
+  .login-header::before{
+    content:'';position:absolute;top:-60px;right:-60px;
+    width:200px;height:200px;border-radius:50%;
+    border:1px solid rgba(240,192,64,0.1);
+  }
+  .login-header::after{
+    content:'';position:absolute;bottom:-70px;left:-50px;
+    width:180px;height:180px;border-radius:50%;
+    border:1px solid rgba(74,124,220,0.08);
+  }
+  .header-gold-line{
+    position:absolute;bottom:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent 0%,var(--gold) 40%,var(--gold) 60%,transparent 100%);
+    opacity:0.4;
+  }
+
+  .logo-wrap{position:relative;z-index:1;animation:fadeDown 0.6s ease both;}
+
+  .logo-title{
+    font-family:'Space Grotesk','Noto Sans KR',sans-serif;
+    font-size:30px;font-weight:700;
+    color:#fff;letter-spacing:5px;margin-bottom:6px;
+    position:relative;display:inline-block;
+  }
+  .logo-title::after{
+    content:'';position:absolute;bottom:-4px;left:10%;right:10%;
+    height:2px;background:var(--gold);border-radius:1px;opacity:0.6;
+  }
+
+  .logo-subtitle{
+    font-size:11px;color:rgba(255,255,255,0.5);
+    letter-spacing:0.5px;font-weight:400;margin-top:12px;
+    font-family:'Noto Sans KR',sans-serif;
+  }
+
+  .gov-badge{
+    display:inline-flex;align-items:center;gap:6px;
+    background:rgba(240,192,64,0.1);border:1px solid rgba(240,192,64,0.22);
+    border-radius:20px;padding:5px 14px;margin-top:14px;
+    font-size:10px;color:rgba(255,255,255,0.65);letter-spacing:0.3px;
+  }
+  .gov-badge-dot{width:5px;height:5px;border-radius:50%;background:var(--gold);flex-shrink:0;}
+
+  .login-body{
+    background:var(--card);border-radius:28px 28px 0 0;
+    margin-top:-20px;flex:1;padding:34px 28px 44px;
+    position:relative;z-index:2;
+    animation:fadeUp 0.5s ease 0.15s both;
+  }
+
+  .section-tag{
+    display:flex;align-items:center;gap:8px;margin-bottom:24px;
+  }
+  .section-tag-line{flex:1;height:1px;background:var(--bd);}
+  .section-tag span{font-size:10px;color:var(--tm);letter-spacing:1px;text-transform:uppercase;white-space:nowrap;}
+
+  .field-group{margin-bottom:14px;}
+  .field-label{
+    font-size:10px;font-weight:500;color:var(--ts);
+    display:block;margin-bottom:6px;letter-spacing:0.8px;
+    text-transform:uppercase;
+  }
+  .field-wrap{position:relative;}
+  .field-wrap svg{
+    position:absolute;left:14px;top:50%;transform:translateY(-50%);
+    width:15px;height:15px;stroke:var(--tm);pointer-events:none;
+  }
+  .field-input{
+    width:100%;padding:13px 14px 13px 42px;
+    background:var(--bg);border:1.5px solid var(--bd);
+    border-radius:14px;font-size:14px;
+    font-family:'Noto Sans KR',sans-serif;color:var(--tp);
+    outline:none;transition:border-color 0.2s,background 0.2s,box-shadow 0.2s;
+  }
+  .field-input:focus{
+    border-color:var(--deep);background:#fff;
+    box-shadow:0 0 0 3px rgba(13,26,51,0.07);
+  }
+  .field-input::placeholder{color:var(--tm);font-size:13px;}
+
+  .btn-login{
+    width:100%;background:var(--deep);color:#fff;
+    border:none;border-radius:14px;padding:15px;
+    font-size:14px;font-weight:500;letter-spacing:2px;
+    font-family:'Noto Sans KR',sans-serif;cursor:pointer;
+    margin-top:10px;margin-bottom:20px;
+    position:relative;overflow:hidden;
+    transition:transform 0.1s,background 0.2s;
+  }
+  .btn-login::before{
+    content:'';position:absolute;
+    top:0;left:0;right:0;bottom:0;
+    background:rgba(240,192,64,0.0);
+    transition:background 0.2s;
+  }
+  .btn-login:hover::before{background:rgba(240,192,64,0.06);}
+  .btn-login::after{
+    content:'';position:absolute;
+    bottom:0;left:25%;right:25%;height:2px;
+    background:var(--gold);border-radius:1px;opacity:0.5;
+  }
+  .btn-login:active{transform:scale(0.98);background:#08111f;}
+
+  .links-row{
+    display:flex;justify-content:center;
+    gap:0;margin-bottom:24px;
+  }
+  .links-row a{
+    font-size:12px;color:var(--tm);text-decoration:none;
+    padding:0 14px;border-right:1px solid var(--bd);transition:color 0.2s;
+  }
+  .links-row a:last-child{border-right:none;}
+  .links-row a:hover{color:var(--deep);}
+
+  .security-notice{
+    background:#f5f7ff;border:1px solid #dce4f5;
+    border-radius:12px;padding:12px 16px;
+    display:flex;gap:10px;align-items:flex-start;
+  }
+  .notice-icon{flex-shrink:0;margin-top:1px;}
+  .notice-icon svg{width:14px;height:14px;stroke:var(--blue);}
+  .security-notice p{font-size:10px;color:#4a5a8a;line-height:1.8;font-weight:300;}
+
+  .error-msg{font-size:12px;color:var(--danger);margin-top:5px;padding-left:4px;display:none;}
+
+  @keyframes fadeDown{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes fadeUp  {from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)}}
+
+  @media(min-width:421px){
+    .screen{min-height:auto;box-shadow:0 8px 48px rgba(0,0,0,0.14);border-radius:16px;margin:24px 0;}
+    .page-wrapper{padding:24px 16px;}
+  }
+</style>
+</head>
+<body>
+<div class="page-wrapper">
+  <div class="screen">
+    <div class="login-header">
+
+      <div class="logo-wrap">
+        <svg width="86" height="86" viewBox="0 0 86 86" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin:0 auto 22px;display:block;">
+          <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z"
+                fill="rgba(0,0,0,0.25)" transform="translate(1.5,2.5)"/>
+          <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z"
+                fill="#162240"/>
+          <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z"
+                fill="none" stroke="#f0c040" stroke-width="1.8"/>
+          <path d="M43 13 L60 21 L60 40 C60 53 43 64 43 64 C43 64 26 53 26 40 L26 21 Z"
+                fill="none" stroke="rgba(240,192,64,0.18)" stroke-width="0.8"/>
+          <circle cx="43" cy="40" r="15" fill="none"
+                  stroke="#4a7cdc" stroke-width="1.2" stroke-dasharray="4.5 2.5" opacity="0.65"/>
+          <circle cx="43" cy="40" r="11" fill="#0d1a33"/>
+          <circle cx="43" cy="40" r="11" fill="none" stroke="#4a7cdc" stroke-width="1.2"/>
+          <circle cx="43" cy="40" r="6" fill="#4a7cdc" opacity="0.85"/>
+          <circle cx="43" cy="40" r="3" fill="#ffffff"/>
+          <circle cx="45.5" cy="37.5" r="1.2" fill="rgba(255,255,255,0.55)"/>
+          <circle cx="43" cy="22" r="2"   fill="#f0c040"/>
+          <circle cx="43" cy="58" r="2"   fill="#f0c040"/>
+          <circle cx="28" cy="40" r="2"   fill="#f0c040"/>
+          <circle cx="58" cy="40" r="2"   fill="#f0c040"/>
+          <polygon points="43,8 44.4,12 48.5,12 45.2,14.5 46.6,18.5 43,16 39.4,18.5 40.8,14.5 37.5,12 41.6,12"
+                   fill="#f0c040"/>
+          <line x1="35" y1="65" x2="51" y2="65" stroke="#f0c040" stroke-width="1" opacity="0.4" stroke-linecap="round"/>
+        </svg>
+
+        <div class="logo-title">POL-MATE</div>
+        <div class="logo-subtitle">Criminal Justice Information System</div>
+        <div class="gov-badge">
+          <span class="gov-badge-dot"></span>
+          대한민국 경찰청 공식 시스템
+        </div>
+      </div>
+      <div class="header-gold-line"></div>
+    </div>
+
+    <div class="login-body">
+      <div class="section-tag">
+        <div class="section-tag-line"></div>
+        <span>수사관 로그인</span>
+        <div class="section-tag-line"></div>
+      </div>
+
+      <form action="/login" method="post" id="loginForm" onsubmit="return validateForm()">
+        <input type="hidden" name="redirectTo" value="mobile">
+        <div class="field-group">
+          <label class="field-label" for="userId">수사관 ID</label>
+          <div class="field-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+            <input type="text" id="userId" name="userId" class="field-input" placeholder="아이디 입력" autocomplete="username">
+          </div>
+          <p class="error-msg" id="idError">아이디를 입력해 주세요.</p>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="userPw">비밀번호</label>
+          <div class="field-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <input type="password" id="userPw" name="userPw" class="field-input" placeholder="비밀번호 입력" autocomplete="current-password">
+          </div>
+          <p class="error-msg" id="pwError">비밀번호를 입력해 주세요.</p>
+        </div>
+
+        <div th:if="${loginError}" style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:10px 14px;margin-bottom:14px;">
+          <p style="font-size:12px;color:#b91c1c;" th:text="${loginError}"></p>
+        </div>
+
+        <button type="submit" class="btn-login">로그인</button>
+      </form>
+
+      <div class="links-row">
+        <a href="/mobile/findAccount">ID 찾기</a>
+        <a href="/mobile/findAccount">비밀번호 찾기</a>
+        <a href="/mobile/register">회원가입</a>
+      </div>
+
+      <div class="security-notice">
+        <div class="notice-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <p>본 시스템은 인가된 수사관만 접근 가능합니다.<br>무단 접근 및 수사 정보 유출 시 형사처벌을 받을 수 있습니다.</p>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function validateForm() {
+  var valid = true;
+  var userId  = document.getElementById('userId').value.trim();
+  var userPw  = document.getElementById('userPw').value.trim();
+  var idError = document.getElementById('idError');
+  var pwError = document.getElementById('pwError');
+  idError.style.display = 'none';
+  pwError.style.display = 'none';
+  if (!userId) { idError.style.display='block'; valid=false; }
+  if (!userPw) { pwError.style.display='block'; valid=false; }
+  return valid;
+}
+</script>
+</body>
+</html>

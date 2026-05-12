@@ -20,14 +20,17 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
 
-    // JSP 지원 (embedded Tomcat + Jasper)
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // JSP 지원 (Thymeleaf 전환 완료 전까지 유지)
     providedRuntime 'org.springframework.boot:spring-boot-starter-tomcat'
     runtimeOnly 'org.apache.tomcat.embed:tomcat-embed-jasper'
-
-    // JSTL
     implementation 'jakarta.servlet.jsp.jstl:jakarta.servlet.jsp.jstl-api:3.0.0'
     runtimeOnly 'org.glassfish.web:jakarta.servlet.jsp.jstl:3.0.1'
 

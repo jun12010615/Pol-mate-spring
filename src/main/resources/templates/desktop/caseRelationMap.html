@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POL-MATE | 사건 관계망</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" th:href="@{/css/polmate.css}">
+<script th:inline="javascript">
+var _ctx = '';
+var POL_MATE_SERV_BASE = /*[[${@environment.getProperty('polmate.serv.base-url')}]]*/ 'http://localhost:5001';
+var _initCaseId = /*[[${param.caseId ?: ''}]]*/ '';
+</script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f4f6fb; color: #1a1a2e; -webkit-font-smoothing: antialiased; overflow: hidden; }
+.pm-content { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+.page-toolbar {
+    background: #fff; border-bottom: 1px solid #e2e5ee;
+    padding: 10px 20px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+.toolbar-title { font-size: 15px; font-weight: 500; color: #0d1a33; }
+.toolbar-case { font-size: 12px; color: #6b7280; background: #f4f6fb; border: 1px solid #e2e5ee; border-radius: 7px; padding: 4px 11px; }
+.toolbar-spacer { flex: 1; }
+.btn-toolbar { display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 9px; border: 1.5px solid #e2e5ee; background: transparent; color: #6b7280; font-size: 12px; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; transition: all 0.13s; white-space: nowrap; }
+.btn-toolbar:hover { border-color: #0d1a33; color: #0d1a33; }
+.btn-toolbar.primary { background: #0d1a33; border-color: #0d1a33; color: #fff; }
+.btn-toolbar.primary:hover { background: #1a2744; }
+.btn-toolbar svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; flex-shrink: 0; }
+.toolbar-divider { width: 1px; height: 22px; background: #e2e5ee; }
+
+/* Main content split */
+.map-layout { display: flex; flex: 1; overflow: hidden; }
+.left-panel { width: 320px; flex-shrink: 0; border-right: 1px solid #e2e5ee; background: #fff; display: flex; flex-direction: column; overflow: hidden; }
+.right-panel { flex: 1; background: #0d1a33; position: relative; overflow: hidden; }
+
+/* Left panel tabs */
+.panel-tabs { display: flex; border-bottom: 1px solid #e2e5ee; flex-shrink: 0; }
+.panel-tab { flex: 1; padding: 10px 6px; font-size: 12px; font-family: 'Noto Sans KR', sans-serif; border: none; background: transparent; color: #9ca3af; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.13s; white-space: nowrap; }
+.panel-tab.active { color: #0d1a33; font-weight: 500; border-bottom-color: #0d1a33; }
+.panel-content { flex: 1; overflow-y: auto; padding: 14px; scrollbar-width: thin; }
+
+/* Case list */
+.case-item { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; cursor: pointer; transition: background 0.13s; border: 1px solid transparent; margin-bottom: 6px; }
+.case-item:hover { background: #f4f6fb; }
+.case-item.selected { background: #eff6ff; border-color: #4a7cdc; }
+.case-icon { width: 34px; height: 34px; border-radius: 9px; background: #f0f3f9; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.case-icon svg { width: 16px; height: 16px; stroke: #1a2744; fill: none; stroke-width: 1.8; stroke-linecap: round; }
+.case-info { flex: 1; min-width: 0; }
+.case-id-text { font-size: 10px; color: #9ca3af; }
+.case-name { font-size: 13px; font-weight: 500; color: #1a1a2e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.case-badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
+.badge-active { background: #f0fdf4; color: #16a34a; }
+.badge-done { background: #eff6ff; color: #1e40af; }
+.badge-warn { background: #fffbeb; color: #92400e; }
+.badge-danger { background: #fef2f2; color: #dc2626; }
+
+/* Transcript list */
+.transcript-item { display: flex; align-items: center; gap: 9px; padding: 10px 11px; background: #f4f6fb; border-radius: 9px; border: 1px solid #e2e5ee; cursor: pointer; transition: border-color 0.13s; margin-bottom: 7px; }
+.transcript-item.checked { border-color: #4a7cdc; background: #eff6ff; }
+.transcript-chk { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid #e2e5ee; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.13s; }
+.transcript-item.checked .transcript-chk { background: #4a7cdc; border-color: #4a7cdc; }
+.transcript-chk svg { width: 9px; height: 9px; stroke: #fff; display: none; }
+.transcript-item.checked .transcript-chk svg { display: block; }
+.transcript-info { flex: 1; min-width: 0; }
+.transcript-title { font-size: 12px; font-weight: 500; color: #1a1a2e; }
+.transcript-meta { font-size: 10px; color: #9ca3af; margin-top: 1px; }
+.transcript-badge { font-size: 9px; padding: 2px 7px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
+.tb-contradiction { background: #fef2f2; color: #dc2626; }
+.tb-normal { background: #f0fdf4; color: #16a34a; }
+
+.btn-analyze { width: 100%; padding: 11px; border-radius: 9px; border: none; background: #0d1a33; color: #fff; font-size: 13px; font-weight: 500; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: opacity 0.13s; margin-top: 12px; }
+.btn-analyze:hover { opacity: 0.88; }
+.btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-analyze svg { width: 14px; height: 14px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+.ai-loading { display: none; align-items: center; gap: 8px; padding: 10px 12px; background: #f0f3f9; border-radius: 9px; margin-top: 10px; }
+.ai-loading.show { display: flex; }
+.ai-dot { width: 6px; height: 6px; border-radius: 50%; background: #4a7cdc; animation: bounce 1.2s infinite; flex-shrink: 0; }
+.ai-dot:nth-child(2) { animation-delay: 0.2s; }
+.ai-dot:nth-child(3) { animation-delay: 0.4s; }
+.ai-loading-text { font-size: 11px; color: #6b7280; }
+.ai-result-box { background: #f0f3f9; border-radius: 9px; padding: 11px 13px; margin-top: 10px; display: none; }
+.ai-result-box.show { display: block; }
+.ai-result-label { font-size: 9px; font-weight: 600; color: #4a7cdc; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+.ai-result-text { font-size: 11px; color: #6b7280; line-height: 1.7; }
+
+/* Person / Edge lists in panel */
+.person-item { display: flex; align-items: center; gap: 9px; padding: 9px 11px; background: #f4f6fb; border-radius: 9px; border: 1px solid #e2e5ee; margin-bottom: 6px; }
+.p-avatar { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.p-name { font-size: 13px; font-weight: 500; color: #1a1a2e; flex: 1; }
+.p-role { font-size: 10px; }
+.role-suspect { color: #dc2626; } .role-victim { color: #3d8f6a; } .role-witness { color: #4a7cdc; } .role-reference { color: #8b5cf6; }
+.p-del { width: 22px; height: 22px; border-radius: 50%; background: #e2e5ee; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.p-del svg { width: 9px; height: 9px; stroke: #6b7280; fill: none; stroke-width: 2.5; stroke-linecap: round; }
+
+.edge-item { padding: 9px 11px; background: #f4f6fb; border-radius: 9px; border: 1px solid #e2e5ee; border-left: 3px solid #e2e5ee; margin-bottom: 6px; display: flex; align-items: center; }
+.edge-item.accomplice { border-left-color: #f97316; } .edge-item.harm { border-left-color: #dc2626; }
+.edge-item.witness { border-left-color: #4a7cdc; } .edge-item.acquaint { border-left-color: #9ca3af; }
+.edge-item.family { border-left-color: #16a34a; }
+.edge-text { flex: 1; font-size: 12px; color: #374151; }
+.edge-del { width: 22px; height: 22px; border-radius: 50%; background: #e2e5ee; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.edge-del svg { width: 9px; height: 9px; stroke: #6b7280; fill: none; stroke-width: 2.5; stroke-linecap: round; }
+
+/* Mini form */
+.mini-form { background: #f4f6fb; border: 1px solid #e2e5ee; border-radius: 10px; padding: 13px; margin-bottom: 12px; }
+.mini-form-title { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+.mini-input { width: 100%; padding: 8px 10px; border: 1.5px solid #e2e5ee; border-radius: 8px; font-size: 12px; font-family: 'Noto Sans KR', sans-serif; color: #1a1a2e; outline: none; background: #fff; margin-bottom: 8px; transition: border-color 0.13s; }
+.mini-input:focus { border-color: #4a7cdc; }
+.mini-input::placeholder { color: #9ca3af; }
+.mini-role-row { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+.mini-role-btn { padding: 4px 9px; border-radius: 6px; border: 1px solid #e2e5ee; background: #fff; font-size: 11px; color: #6b7280; cursor: pointer; font-family: 'Noto Sans KR', sans-serif; transition: all 0.13s; }
+.mini-role-btn.active { background: #0d1a33; border-color: #0d1a33; color: #fff; }
+.mini-btn-row { display: flex; gap: 7px; }
+.mini-btn { flex: 1; padding: 8px; border-radius: 7px; border: none; font-size: 12px; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; }
+.mini-btn.primary { background: #0d1a33; color: #fff; }
+.mini-btn.secondary { background: #e2e5ee; color: #6b7280; }
+
+.section-badge { font-size: 11px; background: #f0f3f9; color: #1a2744; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+
+/* Canvas toolbar overlay */
+.canvas-toolbar { position: absolute; top: 12px; right: 12px; z-index: 5; display: flex; flex-direction: column; gap: 6px; }
+.canvas-tool-btn { width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.13s; }
+.canvas-tool-btn:hover { background: rgba(255,255,255,0.22); }
+.canvas-tool-btn svg { width: 14px; height: 14px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+.canvas-hint { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); border-radius: 20px; padding: 5px 14px; font-size: 10px; color: rgba(255,255,255,0.7); white-space: nowrap; pointer-events: none; }
+.canvas-legend { position: absolute; bottom: 12px; left: 12px; background: rgba(10,20,50,0.82); border-radius: 10px; padding: 9px 12px; display: flex; flex-wrap: wrap; gap: 7px 12px; max-width: 260px; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: rgba(255,255,255,0.75); }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.legend-line { width: 16px; height: 2px; flex-shrink: 0; }
+.canvas-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.canvas-empty svg { width: 56px; height: 56px; stroke: rgba(255,255,255,0.2); fill: none; stroke-width: 1.4; stroke-linecap: round; margin-bottom: 14px; }
+.canvas-empty p { font-size: 13px; color: rgba(255,255,255,0.4); text-align: center; line-height: 1.8; }
+
+.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1a2744; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif; opacity: 0; transition: all 0.25s; z-index: 9999; white-space: nowrap; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@keyframes bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-5px); } }
+</style>
+</head>
+<body>
+<div class="pm-layout">
+
+<th:block th:replace="~{desktop/fragments/sidebar :: sidebar('relations')}"></th:block>
+<div class="pm-content" style="height:100vh;overflow:hidden;">
+<th:block th:replace="~{desktop/fragments/appbar :: appbar('POL-MATE,수사 도구,사건 관계망')}"></th:block>
+
+<!-- 페이지 툴바 -->
+<div class="page-toolbar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0d1a33" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="5" r="2.5"/><circle cx="18" cy="19" r="2.5"/><line x1="8.4" y1="11" x2="15.6" y2="6.5"/><line x1="8.4" y1="13" x2="15.6" y2="17.5"/></svg>
+    <span class="toolbar-title">사건 관계망</span>
+    <span class="toolbar-case" id="toolbarCaseName">사건을 선택해 주세요</span>
+    <div class="toolbar-spacer"></div>
+    <button class="btn-toolbar" onclick="resetView()">
+        <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>보기 초기화
+    </button>
+    <div class="toolbar-divider"></div>
+    <button class="btn-toolbar" onclick="drawBoard()">
+        <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="5" r="2.5"/><circle cx="18" cy="19" r="2.5"/><line x1="8.4" y1="11" x2="15.6" y2="6.5"/><line x1="8.4" y1="13" x2="15.6" y2="17.5"/></svg>보드 그리기
+    </button>
+    <button class="btn-toolbar primary" id="btnSave" onclick="saveBoard(false)" style="display:none;">
+        <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>보드 저장
+    </button>
+    <button class="btn-toolbar primary" id="btnUpdate" onclick="saveBoard(true)" style="display:none;">
+        <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>보드 업데이트
+    </button>
+</div>
+
+<!-- 메인 레이아웃 -->
+<div class="map-layout">
+    <!-- 왼쪽 패널 -->
+    <div class="left-panel">
+        <div class="panel-tabs">
+            <button class="panel-tab active" id="ptab-cases"   onclick="switchPanelTab('cases')">사건 선택</button>
+            <button class="panel-tab"        id="ptab-ai"      onclick="switchPanelTab('ai')">AI 분석</button>
+            <button class="panel-tab"        id="ptab-persons" onclick="switchPanelTab('persons')">인물</button>
+            <button class="panel-tab"        id="ptab-edges"   onclick="switchPanelTab('edges')">관계선</button>
+        </div>
+
+        <!-- 사건 선택 탭 -->
+        <div class="panel-content" id="panel-cases">
+            <div style="text-align:center;padding:24px 0;font-size:12px;color:#9ca3af;">불러오는 중...</div>
+        </div>
+
+        <!-- AI 분석 탭 -->
+        <div class="panel-content" id="panel-ai" style="display:none;">
+            <div style="font-size:11px;color:#9ca3af;margin-bottom:12px;line-height:1.7;">조서를 1개 이상 선택하면 AI가 등장인물과 관계를 자동 분석합니다.</div>
+            <div id="transcriptList">
+                <div style="text-align:center;padding:24px 0;font-size:12px;color:#9ca3af;">사건을 먼저 선택해 주세요.</div>
+            </div>
+            <button class="btn-analyze" id="btnAnalyze" onclick="analyzeWithAI()" disabled>
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+                AI 관계망 분석 시작
+            </button>
+            <div class="ai-loading" id="aiLoading">
+                <div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div>
+                <div class="ai-loading-text" id="aiLoadingText">AI가 조서를 분석하는 중...</div>
+            </div>
+            <div class="ai-result-box" id="aiResultBox">
+                <div class="ai-result-label">AI 분석 결과</div>
+                <div class="ai-result-text" id="aiResultText"></div>
+            </div>
+        </div>
+
+        <!-- 인물 탭 -->
+        <div class="panel-content" id="panel-persons" style="display:none;">
+            <div class="mini-form">
+                <div class="mini-form-title">인물 추가</div>
+                <input class="mini-input" id="miniPersonName" placeholder="이름">
+                <input class="mini-input" id="miniPersonMemo" placeholder="메모 (선택)">
+                <div class="mini-role-row">
+                    <button type="button" class="mini-role-btn" id="mrole-suspect"   onclick="selectMiniRole('suspect')">피의자</button>
+                    <button type="button" class="mini-role-btn" id="mrole-victim"    onclick="selectMiniRole('victim')">피해자</button>
+                    <button type="button" class="mini-role-btn" id="mrole-witness"   onclick="selectMiniRole('witness')">목격자</button>
+                    <button type="button" class="mini-role-btn" id="mrole-reference" onclick="selectMiniRole('reference')">참고인</button>
+                </div>
+                <div class="mini-btn-row">
+                    <button type="button" class="mini-btn primary" onclick="addMiniPerson()">추가</button>
+                    <button type="button" class="mini-btn secondary" onclick="clearMiniPersonForm()">초기화</button>
+                </div>
+            </div>
+            <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+                등록 인물 <span class="section-badge" id="personCount">0명</span>
+            </div>
+            <div id="personListView"></div>
+        </div>
+
+        <!-- 관계선 탭 -->
+        <div class="panel-content" id="panel-edges" style="display:none;">
+            <div class="mini-form">
+                <div class="mini-form-title">관계선 추가</div>
+                <select class="mini-input" id="miniEdgeSrc" style="appearance:none;"><option value="">출발 인물 선택</option></select>
+                <select class="mini-input" id="miniEdgeDst" style="appearance:none;"><option value="">도착 인물 선택</option></select>
+                <div class="mini-role-row" style="flex-wrap:wrap;">
+                    <button type="button" class="mini-role-btn" id="mrel-accomplice" onclick="selectMiniRel('accomplice')">공범</button>
+                    <button type="button" class="mini-role-btn" id="mrel-harm"       onclick="selectMiniRel('harm')">피해관계</button>
+                    <button type="button" class="mini-role-btn" id="mrel-witness"    onclick="selectMiniRel('witness')">목격</button>
+                    <button type="button" class="mini-role-btn" id="mrel-acquaint"   onclick="selectMiniRel('acquaint')">지인</button>
+                    <button type="button" class="mini-role-btn" id="mrel-family"     onclick="selectMiniRel('family')">가족</button>
+                </div>
+                <div class="mini-btn-row">
+                    <button type="button" class="mini-btn primary" onclick="addMiniEdge()">추가</button>
+                    <button type="button" class="mini-btn secondary" onclick="clearMiniEdgeForm()">초기화</button>
+                </div>
+            </div>
+            <div style="font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+                관계선 <span class="section-badge" id="edgeCount">0개</span>
+            </div>
+            <div id="edgeListView"></div>
+        </div>
+    </div>
+
+    <!-- 캔버스 영역 -->
+    <div class="right-panel" id="rightPanel">
+        <!-- 빈 상태 -->
+        <div class="canvas-empty" id="canvasEmpty">
+            <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="5" r="2.5"/><circle cx="18" cy="19" r="2.5"/><line x1="8.4" y1="11" x2="15.6" y2="6.5"/><line x1="8.4" y1="13" x2="15.6" y2="17.5"/></svg>
+            <p>사건을 선택하고 AI 분석 후<br>보드 그리기를 눌러 관계망을 그리세요.</p>
+        </div>
+
+        <canvas id="relationCanvas" style="display:none;position:absolute;inset:0;cursor:grab;touch-action:none;"></canvas>
+
+        <div class="canvas-toolbar" id="canvasToolbar" style="display:none;">
+            <button type="button" class="canvas-tool-btn" onclick="zoomIn()"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+            <button type="button" class="canvas-tool-btn" onclick="zoomOut()"><svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+            <button type="button" class="canvas-tool-btn" onclick="resetView()"><svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg></button>
+        </div>
+        <div class="canvas-hint" id="canvasHint" style="display:none;">노드 드래그로 이동 · 빈 곳 드래그로 패닝 · 스크롤로 줌</div>
+        <div class="canvas-legend" id="canvasLegend" style="display:none;">
+            <div class="legend-item"><div class="legend-dot" style="background:#dc2626"></div>피의자</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#3d8f6a"></div>피해자</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#4a7cdc"></div>목격자</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div>참고인</div>
+            <div class="legend-item"><div class="legend-line" style="background:#f97316"></div>공범</div>
+            <div class="legend-item"><div class="legend-line" style="background:#dc2626"></div>피해관계</div>
+            <div class="legend-item"><div class="legend-line" style="background:#4a7cdc"></div>목격</div>
+            <div class="legend-item"><div class="legend-line" style="background:#16a34a"></div>가족</div>
+            <div class="legend-item"><div class="legend-line" style="background:#9ca3af"></div>지인</div>
+        </div>
+    </div>
+</div>
+
+</div><!-- /pm-content -->
+</div><!-- /pm-layout -->
+
+<div class="toast" id="toast"></div>
+<div id="_boot" hidden th:attr="data-case-id=${param.caseId ?: ''}"></div>
+
+<script>
+var RELATION_MAP_URL = POL_MATE_SERV_BASE.replace(/\/$/, '') + '/relation_map';
+
+var currentCaseId = '', currentCaseName = '';
+var persons = [], edges = [], checkedTranscripts = [];
+var boardExists = false;
+var currentMiniRole = '', currentMiniRel = '';
+
+var ROLE_COLOR = {suspect:'#dc2626',victim:'#3d8f6a',witness:'#4a7cdc',reference:'#8b5cf6'};
+var ROLE_LABEL = {suspect:'피의자',victim:'피해자',witness:'목격자',reference:'참고인'};
+var REL_COLOR  = {accomplice:'#f97316',harm:'#dc2626',witness:'#4a7cdc',acquaint:'#9ca3af',family:'#16a34a'};
+var REL_LABEL  = {accomplice:'공범',harm:'피해관계',witness:'목격',acquaint:'지인',family:'가족'};
+var EDGE_MISMATCH_STROKE = '#f97316';
+var VALID_ROLES = ['suspect','victim','witness','reference'];
+var VALID_RELTYPES = ['accomplice','harm','witness','acquaint','family'];
+
+/* ── Canvas state ── */
+var canvas, ctx;
+var scale = 1, offsetX = 0, offsetY = 0;
+var isDragging = false, dragStartX = 0, dragStartY = 0;
+var dragNode = null, dragNodeOffX = 0, dragNodeOffY = 0;
+var lastTouchDist = 0;
+
+/* ── Panel tab ── */
+function switchPanelTab(tab) {
+    ['cases','ai','persons','edges'].forEach(function(t) {
+        document.getElementById('ptab-' + t).classList.toggle('active', t === tab);
+        document.getElementById('panel-' + t).style.display = t === tab ? '' : 'none';
+    });
+}
+
+/* ── Case selection ── */
+function selectCase(caseId, caseName) {
+    currentCaseId = caseId; currentCaseName = caseName;
+    document.querySelectorAll('.case-item').forEach(function(el) { el.classList.remove('selected'); });
+    var el = document.getElementById('ci_' + caseId.replace(/-/g,'_'));
+    if (el) el.classList.add('selected');
+    document.getElementById('toolbarCaseName').textContent = caseId + ' ' + caseName;
+    checkedTranscripts = [];
+    loadTranscripts(caseId);
+    tryLoadExistingBoard(caseId);
+    switchPanelTab('ai');
+}
+
+function loadTranscripts(caseId) {
+    var list = document.getElementById('transcriptList');
+    list.innerHTML = '<div style="text-align:center;padding:20px;font-size:12px;color:#9ca3af;">불러오는 중...</div>';
+    document.getElementById('btnAnalyze').disabled = true;
+    fetch('/caseApi?action=caseDetail&caseId=' + encodeURIComponent(caseId), {credentials:'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var docs = data.docs || [];
+            if (!docs.length) { list.innerHTML = '<div style="text-align:center;padding:20px;font-size:12px;color:#9ca3af;">이 사건에 등록된 조서가 없습니다.</div>'; return; }
+            list.innerHTML = '';
+            docs.forEach(function(d) {
+                var badgeCls = d.contradiction ? 'tb-contradiction' : 'tb-normal';
+                var badgeTxt = d.contradiction ? '모순탐지' : '정상';
+                var typeLabel = d.type || '미분류';
+                var item = document.createElement('div');
+                item.className = 'transcript-item'; item.id = 'tr_' + d.id;
+                var chk = document.createElement('div');
+                chk.className = 'transcript-chk';
+                chk.innerHTML = '<svg viewBox="0 0 12 12" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="2 6 5 9 10 3"/></svg>';
+                var info = document.createElement('div'); info.className = 'transcript-info';
+                info.innerHTML = '<div class="transcript-title">' + escHtml(d.name||'미입력') + ' · ' + escHtml(typeLabel) + '</div>' +
+                    '<div class="transcript-meta">' + escHtml(d.date||'') + ' · ' + (d.textLen||0) + '자</div>';
+                var badge = document.createElement('span');
+                badge.className = 'transcript-badge ' + badgeCls; badge.textContent = badgeTxt;
+                item.appendChild(chk); item.appendChild(info); item.appendChild(badge);
+                (function(tid, tname, ttype, tdate) {
+                    item.addEventListener('click', function() { toggleTranscript(tid, tname, ttype, tdate); });
+                })(String(d.id), d.name||'', d.type||'', d.date||'');
+                list.appendChild(item);
+            });
+        })
+        .catch(function() { list.innerHTML = '<div style="text-align:center;padding:20px;font-size:12px;color:#dc2626;">조서 목록을 불러오지 못했습니다.</div>'; });
+}
+
+function toggleTranscript(id, name, type, date) {
+    id = String(id);
+    var el = document.getElementById('tr_' + id);
+    if (!el) return;
+    var idx = checkedTranscripts.findIndex(function(t) { return String(t.id) === id; });
+    if (idx >= 0) { checkedTranscripts.splice(idx, 1); el.classList.remove('checked'); }
+    else { checkedTranscripts.push({id:id, name:name, type:type, date:date}); el.classList.add('checked'); }
+    document.getElementById('btnAnalyze').disabled = checkedTranscripts.length < 1;
+}
+
+/* ── AI Analysis ── */
+function analyzeWithAI() {
+    if (checkedTranscripts.length < 1) { showToast('조서를 1개 이상 선택해 주세요.'); return; }
+    document.getElementById('btnAnalyze').disabled = true;
+    document.getElementById('aiLoading').classList.add('show');
+    document.getElementById('aiResultBox').classList.remove('show');
+    document.getElementById('aiLoadingText').textContent = '조서 원문을 불러오는 중...';
+    var fetchPromises = checkedTranscripts.map(function(t) {
+        return fetch('/caseApi?action=transcriptText&transcriptId=' + t.id, {credentials:'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) { return {meta:t, text:d.text||''}; })
+            .catch(function() { return {meta:t, text:''}; });
+    });
+    Promise.all(fetchPromises).then(function(results) {
+        var filled = results.filter(function(r) { return r.text && r.text.trim().length > 0; }).length;
+        document.getElementById('aiLoadingText').textContent = 'AI 서버가 관계망을 분석하는 중... (' + filled + '/' + results.length + '건)';
+        var payload = { caseId: currentCaseId, caseName: currentCaseName, transcripts: results.map(function(r) { return {name:r.meta.name||'', type:r.meta.type||'', text:r.text||''}; }) };
+        fetch(RELATION_MAP_URL, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                document.getElementById('aiLoading').classList.remove('show');
+                if (!data.success) { runFallback('AI 서버: ' + (data.error||'오류')); return; }
+                parseAndApplyAiResult(data.response || '');
+            })
+            .catch(function(err) {
+                document.getElementById('aiLoading').classList.remove('show');
+                runFallback(err.message || 'AI 서버에 연결할 수 없습니다.');
+            });
+    });
+}
+
+function runFallback(errMsg) {
+    showToast('AI 서버 연결 실패 — 샘플 데이터로 대체합니다.');
+    document.getElementById('aiResultBox').classList.add('show');
+    document.getElementById('aiResultText').textContent = '[Fallback] ' + errMsg + '\n\n샘플 인물과 관계선이 추가되었습니다.';
+    persons = [
+        {id:uid(), name:'김철수', role:'suspect', memo:'주요 피의자'},
+        {id:uid(), name:'이영희', role:'victim',   memo:'피해자'},
+        {id:uid(), name:'박민수', role:'witness',  memo:'목격자'},
+    ];
+    edges = [{id:uid(), src:persons[0].id, dst:persons[1].id, relType:'harm', status:'unknown'}];
+    updateAllViews();
+    drawBoard();
+}
+
+/* ── AI 결과 파싱 ── */
+function normalizeRole(r) {
+    if (!r) return 'reference';
+    r = String(r).toLowerCase().trim();
+    if (r.indexOf('|') >= 0) r = r.split('|')[0].trim();
+    if (VALID_ROLES.indexOf(r) >= 0) return r;
+    if (r.indexOf('suspect') >= 0 || r.indexOf('피의자') >= 0) return 'suspect';
+    if (r.indexOf('victim') >= 0  || r.indexOf('피해') >= 0)   return 'victim';
+    if (r.indexOf('witness') >= 0 || r.indexOf('목격') >= 0)   return 'witness';
+    return 'reference';
+}
+function normalizeRelType(r) {
+    if (!r) return 'acquaint';
+    r = String(r).toLowerCase().trim();
+    if (r.indexOf('|') >= 0) r = r.split('|')[0].trim();
+    if (VALID_RELTYPES.indexOf(r) >= 0) return r;
+    if (r.indexOf('accomplice') >= 0 || r.indexOf('공범') >= 0) return 'accomplice';
+    if (r.indexOf('harm') >= 0 || r.indexOf('피해') >= 0)       return 'harm';
+    if (r.indexOf('witness') >= 0 || r.indexOf('목격') >= 0)    return 'witness';
+    if (r.indexOf('family') >= 0 || r.indexOf('가족') >= 0)     return 'family';
+    return 'acquaint';
+}
+function normalizeStatus(s) {
+    if (!s) return 'unknown';
+    s = String(s).toLowerCase().trim();
+    if (s.indexOf('|') >= 0) s = s.split('|')[0].trim();
+    if (['match','mismatch','unknown'].indexOf(s) >= 0) return s;
+    if (s.indexOf('불일치') >= 0 || s.indexOf('mismatch') >= 0) return 'mismatch';
+    if (s.indexOf('일치') >= 0 && s.indexOf('불일치') < 0)     return 'match';
+    return 'unknown';
+}
+
+function parseAndApplyAiResult(raw) {
+    var result = null;
+    var jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (jsonMatch) { try { result = JSON.parse(jsonMatch[0]); } catch(e) {} }
+    if (!result || (!result.persons && !result.nodes)) {
+        var lines = raw.split('\n');
+        result = {persons:[], edges:[]};
+        lines.forEach(function(line) {
+            var pm = line.match(/- ([가-힣a-zA-Z0-9]+)\s*[:：]\s*(suspect|victim|witness|reference|피의자|피해자|목격자|참고인)/i);
+            if (pm) result.persons.push({name:pm[1], role:pm[2], memo:''});
+        });
+    }
+    var newPersons = (result.persons||result.nodes||[]).map(function(p) {
+        return {id:uid(), name:(p.name||'').trim(), role:normalizeRole(p.role||p.type||''), memo:(p.memo||p.note||'').trim()};
+    }).filter(function(p) { return p.name; });
+    var nameMap = {};
+    newPersons.forEach(function(p) { nameMap[p.name.toLowerCase().replace(/\s/g,'')] = p.id; });
+    var newEdges = (result.edges||result.relations||[]).map(function(e) {
+        var srcKey = (e.src||e.source||e.from||'').toLowerCase().replace(/\s/g,'');
+        var dstKey = (e.dst||e.target||e.to||'').toLowerCase().replace(/\s/g,'');
+        var srcId = nameMap[srcKey], dstId = nameMap[dstKey];
+        if (!srcId || !dstId || srcId === dstId) return null;
+        return {id:uid(), src:srcId, dst:dstId, relType:normalizeRelType(e.relType||e.relation||''), status:normalizeStatus(e.status||'')};
+    }).filter(Boolean);
+
+    persons = newPersons;
+    edges = newEdges;
+    document.getElementById('aiResultBox').classList.add('show');
+    document.getElementById('aiResultText').textContent =
+        '인물 ' + persons.length + '명, 관계선 ' + edges.length + '개가 분석되었습니다.\n인물/관계선 탭에서 수정 후 보드 그리기를 클릭하세요.';
+    document.getElementById('btnAnalyze').disabled = false;
+    updateAllViews();
+    drawBoard();
+    showToast('AI 분석 완료: 인물 ' + persons.length + '명, 관계선 ' + edges.length + '개');
+}
+
+/* ── 기존 보드 불러오기 ── */
+function tryLoadExistingBoard(caseId) {
+    boardExists = false;
+    document.getElementById('btnSave').style.display = '';
+    document.getElementById('btnUpdate').style.display = 'none';
+    fetch('/boardApi?action=load&caseId=' + encodeURIComponent(caseId), {credentials:'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.boardExists || !data.boardJson) return;
+            var bj; try { bj = JSON.parse(data.boardJson); } catch(e) { return; }
+            if (!bj || !bj.persons || !bj.persons.length) return;
+            persons = bj.persons.map(function(p) {
+                var o = {id:uid(), name:p.name||'', role:p.role||'reference', memo:p.memo||''};
+                var lx = Number(p.layoutX), ly = Number(p.layoutY);
+                if (!isNaN(lx) && !isNaN(ly)) { o.layoutX = lx; o.layoutY = ly; o._x = lx; o._y = ly; o._vx = 0; o._vy = 0; }
+                return o;
+            }).filter(function(p) { return p.name; });
+            var nameMap = {};
+            persons.forEach(function(p) { nameMap[p.name.toLowerCase().replace(/\s/g,'')] = p.id; });
+            edges = (bj.edges||[]).map(function(e) {
+                var sk = (e.srcName||e.src||'').toLowerCase().replace(/\s/g,'');
+                var dk = (e.dstName||e.dst||'').toLowerCase().replace(/\s/g,'');
+                var sp = nameMap[sk], dp = nameMap[dk];
+                if (!sp || !dp) return null;
+                return {id:uid(), src:sp, dst:dp, relType:e.relType||'acquaint', status:e.status||'unknown'};
+            }).filter(Boolean);
+            boardExists = true;
+            document.getElementById('btnSave').style.display = 'none';
+            document.getElementById('btnUpdate').style.display = '';
+            updateAllViews();
+            drawBoard();
+            showToast('저장된 보드를 불러왔습니다.');
+        }).catch(function() {});
+}
+
+/* ── 보드 저장 ── */
+function saveBoard(isUpdate) {
+    if (!currentCaseId) { showToast('사건을 선택해 주세요.'); return; }
+    var boardJson = JSON.stringify({
+        persons: persons.map(function(p) { return {name:p.name, role:p.role, memo:p.memo, layoutX:p._x||0, layoutY:p._y||0}; }),
+        edges:   edges.map(function(e) {
+            var sp = persons.find(function(p) { return p.id === e.src; });
+            var dp = persons.find(function(p) { return p.id === e.dst; });
+            return {srcName:sp?sp.name:'', dstName:dp?dp.name:'', relType:e.relType, status:e.status};
+        })
+    });
+    fetch('/boardApi?action=save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({caseId: currentCaseId, boardJson: boardJson, isUpdate: isUpdate}),
+        credentials: 'same-origin'
+    })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                boardExists = true;
+                document.getElementById('btnSave').style.display = 'none';
+                document.getElementById('btnUpdate').style.display = '';
+                showToast(isUpdate ? '보드가 업데이트되었습니다.' : '보드가 저장되었습니다.');
+            } else { showToast(data.error || '저장에 실패했습니다.'); }
+        }).catch(function() { showToast('서버 연결 오류가 발생했습니다.'); });
+}
+
+/* ── 보드 그리기 ── */
+function drawBoard() {
+    var panel = document.getElementById('rightPanel');
+    var c = document.getElementById('relationCanvas');
+    c.width  = panel.clientWidth;
+    c.height = panel.clientHeight;
+    canvas = c; ctx = c.getContext('2d');
+    document.getElementById('canvasEmpty').style.display = 'none';
+    c.style.display = '';
+    document.getElementById('canvasToolbar').style.display = '';
+    document.getElementById('canvasHint').style.display = '';
+    document.getElementById('canvasLegend').style.display = '';
+    if (!persons.length || !persons.every(function(p) { return typeof p._x === 'number' && !isNaN(p._x); })) {
+        initForce(c.width, c.height);
+    }
+    initCanvasEvents();
+    render();
+}
+
+/* ── Canvas events ── */
+function initCanvasEvents() {
+    if (canvas._eventsInited) return;
+    canvas._eventsInited = true;
+    canvas.addEventListener('mousedown', function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var mx = (e.clientX - rect.left) / scale - offsetX;
+        var my = (e.clientY - rect.top)  / scale - offsetY;
+        dragNode = null;
+        persons.forEach(function(p) {
+            var dx = mx - p._x, dy = my - p._y;
+            if (Math.sqrt(dx*dx + dy*dy) <= 22) { dragNode = p; dragNodeOffX = dx; dragNodeOffY = dy; }
+        });
+        if (!dragNode) { isDragging = true; dragStartX = e.clientX; dragStartY = e.clientY; }
+    });
+    canvas.addEventListener('mousemove', function(e) {
+        if (dragNode) {
+            var rect = canvas.getBoundingClientRect();
+            dragNode._x = (e.clientX - rect.left) / scale - offsetX;
+            dragNode._y = (e.clientY - rect.top)  / scale - offsetY;
+            render();
+        } else if (isDragging) {
+            offsetX += (e.clientX - dragStartX) / scale;
+            offsetY += (e.clientY - dragStartY) / scale;
+            dragStartX = e.clientX; dragStartY = e.clientY;
+            render();
+        }
+    });
+    canvas.addEventListener('mouseup', function() { isDragging = false; dragNode = null; });
+    canvas.addEventListener('mouseleave', function() { isDragging = false; dragNode = null; });
+    canvas.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        var delta = e.deltaY > 0 ? 0.9 : 1.1;
+        scale = Math.max(0.3, Math.min(3, scale * delta));
+        render();
+    }, {passive: false});
+
+    canvas.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        if (e.touches.length === 1) {
+            var t = e.touches[0];
+            var rect = canvas.getBoundingClientRect();
+            var mx = (t.clientX - rect.left) / scale - offsetX;
+            var my = (t.clientY - rect.top)  / scale - offsetY;
+            dragNode = null;
+            persons.forEach(function(p) {
+                var dx = mx - p._x, dy = my - p._y;
+                if (Math.sqrt(dx*dx + dy*dy) <= 28) { dragNode = p; }
+            });
+            if (!dragNode) { isDragging = true; dragStartX = t.clientX; dragStartY = t.clientY; }
+        } else if (e.touches.length === 2) {
+            isDragging = false; dragNode = null;
+            var dx = e.touches[0].clientX - e.touches[1].clientX;
+            var dy = e.touches[0].clientY - e.touches[1].clientY;
+            lastTouchDist = Math.sqrt(dx*dx + dy*dy);
+        }
+    }, {passive: false});
+    canvas.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        if (e.touches.length === 1) {
+            var t = e.touches[0];
+            var rect = canvas.getBoundingClientRect();
+            if (dragNode) {
+                dragNode._x = (t.clientX - rect.left) / scale - offsetX;
+                dragNode._y = (t.clientY - rect.top)  / scale - offsetY;
+                render();
+            } else if (isDragging) {
+                offsetX += (t.clientX - dragStartX) / scale;
+                offsetY += (t.clientY - dragStartY) / scale;
+                dragStartX = t.clientX; dragStartY = t.clientY;
+                render();
+            }
+        } else if (e.touches.length === 2) {
+            var dx = e.touches[0].clientX - e.touches[1].clientX;
+            var dy = e.touches[0].clientY - e.touches[1].clientY;
+            var dist = Math.sqrt(dx*dx + dy*dy);
+            if (lastTouchDist > 0) {
+                scale = Math.max(0.3, Math.min(3, scale * (dist / lastTouchDist)));
+                render();
+            }
+            lastTouchDist = dist;
+        }
+    }, {passive: false});
+    canvas.addEventListener('touchend', function() { isDragging = false; dragNode = null; lastTouchDist = 0; });
+}
+
+/* ── Force layout ── */
+function initForce(w, h) {
+    var n = persons.length;
+    if (!n) return;
+    var cx = w/2, cy = h/2;
+    if (n === 1) { persons[0]._x = cx; persons[0]._y = cy; persons[0]._vx = 0; persons[0]._vy = 0; return; }
+    persons.forEach(function(p, i) {
+        var a = (2 * Math.PI * i / n) - Math.PI/2;
+        var r = Math.min(w, h) * 0.3;
+        p._x = cx + Math.cos(a) * r;
+        p._y = cy + Math.sin(a) * r;
+        p._vx = 0; p._vy = 0;
+    });
+    for (var i = 0; i < 200; i++) runForce(w, h);
+}
+function runForce(w, h) {
+    var n = persons.length; if (n < 2) return;
+    var area = Math.max(w * h, 1);
+    var k = Math.sqrt(area / n) * 0.82;
+    var repK = k * k, attract = 0.05, pad = 60, damping = 0.85, grav = 0.018, vmax = k * 0.4;
+    persons.forEach(function(p) { p._fx = 0; p._fy = 0; });
+    for (var i = 0; i < n; i++) {
+        for (var j = i+1; j < n; j++) {
+            var pi = persons[i], pj = persons[j];
+            var dx = pi._x - pj._x, dy = pi._y - pj._y;
+            var dist = Math.sqrt(dx*dx + dy*dy); if (dist < 0.01) dist = 0.01;
+            var f = repK / dist;
+            pi._fx += dx/dist*f; pi._fy += dy/dist*f;
+            pj._fx -= dx/dist*f; pj._fy -= dy/dist*f;
+        }
+    }
+    edges.forEach(function(e) {
+        var sp = persons.find(function(p) { return p.id === e.src; });
+        var dp = persons.find(function(p) { return p.id === e.dst; });
+        if (!sp || !dp) return;
+        var dx = dp._x - sp._x, dy = dp._y - sp._y;
+        var dist = Math.sqrt(dx*dx + dy*dy); if (dist < 0.01) dist = 0.01;
+        var f = attract * (dist - k);
+        sp._fx += dx/dist*f; sp._fy += dy/dist*f;
+        dp._fx -= dx/dist*f; dp._fy -= dy/dist*f;
+    });
+    var cx = w/2, cy = h/2;
+    persons.forEach(function(p) {
+        p._fx += (cx - p._x) * grav; p._fy += (cy - p._y) * grav;
+        p._vx = (p._vx + p._fx) * damping; p._vy = (p._vy + p._fy) * damping;
+        var v = Math.sqrt(p._vx*p._vx + p._vy*p._vy);
+        if (v > vmax) { p._vx *= vmax/v; p._vy *= vmax/v; }
+        p._x = Math.max(pad, Math.min(w-pad, p._x + p._vx));
+        p._y = Math.max(pad, Math.min(h-pad, p._y + p._vy));
+    });
+}
+
+/* ── Render ── */
+function render() {
+    if (!ctx || !canvas) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#0d1a33'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (!persons.length) {
+        ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = '13px Noto Sans KR,sans-serif';
+        ctx.textAlign = 'center'; ctx.fillText('인물 정보가 없습니다', canvas.width/2, canvas.height/2);
+        return;
+    }
+    ctx.save();
+    ctx.translate(offsetX * scale, offsetY * scale);
+    ctx.scale(scale, scale);
+    // Draw edges
+    edges.forEach(function(e) {
+        var sp = persons.find(function(p) { return p.id === e.src; });
+        var dp = persons.find(function(p) { return p.id === e.dst; });
+        if (!sp || !dp) return;
+        var isMis = e.status === 'mismatch';
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = isMis ? EDGE_MISMATCH_STROKE : (REL_COLOR[e.relType] || '#9ca3af');
+        ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(sp._x, sp._y); ctx.lineTo(dp._x, dp._y); ctx.stroke();
+        var mx = (sp._x + dp._x) / 2, my = (sp._y + dp._y) / 2;
+        var dx = dp._x - sp._x, dy = dp._y - sp._y, len = Math.sqrt(dx*dx + dy*dy) || 1;
+        var perpX = -(dy/len) * 12, perpY = (dx/len) * 12;
+        var lx = mx + perpX, ly = my + perpY;
+        var label = isMis ? '진술 불일치' : (REL_LABEL[e.relType] || e.relType || '');
+        if (label) {
+            ctx.textAlign = 'center';
+            ctx.font = '10px Noto Sans KR,sans-serif';
+            var tw = ctx.measureText(label).width;
+            ctx.fillStyle = 'rgba(10,20,50,0.75)';
+            ctx.fillRect(lx - tw/2 - 4, ly - 9, tw + 8, 13);
+            ctx.fillStyle = '#fff'; ctx.fillText(label, lx, ly);
+        }
+    });
+    // Draw nodes
+    persons.forEach(function(p) {
+        var nr = 22;
+        ctx.beginPath(); ctx.arc(p._x, p._y, nr, 0, 2*Math.PI);
+        ctx.fillStyle = ROLE_COLOR[p.role] || '#4a7cdc'; ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+        ctx.font = 'bold 11px Noto Sans KR,sans-serif';
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+        var dispName = p.name.length > 4 ? p.name.substr(0,4)+'…' : p.name;
+        ctx.fillText(dispName, p._x, p._y + 4);
+        ctx.font = '9px Noto Sans KR,sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.fillText(ROLE_LABEL[p.role] || '', p._x, p._y + nr + 13);
+    });
+    ctx.restore();
+}
+
+/* ── Zoom/Pan controls ── */
+function zoomIn()   { scale = Math.min(3, scale + 0.15); render(); }
+function zoomOut()  { scale = Math.max(0.3, scale - 0.15); render(); }
+function resetView(){ scale = 1; offsetX = 0; offsetY = 0; if (canvas) { initForce(canvas.width, canvas.height); render(); } }
+
+/* ── Mini forms ── */
+function selectMiniRole(r) {
+    currentMiniRole = r;
+    ['suspect','victim','witness','reference'].forEach(function(x) {
+        document.getElementById('mrole-' + x).classList.toggle('active', x === r);
+    });
+}
+function clearMiniPersonForm() {
+    document.getElementById('miniPersonName').value = '';
+    document.getElementById('miniPersonMemo').value = '';
+    currentMiniRole = '';
+    ['suspect','victim','witness','reference'].forEach(function(x) { document.getElementById('mrole-' + x).classList.remove('active'); });
+}
+function addMiniPerson() {
+    var name = document.getElementById('miniPersonName').value.trim();
+    if (!name) { showToast('이름을 입력해 주세요.'); return; }
+    if (!currentMiniRole) { showToast('역할을 선택해 주세요.'); return; }
+    if (persons.find(function(p) { return p.name === name; })) { showToast('이미 존재하는 이름입니다.'); return; }
+    var memo = document.getElementById('miniPersonMemo').value.trim();
+    persons.push({id:uid(), name:name, role:currentMiniRole, memo:memo});
+    updateAllViews();
+    clearMiniPersonForm();
+    showToast(name + '이(가) 추가되었습니다.');
+}
+
+function selectMiniRel(r) {
+    currentMiniRel = r;
+    ['accomplice','harm','witness','acquaint','family'].forEach(function(x) {
+        document.getElementById('mrel-' + x).classList.toggle('active', x === r);
+    });
+}
+function clearMiniEdgeForm() {
+    document.getElementById('miniEdgeSrc').value = '';
+    document.getElementById('miniEdgeDst').value = '';
+    currentMiniRel = '';
+    ['accomplice','harm','witness','acquaint','family'].forEach(function(x) { document.getElementById('mrel-' + x).classList.remove('active'); });
+}
+function addMiniEdge() {
+    var srcId = document.getElementById('miniEdgeSrc').value;
+    var dstId = document.getElementById('miniEdgeDst').value;
+    if (!srcId || !dstId) { showToast('인물을 선택해 주세요.'); return; }
+    if (srcId === dstId) { showToast('같은 인물은 선택할 수 없습니다.'); return; }
+    if (!currentMiniRel) { showToast('관계 유형을 선택해 주세요.'); return; }
+    edges.push({id:uid(), src:srcId, dst:dstId, relType:currentMiniRel, status:'unknown'});
+    updateAllViews();
+    clearMiniEdgeForm();
+    if (canvas && canvas.style.display !== 'none') render();
+}
+
+function deletePerson(id) {
+    persons = persons.filter(function(p) { return p.id !== id; });
+    edges   = edges.filter(function(e)   { return e.src !== id && e.dst !== id; });
+    updateAllViews();
+    if (canvas && canvas.style.display !== 'none') render();
+}
+function deleteEdge(id) {
+    edges = edges.filter(function(e) { return e.id !== id; });
+    updateAllViews();
+    if (canvas && canvas.style.display !== 'none') render();
+}
+
+/* ── Update all list views ── */
+function updateAllViews() {
+    document.getElementById('personCount').textContent = persons.length + '명';
+    document.getElementById('edgeCount').textContent   = edges.length + '개';
+    var pList = document.getElementById('personListView');
+    pList.innerHTML = persons.length ? '' : '<div style="text-align:center;padding:16px;font-size:12px;color:#9ca3af;">등록된 인물이 없습니다.</div>';
+    persons.forEach(function(p) {
+        var div = document.createElement('div');
+        div.className = 'person-item';
+        div.innerHTML =
+            '<div class="p-avatar" style="background:' + (ROLE_COLOR[p.role]||'#4a7cdc') + '">' + (p.name.charAt(0)||'?') + '</div>' +
+            '<div style="flex:1;min-width:0;"><div class="p-name">' + escHtml(p.name) + '</div><div class="p-role role-' + p.role + '">' + (ROLE_LABEL[p.role]||p.role) + '</div></div>';
+        var del = document.createElement('button');
+        del.className = 'p-del';
+        del.innerHTML = '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+        (function(pid) { del.addEventListener('click', function() { if(confirm('삭제하시겠습니까?')) deletePerson(pid); }); })(p.id);
+        div.appendChild(del);
+        pList.appendChild(div);
+    });
+    var eList = document.getElementById('edgeListView');
+    eList.innerHTML = edges.length ? '' : '<div style="text-align:center;padding:12px;font-size:12px;color:#9ca3af;">등록된 관계선이 없습니다.</div>';
+    edges.forEach(function(e) {
+        var sp = persons.find(function(p) { return p.id === e.src; });
+        var dp = persons.find(function(p) { return p.id === e.dst; });
+        if (!sp || !dp) return;
+        var div = document.createElement('div');
+        div.className = 'edge-item ' + (e.relType || '');
+        div.innerHTML = '<div class="edge-text">' + escHtml(sp.name) + ' → ' + escHtml(dp.name) + ' <span style="color:#9ca3af;font-size:10px;">(' + (REL_LABEL[e.relType]||e.relType) + ')</span></div>';
+        var del = document.createElement('button');
+        del.className = 'edge-del';
+        del.innerHTML = '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+        (function(eid) { del.addEventListener('click', function() { deleteEdge(eid); }); })(e.id);
+        div.appendChild(del);
+        eList.appendChild(div);
+    });
+    var srcSel = document.getElementById('miniEdgeSrc');
+    var dstSel = document.getElementById('miniEdgeDst');
+    var srcVal = srcSel.value, dstVal = dstSel.value;
+    srcSel.innerHTML = '<option value="">출발 인물 선택</option>';
+    dstSel.innerHTML = '<option value="">도착 인물 선택</option>';
+    persons.forEach(function(p) {
+        var o1 = document.createElement('option'); o1.value = p.id; o1.textContent = p.name; srcSel.appendChild(o1);
+        var o2 = document.createElement('option'); o2.value = p.id; o2.textContent = p.name; dstSel.appendChild(o2);
+    });
+    srcSel.value = srcVal; dstSel.value = dstVal;
+}
+
+/* ── Utilities ── */
+function uid() { return Math.random().toString(36).substr(2, 9); }
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function showToast(msg) {
+    var t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+    setTimeout(function() { t.classList.remove('show'); }, 2500);
+}
+
+/* ── Case panel AJAX ── */
+function loadCasePanel() {
+    var boot = document.getElementById('_boot');
+    var initCaseId = boot ? boot.getAttribute('data-case-id') : '';
+    var panel = document.getElementById('panel-cases');
+    fetch('/caseApi?action=caseList', {credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var cases = Array.isArray(data) ? data : [];
+            if (!cases.length) {
+                panel.innerHTML = '<div style="text-align:center;padding:36px 0;font-size:12px;color:#9ca3af;">담당 사건이 없습니다.</div>';
+                return;
+            }
+            panel.innerHTML = '';
+            cases.forEach(function(c) {
+                var cid = String(c.id || '');
+                var cname = c.name || '';
+                var cstatus = c.status || '';
+                var statusBadge = cstatus === '진행중' ? 'badge-active' : cstatus === '완료' ? 'badge-done' : cstatus === '모순탐지' ? 'badge-danger' : 'badge-warn';
+                var div = document.createElement('div');
+                div.className = 'case-item';
+                div.id = 'ci_' + cid.replace(/-/g, '_');
+                div.innerHTML =
+                    '<div class="case-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>' +
+                    '<div class="case-info"><div class="case-id-text">' + escHtml(cid) + '</div><div class="case-name">' + escHtml(cname) + '</div></div>' +
+                    '<span class="case-badge ' + statusBadge + '">' + escHtml(cstatus || '미설정') + '</span>';
+                (function(id, name) {
+                    div.addEventListener('click', function() { selectCase(id, name); });
+                })(cid, cname);
+                panel.appendChild(div);
+            });
+            if (initCaseId) {
+                var target = cases.find(function(c) { return String(c.id) === initCaseId; });
+                if (target) selectCase(String(target.id), target.name || '');
+            }
+        })
+        .catch(function() {
+            panel.innerHTML = '<div style="text-align:center;padding:36px 0;font-size:12px;color:#dc2626;">사건 목록을 불러오지 못했습니다.</div>';
+        });
+}
+
+/* ── Boot ── */
+(function() {
+    loadCasePanel();
+    window.addEventListener('resize', function() {
+        if (canvas && canvas.style.display !== 'none') {
+            var p = document.getElementById('rightPanel');
+            canvas.width = p.clientWidth; canvas.height = p.clientHeight;
+            render();
+        }
+    });
+})();
+</script>
+</body>
+</html>
