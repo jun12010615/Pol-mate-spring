@@ -261,6 +261,15 @@ var _initCaseId = /*[[${param.caseId ?: ''}]]*/ '';
   .m-help-criterion-range { font-size:10px; font-weight:400; color:var(--text-muted); margin-left:4px; }
   .m-help-criterion-desc  { font-size:11px; color:var(--text-secondary); line-height:1.5; }
   .m-help-total-note { font-size:10px; color:var(--text-muted); padding-top:7px; border-top:1px solid var(--border); margin-top:4px; }
+
+  /* ── 유사 사건 추천 ── */
+  .sim-m-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:13px 15px; margin-bottom:10px; cursor:pointer; transition:border-color 0.15s; }
+  .sim-m-card:active { border-color:var(--accent); background:var(--bg); }
+  .sim-m-id   { font-size:11px; color:var(--text-muted); margin-bottom:3px; }
+  .sim-m-name { font-size:14px; font-weight:500; color:var(--text-primary); margin-bottom:5px; }
+  .sim-m-charge { font-size:11px; color:var(--text-secondary); margin-bottom:7px; }
+  .sim-m-reason { font-size:12px; color:var(--accent); background:var(--info-bg); border-radius:8px; padding:8px 11px; line-height:1.6; }
+  .sim-m-empty  { text-align:center; padding:36px 0; color:var(--text-muted); font-size:13px; line-height:1.7; }
 </style>
 </head>
 <body>
@@ -446,6 +455,24 @@ var _initCaseId = /*[[${param.caseId ?: ''}]]*/ '';
         </div>
         <button onclick="submitEditCase()" style="width:100%;padding:14px;background:var(--navy);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:500;font-family:'Noto Sans KR',sans-serif;cursor:pointer;">저장하기</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 유사 사건 추천 드로어 -->
+<div class="overlay" id="simDrawer" onclick="closeOnBg(event,'simDrawer')">
+  <div class="drawer" style="max-height:82vh;">
+    <div class="drawer-handle"></div>
+    <div class="drawer-head">
+      <div class="drawer-title">유사 사건 추천</div>
+      <div class="drawer-sub">AI가 과거 사건을 분석합니다</div>
+    </div>
+    <div class="drawer-body">
+      <div id="simDrawerContent"><div class="sim-m-empty">불러오는 중...</div></div>
+      <button id="simRefreshBtn" onclick="loadSimilarCasesM(currentCaseId, true)"
+        style="width:100%;margin-top:8px;padding:11px;background:var(--bg);border:1px solid var(--border);border-radius:12px;font-size:13px;color:var(--text-secondary);font-family:'Noto Sans KR',sans-serif;cursor:pointer;display:none;">
+        다시 분석
+      </button>
     </div>
   </div>
 </div>
@@ -651,6 +678,7 @@ function renderDrawerActions(c){
     '<a href="writeTranscript?caseId='+encodeURIComponent(c.id)+'" class="action-btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg><span>조서 추가</span></a>' +
     '<button class="action-btn" onclick="openEditDrawer(\''+escStr(c.id)+'\',\''+escStr(c.status)+'\')" style="border:1px solid var(--border);cursor:pointer;"><svg viewBox="0 0 24 24" fill="none" stroke="var(--navy)" stroke-width="1.8" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg><span>상태 수정</span></button>' +
     '<a href="javascript:void(0)" onclick="goRelationMap()" class="action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="var(--navy)" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="5" r="2.5"/><circle cx="18" cy="19" r="2.5"/><line x1="8.4" y1="11.0" x2="15.6" y2="6.5"/><line x1="8.4" y1="13.0" x2="15.6" y2="17.5"/></svg><span>관계망</span></a>' +
+    '<button class="action-btn" onclick="openSimDrawer()" style="border:1px solid var(--border);cursor:pointer;"><svg viewBox="0 0 24 24" fill="none" stroke="var(--navy)" stroke-width="1.8" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg><span>유사 사건</span></button>' +
     '<button type="button" class="action-btn disabled" id="contraBtn" onclick="runContradiction()" style="border:1px solid var(--border);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span>모순탐지</span></button>' +
     del +
     '<button class="action-btn" onclick="closeDrawer(\'caseDrawer\')" style="border:none;cursor:pointer;"><svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.8" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>닫기</span></button>';
@@ -1066,6 +1094,74 @@ function closeDrawer(id){document.getElementById(id).classList.remove('open');do
 function closeOnBg(e,id){if(e.target===document.getElementById(id))closeDrawer(id);}
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function escStr(s){return String(s||'').replace(/'/g,"\\'");}
+
+function openSimDrawer() {
+  var el = document.getElementById('simDrawerContent');
+  el.innerHTML = '<div class="sim-m-empty">불러오는 중...</div>';
+  document.getElementById('simRefreshBtn').style.display = 'none';
+  document.getElementById('simDrawer').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  loadSimilarCasesM(currentCaseId, false);
+}
+
+function loadSimilarCasesM(caseId, forceRefresh) {
+  if (!caseId) return;
+  var el = document.getElementById('simDrawerContent');
+  var refreshBtn = document.getElementById('simRefreshBtn');
+  var loadMsg = forceRefresh
+    ? 'AI가 유사 사건을 재분석하는 중...<br><small style="font-size:11px;">약 20~40초 소요됩니다</small>'
+    : '불러오는 중...';
+  el.innerHTML = '<div class="sim-m-empty">' + loadMsg + '</div>';
+  refreshBtn.style.display = 'none';
+  var url = '/caseApi?action=similarCases&caseId=' + encodeURIComponent(caseId)
+    + (forceRefresh ? '&forceRefresh=true' : '');
+  fetch(url, {credentials: 'same-origin'})
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.success) {
+        el.innerHTML = '<div class="sim-m-empty">' + escHtml(d.message || '분석에 실패했습니다.') + '</div>';
+        refreshBtn.style.display = '';
+        return;
+      }
+      var list = d.similar || [];
+      var metaHtml = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">'
+        + (d.cached
+          ? '<span style="font-size:10px;background:var(--success-bg);color:var(--success);padding:2px 8px;border-radius:10px;">캐시됨</span>'
+          : '<span style="font-size:10px;background:var(--info-bg);color:var(--info-text);padding:2px 8px;border-radius:10px;">새 분석</span>')
+        + '<span style="font-size:10px;color:var(--text-muted);">' + escHtml(mFormatAnalyzedAt(d.analyzedAt)) + '</span>'
+        + '</div>';
+      if (list.length === 0) {
+        el.innerHTML = metaHtml + '<div class="sim-m-empty" style="padding:20px 0;">유사한 사건을 찾지 못했습니다.</div>';
+        refreshBtn.style.display = '';
+        return;
+      }
+      var html = list.map(function(c) {
+        return '<div class="sim-m-card" onclick="closeDrawer(\'simDrawer\');openCase(\'' + escStr(c.caseId||'') + '\')">'
+          + '<div class="sim-m-id">' + escHtml(c.caseId||'') + '</div>'
+          + '<div class="sim-m-name">' + escHtml(c.caseName||'') + '</div>'
+          + (c.charge ? '<div class="sim-m-charge">혐의: ' + escHtml(c.charge) + '</div>' : '')
+          + '<div class="sim-m-reason">' + escHtml(c.reason||'') + '</div>'
+          + '</div>';
+      }).join('');
+      el.innerHTML = metaHtml + html;
+      refreshBtn.style.display = '';
+    })
+    .catch(function() {
+      el.innerHTML = '<div class="sim-m-empty">오류가 발생했습니다.</div>';
+      refreshBtn.style.display = '';
+    });
+}
+
+function mFormatAnalyzedAt(s) {
+  if (!s) return '';
+  try {
+    var d = new Date(s.replace('T',' ').replace(/-/g,'/'));
+    var p = function(n){return n<10?'0'+n:n;};
+    return d.getFullYear()+'.'+(p(d.getMonth()+1))+'.'+p(d.getDate())
+      +' '+p(d.getHours())+':'+p(d.getMinutes())+' 분석됨';
+  } catch(e) { return ''; }
+}
+
 function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)';setTimeout(function(){t.style.opacity='0';t.style.transform='translateX(-50%) translateY(20px)';},2200);}
 
 /* ── 신뢰도 분석 ────────────────────────────────────────────────── */

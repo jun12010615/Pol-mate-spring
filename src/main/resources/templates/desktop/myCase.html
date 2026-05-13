@@ -253,6 +253,31 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
     font-size: 10px; color: #9ca3af; padding-top: 8px;
     border-top: 1px solid #f0f2f8; margin-top: 4px;
 }
+
+/* === 유사 사건 추천 === */
+.sim-card {
+    border: 1px solid #e2e5ee; border-radius: 12px; padding: 14px 16px;
+    margin-bottom: 10px; cursor: pointer; transition: border-color 0.13s, background 0.13s;
+}
+.sim-card:hover { border-color: #0d1a33; background: #f4f6fb; }
+.sim-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.sim-card-id { font-size: 11px; color: #9ca3af; font-family: 'Space Grotesk', sans-serif; }
+.sim-card-name { font-size: 13px; font-weight: 500; color: #1a1a2e; flex: 1; }
+.sim-card-charge { font-size: 11px; color: #6b7280; margin-bottom: 6px; }
+.sim-reason {
+    font-size: 11px; color: #4a7cdc; background: #eff6ff;
+    border-radius: 7px; padding: 6px 10px; line-height: 1.55;
+}
+.sim-empty { font-size: 13px; color: #9ca3af; text-align: center; padding: 32px 0; }
+.sim-loading { font-size: 13px; color: #9ca3af; text-align: center; padding: 32px 0; line-height: 1.7; }
+.btn-sim-refresh {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    margin-top: 4px; padding: 9px 14px; background: transparent;
+    border: 1px solid #e2e5ee; border-radius: 10px;
+    font-size: 12px; font-family: 'Noto Sans KR', sans-serif; color: #6b7280;
+    cursor: pointer; transition: all 0.13s; justify-content: center;
+}
+.btn-sim-refresh:hover { border-color: #0d1a33; color: #0d1a33; }
 </style>
 </head>
 <body>
@@ -318,6 +343,7 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
         <div class="detail-tabs">
             <button class="dtab active" onclick="switchTab('info')">기본 정보</button>
             <button class="dtab" onclick="switchTab('docs')">조서 목록</button>
+            <button class="dtab" onclick="switchTab('similar')">유사 사건</button>
         </div>
         <div class="tab-pane active" id="tabInfo">
             <div class="info-grid" id="dpInfoGrid"></div>
@@ -339,6 +365,9 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
                     조서 작성
                 </a>
             </div>
+        </div>
+        <div class="tab-pane" id="tabSimilar">
+            <div id="simContent"><div class="sim-empty">사건을 열면 유사 사건을 분석합니다.</div></div>
         </div>
     </div>
     <div class="detail-footer">
@@ -544,7 +573,7 @@ function openDetail(caseId) {
             }
             document.getElementById('btnNewDoc').href = '/desktop/writeTranscript?caseId=' + encodeURIComponent(caseId);
         })
-        .catch(function() { showToast('사건 상세를 벊려엁 수 없습니다.'); });
+        .catch(function() { showToast('사건 상세를 불러올 수 없습니다.'); });
 }
 
 function closeDetail() {
@@ -556,10 +585,87 @@ function closeDetail() {
 
 function switchTab(name) {
     document.querySelectorAll('.dtab').forEach(function(t, i) {
-        t.classList.toggle('active', (i === 0 && name === 'info') || (i === 1 && name === 'docs'));
+        t.classList.toggle('active',
+            (i === 0 && name === 'info') ||
+            (i === 1 && name === 'docs') ||
+            (i === 2 && name === 'similar'));
     });
     document.getElementById('tabInfo').classList.toggle('active', name === 'info');
     document.getElementById('tabDocs').classList.toggle('active', name === 'docs');
+    document.getElementById('tabSimilar').classList.toggle('active', name === 'similar');
+    if (name === 'similar' && _currentCaseId) {
+        var el = document.getElementById('simContent');
+        var notLoaded = el && (el.querySelector('.sim-empty') || el.querySelector('.sim-loading'));
+        var isPlaceholder = el && el.querySelector('.sim-empty') &&
+            el.querySelector('.sim-empty').textContent.indexOf('사건을 열면') !== -1;
+        if (isPlaceholder) {
+            loadSimilarCases(_currentCaseId, false);
+        }
+    }
+}
+
+function loadSimilarCases(caseId, forceRefresh) {
+    var el = document.getElementById('simContent');
+    var loading = forceRefresh
+        ? 'AI가 유사 사건을 재분석하는 중...<br><small>약 20~40초 소요됩니다</small>'
+        : '불러오는 중...';
+    el.innerHTML = '<div class="sim-loading">' + loading + '</div>';
+    var url = '/caseApi?action=similarCases&caseId=' + encodeURIComponent(caseId)
+        + (forceRefresh ? '&forceRefresh=true' : '');
+    fetch(url, {credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (!d.success) {
+                el.innerHTML = '<div class="sim-empty">' + escHtml(d.message || '분석에 실패했습니다.') + '</div>'
+                    + simRefreshBtn(caseId); return;
+            }
+            var list = d.similar || [];
+            var metaHtml = '<div style="font-size:10px;color:#9ca3af;margin-bottom:12px;display:flex;align-items:center;gap:6px;">'
+                + (d.cached
+                    ? '<span style="background:#f0fdf4;color:#15803d;padding:2px 7px;border-radius:10px;">캐시됨</span>'
+                    : '<span style="background:#eff6ff;color:#1e40af;padding:2px 7px;border-radius:10px;">새 분석</span>')
+                + '<span>' + formatAnalyzedAt(d.analyzedAt) + '</span>'
+                + '</div>';
+            if (list.length === 0) {
+                el.innerHTML = metaHtml + '<div class="sim-empty">유사한 사건이 없습니다.</div>'
+                    + simRefreshBtn(caseId); return;
+            }
+            var html = list.map(function(c) {
+                var safeId = (c.caseId||'').replace(/'/g, "\\'");
+                return '<div class="sim-card" onclick="closeDetail();openDetail(\'' + safeId + '\')">'
+                    + '<div class="sim-card-header">'
+                    + '<span class="sim-card-id">' + escHtml(c.caseId||'') + '</span>'
+                    + '<span class="sim-card-name">' + escHtml(c.caseName||'') + '</span>'
+                    + '</div>'
+                    + (c.charge ? '<div class="sim-card-charge">혐의: ' + escHtml(c.charge) + '</div>' : '')
+                    + '<div class="sim-reason">' + escHtml(c.reason||'') + '</div>'
+                    + '</div>';
+            }).join('');
+            el.innerHTML = metaHtml + html + simRefreshBtn(caseId);
+        })
+        .catch(function() {
+            el.innerHTML = '<div class="sim-empty">오류가 발생했습니다.</div>' + simRefreshBtn(caseId);
+        });
+}
+
+function simRefreshBtn(caseId) {
+    return '<button class="btn-sim-refresh" onclick="loadSimilarCases(\'' + caseId + '\', true)">'
+        + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
+        + '다시 분석</button>';
+}
+
+function formatAnalyzedAt(s) {
+    if (!s) return '';
+    try {
+        var d = new Date(s.replace('T',' ').replace(/-/g,'/'));
+        var pad = function(n){return n<10?'0'+n:n;};
+        return d.getFullYear()+'.'+(pad(d.getMonth()+1))+'.'+pad(d.getDate())
+            +' '+pad(d.getHours())+':'+pad(d.getMinutes())+' 분석됨';
+    } catch(e) { return ''; }
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function saveStatus() {

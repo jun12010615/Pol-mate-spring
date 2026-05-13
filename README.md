@@ -3,7 +3,7 @@
 대한민국 경찰청 형사 수사관을 위한 AI 기반 수사 보조 플랫폼입니다.
 진술 모순 탐지, 사건 관계망 시각화, CCTV 번호판 분석, AI 수사 챗봇 기능을 제공합니다.
 
-> 기존 JSP+Servlet 프로젝트를 **Spring Boot 3.3.5 + JPA + Thymeleaf** 구조로 전면 전환 완료.
+**Spring Boot 3.3.5 + JPA + Thymeleaf** 기반 웹 애플리케이션. 데스크탑/모바일 UI 분리 제공.
 
 ---
 
@@ -332,7 +332,7 @@ Pol-mate-spring/
 │       │   │   ├── BoardPostRepository.java
 │       │   │   ├── BoardCommentRepository.java
 │       │   │   ├── NotificationRepository.java
-│       │   │   └── ... (17개 총)
+│       │   │   └── ... 외 11개
 │       │   └── entity/                            ← JPA Entity (DB 테이블 1:1 매핑, 17개)
 │       │       ├── User.java                      → users
 │       │       ├── Case.java                      → cases
@@ -343,7 +343,7 @@ Pol-mate-spring/
 │       │       ├── Notification.java              → notifications
 │       │       ├── ContradictionResult.java       → contradiction_results
 │       │       ├── RelationBoard.java             → relation_boards
-│       │       └── ... (17개 총)
+│       │       └── ... 외 8개
 │       └── resources/
 │           ├── application.properties             ← DB, JPA, 인코딩, 외부서비스 설정
 │           └── templates/                         ← Thymeleaf HTML (모든 뷰)

@@ -1,15 +1,26 @@
 package com.polmate.service;
 
 import com.polmate.entity.Case;
+import com.polmate.entity.CaseSimilarCache;
 import com.polmate.entity.Notification;
 import com.polmate.repository.CaseRepository;
+import com.polmate.repository.CaseSimilarCacheRepository;
 import com.polmate.repository.NotificationRepository;
 import com.polmate.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -20,7 +31,11 @@ public class CaseService {
     private final CaseRepository caseRepo;
     private final UserRepository userRepo;
     private final NotificationRepository notifRepo;
+    private final CaseSimilarCacheRepository simCacheRepo;
     private final JdbcTemplate jdbc;
+
+    @Value("${polmate.serv.base-url}")
+    private String servBaseUrl;
 
     // ── 목록 (동적 필터) ───────────────────────────────────────────
     public List<Map<String, Object>> list(String userId, String status, String keyword) {
@@ -154,6 +169,7 @@ public class CaseService {
         if (opt.isEmpty() || !userId.equals(opt.get().getUserId())) {
             result.put("success", false); result.put("message", "삭제 권한이 없습니다. (등록자만 삭제 가능)"); return result;
         }
+        simCacheRepo.deleteById(caseId);
         caseRepo.deleteById(caseId);
         result.put("success", true); result.put("message", "사건이 삭제됐습니다.");
         return result;
@@ -192,4 +208,170 @@ public class CaseService {
     public boolean hasAccess(String caseId, String userId) {
         return caseRepo.checkAccess(caseId, userId).isPresent();
     }
+
+    // ── 유사 사건 추천 ────────────────────────────────────────────
+    @Transactional
+    public Map<String, Object> similarCases(String caseId, String userId, boolean forceRefresh) {
+        Map<String, Object> result = new HashMap<>();
+
+        // 캐시 우선 반환 (forceRefresh=false인 경우)
+        if (!forceRefresh) {
+            Optional<CaseSimilarCache> cached = simCacheRepo.findById(caseId);
+            if (cached.isPresent()) {
+                return parseCacheToResult(cached.get());
+            }
+        }
+
+        // 사건 접근 권한 확인
+        Optional<Map<String, Object>> curOpt = detail(caseId, userId);
+        if (curOpt.isEmpty()) {
+            result.put("success", false); result.put("message", "사건 정보를 찾을 수 없습니다."); return result;
+        }
+        Map<String, Object> cur = curOpt.get();
+
+        String summary = "";
+        List<Map<String, Object>> trRows = jdbc.queryForList(
+            "SELECT ai_result, original_text FROM transcripts WHERE case_id=? ORDER BY created_at DESC LIMIT 1", caseId);
+        if (!trRows.isEmpty()) {
+            Object ai = trRows.get(0).get("ai_result");
+            Object orig = trRows.get(0).get("original_text");
+            String aiStr = ai != null ? ai.toString().trim() : "";
+            String origStr = orig != null ? orig.toString().trim() : "";
+            summary = !aiStr.isEmpty() ? aiStr.substring(0, Math.min(aiStr.length(), 300))
+                                       : origStr.substring(0, Math.min(origStr.length(), 300));
+        }
+
+        List<Map<String, Object>> candRows = jdbc.queryForList(
+            "SELECT c.case_id, c.case_name, c.charge, " +
+            "(SELECT t2.ai_result FROM transcripts t2 WHERE t2.case_id=c.case_id ORDER BY t2.created_at DESC LIMIT 1) AS ai_result, " +
+            "(SELECT t3.original_text FROM transcripts t3 WHERE t3.case_id=c.case_id ORDER BY t3.created_at DESC LIMIT 1) AS orig_text " +
+            "FROM cases c WHERE c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?) " +
+            "AND c.case_id != ? ORDER BY c.created_at DESC LIMIT 20",
+            userId, caseId);
+
+        JSONObject current = new JSONObject();
+        current.put("caseId",   nvl(cur.get("case_id")));
+        current.put("caseName", nvl(cur.get("case_name")));
+        current.put("charge",   nvl(cur.get("charge")));
+        current.put("summary",  summary);
+
+        JSONArray candidates = new JSONArray();
+        for (Map<String, Object> r : candRows) {
+            String ai2   = r.get("ai_result") != null ? r.get("ai_result").toString().trim() : "";
+            String orig2 = r.get("orig_text")  != null ? r.get("orig_text").toString().trim()  : "";
+            String sum2  = !ai2.isEmpty() ? ai2.substring(0, Math.min(ai2.length(), 200))
+                                          : orig2.substring(0, Math.min(orig2.length(), 200));
+            JSONObject c = new JSONObject();
+            c.put("caseId",   nvl(r.get("case_id")));
+            c.put("caseName", nvl(r.get("case_name")));
+            c.put("charge",   nvl(r.get("charge")));
+            c.put("summary",  sum2);
+            candidates.put(c);
+        }
+
+        if (candidates.isEmpty()) {
+            LocalDateTime now = LocalDateTime.now();
+            simCacheRepo.save(CaseSimilarCache.builder()
+                .caseId(caseId).resultJson("[]").analyzedAt(now).build());
+            result.put("success",    true);
+            result.put("similar",    Collections.emptyList());
+            result.put("cached",     false);
+            result.put("analyzedAt", now.toString());
+            return result;
+        }
+
+        JSONObject body = new JSONObject();
+        body.put("current",    current);
+        body.put("candidates", candidates);
+
+        String raw = callFlask("/similar_cases", body);
+        if (raw == null) {
+            result.put("success", false); result.put("message", "AI 서버 연결 실패"); return result;
+        }
+
+        try {
+            JSONObject parsed = new JSONObject(raw);
+            JSONArray sim = parsed.optJSONArray("similar");
+            List<Map<String, Object>> simList = new ArrayList<>();
+            if (sim != null) {
+                for (int i = 0; i < sim.length(); i++) {
+                    JSONObject item = sim.getJSONObject(i);
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("caseId",   item.optString("caseId",   ""));
+                    m.put("caseName", item.optString("caseName", ""));
+                    m.put("charge",   item.optString("charge",   ""));
+                    m.put("reason",   item.optString("reason",   ""));
+                    simList.add(m);
+                }
+            }
+
+            // 결과를 DB에 저장
+            LocalDateTime now = LocalDateTime.now();
+            String jsonToStore = sim != null ? sim.toString() : "[]";
+            simCacheRepo.save(CaseSimilarCache.builder()
+                .caseId(caseId).resultJson(jsonToStore).analyzedAt(now).build());
+
+            result.put("success",    true);
+            result.put("similar",    simList);
+            result.put("cached",     false);
+            result.put("analyzedAt", now.toString());
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "응답 파싱 실패: " + e.getMessage());
+        }
+        return result;
+    }
+
+    private Map<String, Object> parseCacheToResult(CaseSimilarCache cache) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            JSONArray sim = new JSONArray(cache.getResultJson());
+            List<Map<String, Object>> simList = new ArrayList<>();
+            for (int i = 0; i < sim.length(); i++) {
+                JSONObject item = sim.getJSONObject(i);
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("caseId",   item.optString("caseId",   ""));
+                m.put("caseName", item.optString("caseName", ""));
+                m.put("charge",   item.optString("charge",   ""));
+                m.put("reason",   item.optString("reason",   ""));
+                simList.add(m);
+            }
+            result.put("success",    true);
+            result.put("similar",    simList);
+            result.put("cached",     true);
+            result.put("analyzedAt", cache.getAnalyzedAt() != null ? cache.getAnalyzedAt().toString() : "");
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "캐시 파싱 실패");
+        }
+        return result;
+    }
+
+    private String callFlask(String path, JSONObject body) {
+        try {
+            URL url = new URL(servBaseUrl + path);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(120000);
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            if (conn.getResponseCode() != 200) return null;
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                return sb.toString();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private String nvl(Object o) { return o != null ? o.toString() : ""; }
 }

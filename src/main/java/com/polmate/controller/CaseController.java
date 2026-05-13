@@ -32,6 +32,7 @@ public class CaseController {
                       @RequestParam(required = false) String status,
                       @RequestParam(required = false) String keyword,
                       @RequestParam(required = false) String transcriptId,
+                      @RequestParam(defaultValue = "false") boolean forceRefresh,
                       HttpServletResponse res, HttpSession session) throws IOException {
         res.setContentType("application/json;charset=UTF-8");
         String loginUser = getLoginUser(session, res);
@@ -45,6 +46,7 @@ public class CaseController {
             case "myDept":         handleMyDept(res, loginUser);                 break;
             case "transcriptText": handleTranscriptText(res, loginUser, transcriptId); break;
             case "getScore":       handleGetScore(res, loginUser, transcriptId);       break;
+            case "similarCases":   handleSimilarCases(res, loginUser, caseId, forceRefresh); break;
             default: res.getWriter().write("{\"error\":\"알 수 없는 action\"}");
         }
     }
@@ -298,6 +300,12 @@ public class CaseController {
         } catch (Exception e) {
             e.printStackTrace(); res.getWriter().write("{\"error\":\"신뢰도 분석 중 오류가 발생했습니다.\"}");
         }
+    }
+
+    private void handleSimilarCases(HttpServletResponse res, String loginUser,
+                                    String caseId, boolean forceRefresh) throws IOException {
+        if (isEmpty(caseId)) { res.getWriter().write("{\"error\":\"caseId가 필요합니다.\"}"); return; }
+        writeMap(res, caseService.similarCases(caseId, loginUser, forceRefresh));
     }
 
     private void writeMap(HttpServletResponse res, Map<String, Object> map) throws IOException {

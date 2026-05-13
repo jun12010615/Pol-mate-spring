@@ -1403,6 +1403,74 @@ def relation_map():
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# [섹션 6-A] Flask 라우트 — 유사 사건 추천
+# ════════════════════════════════════════════════════════════════════════════
+
+@app.route("/similar_cases", methods=["POST", "OPTIONS"])
+def similar_cases():
+    if request.method == "OPTIONS":
+        return "", 204
+
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "요청 데이터가 없습니다."}), 400
+
+    current    = data.get("current") or {}
+    candidates = data.get("candidates") or []
+
+    case_name = (current.get("caseName") or "").strip()
+    charge    = (current.get("charge")   or "").strip()
+    summary   = (current.get("summary")  or "").strip()
+
+    if not candidates:
+        return jsonify({"success": True, "similar": []})
+
+    cand_lines = []
+    for i, c in enumerate(candidates[:20], 1):
+        cid   = c.get("caseId",   "")
+        cname = c.get("caseName", "")
+        cchg  = c.get("charge",   "")
+        csum  = (c.get("summary") or "")[:200]
+        cand_lines.append(
+            f"{i}. [사건ID:{cid}] 사건명:{cname} / 혐의:{cchg} / 요약:{csum}"
+        )
+
+    cand_block = "\n".join(cand_lines)
+
+    prompt = f"""당신은 형사사건 수사 AI 어시스턴트입니다. {NO_MARKDOWN}
+
+[현재 사건]
+사건명: {case_name}
+혐의: {charge}
+요약: {summary}
+
+[비교 대상 사건 목록]
+{cand_block}
+
+위 비교 대상 목록에서 현재 사건과 가장 유사한 사건 최대 3건을 선택하고, 반드시 아래 JSON 형식으로만 답하세요.
+유사도가 낮아 추천할 사건이 없으면 similar 배열을 비워 주세요.
+
+출력 형식 (JSON만, 설명 없이):
+{{"similar": [{{"caseId": "사건ID", "caseName": "사건명", "charge": "혐의", "reason": "유사한 이유 1~2문장"}}]}}"""
+
+    try:
+        raw = call_ollama(prompt, expect_json=True)
+    except Exception as ex:
+        return jsonify({"success": False, "error": f"모델 호출 실패: {ex}"}), 502
+
+    if not raw:
+        return jsonify({"success": True, "similar": []})
+
+    try:
+        parsed = json.loads(raw) if isinstance(raw, str) else raw
+        similar = parsed.get("similar", []) if isinstance(parsed, dict) else []
+    except Exception:
+        similar = []
+
+    return jsonify({"success": True, "similar": similar, "model": MODEL})
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # [섹션 6] Flask 라우트 — CCTV 번호판 분석
 # ════════════════════════════════════════════════════════════════════════════
 
