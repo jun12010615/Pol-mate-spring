@@ -79,6 +79,20 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
 @media (max-width:1000px) { .content-grid { grid-template-columns:1fr; } }
+
+.hist-section { margin-top: 20px; }
+.hist-item { display:flex; align-items:center; gap:14px; padding:13px 0; border-bottom:1px solid #f0f2f8; cursor:pointer; }
+.hist-item:last-child { border-bottom:none; }
+.hist-item:hover .hist-title { color:#4a7cdc; }
+.hist-dot { width:7px; height:7px; border-radius:50%; background:#4a7cdc; flex-shrink:0; margin-top:2px; }
+.hist-main { flex:1; min-width:0; }
+.hist-title { font-size:13px; font-weight:500; color:#1a1a2e; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:color 0.12s; }
+.hist-meta  { font-size:11px; color:#9ca3af; }
+.hist-badge { font-size:10px; padding:3px 10px; border-radius:20px; white-space:nowrap; flex-shrink:0; }
+.hist-badge-ok   { background:#f0fdf4; color:#15803d; }
+.hist-badge-warn { background:#fffbeb; color:#92400e; }
+.hist-badge-done { background:#eff6ff; color:#1e40af; }
+.hist-empty { font-size:13px; color:#9ca3af; text-align:center; padding:24px 0; }
 </style>
 </head>
 <body>
@@ -219,6 +233,16 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 
     </div>
 
+    <div class="section-card hist-section" id="histSection" style="display:none;">
+        <div class="section-head">
+            <span class="section-title">최근 활동 이력</span>
+            <span id="histCount" style="font-size:11px;color:#9ca3af;"></span>
+        </div>
+        <div class="section-body" id="histList">
+            <div class="hist-empty">불러오는 중...</div>
+        </div>
+    </div>
+
 </main>
 </div>
 </div>
@@ -280,7 +304,49 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
             if (document.getElementById('statTranscript')) document.getElementById('statTranscript').textContent = s.totalTranscripts   != null ? s.totalTranscripts   : '-';
             if (document.getElementById('statBoard'))      document.getElementById('statBoard').textContent      = '-';
         }).catch(function() {});
+    loadHistory();
 })();
+
+function escHtml(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function loadHistory() {
+    fetch('/mypage?action=history', {credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var list = data.history || [];
+            var sec  = document.getElementById('histSection');
+            var cont = document.getElementById('histList');
+            var cnt  = document.getElementById('histCount');
+            if (sec)  sec.style.display = '';
+            if (cnt)  cnt.textContent = list.length + '건';
+            if (!cont) return;
+            if (!list.length) {
+                cont.innerHTML = '<div class="hist-empty">조서 이력이 없습니다.</div>';
+                return;
+            }
+            var BADGE = {'진행중':'hist-badge-ok','검토필요':'hist-badge-warn','모순탐지':'hist-badge-warn','완료':'hist-badge-done'};
+            cont.innerHTML = list.map(function(t) {
+                var date  = t.createdAt
+                    ? new Date(t.createdAt).toLocaleDateString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Seoul'}).replace(/\. /g,'.').replace(/\.$/,'')
+                    : '';
+                var badge = BADGE[t.caseStatus] || 'hist-badge-done';
+                var caseIdEsc = (t.caseId || '').replace(/'/g,"\\'");
+                return '<div class="hist-item" onclick="location.href=\'/desktop/myCase?caseId=' + caseIdEsc + '\'">' +
+                    '<div class="hist-dot"></div>' +
+                    '<div class="hist-main">' +
+                        '<div class="hist-title">' + escHtml(t.caseId) + ' ' + escHtml(t.caseName || '') + '</div>' +
+                        '<div class="hist-meta">' + date + (t.stmtName ? ' · ' + escHtml(t.stmtType || '') + ' ' + escHtml(t.stmtName) + ' 진술' : '') + '</div>' +
+                    '</div>' +
+                    '<span class="hist-badge ' + badge + '">' + escHtml(t.caseStatus || '') + '</span>' +
+                '</div>';
+            }).join('');
+        }).catch(function() {
+            var cont = document.getElementById('histList');
+            if (cont) cont.innerHTML = '<div class="hist-empty">불러오기에 실패했습니다.</div>';
+        });
+}
 
 function openPwModal()  { document.getElementById('pwModal').classList.add('open'); }
 function closePwModal() { document.getElementById('pwModal').classList.remove('open'); ['curPw','newPw','newPwCf'].forEach(function(id){document.getElementById(id).value='';}); }
