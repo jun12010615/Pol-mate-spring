@@ -168,11 +168,10 @@ public class TimelineService {
 
         for (TimelineEvent e : rows) {
             if (!hasTimeSignal(e) || e.getTimeStart() == null) continue;
-            String laneKey = nvl(e.getLaneKey(), "미상");
-            String personName = nvl(e.getStmtName(), laneKey);
-            String roleKey = resolvePersonRoleKey(personName, laneKey, e.getStmtType(), personRoles);
-            laneMap.compute(laneKey, (k, lane) -> {
-                if (lane == null) return newLane(laneKey, personName, roleKey);
+            String personName = nvl(e.getStmtName(), "미상");
+            String roleKey = resolvePersonRoleKey(personName, e.getStmtType(), personRoles);
+            laneMap.compute(personName, (k, lane) -> {
+                if (lane == null) return newLane(personName, roleKey);
                 upgradeLaneRole(lane, roleKey);
                 return lane;
             });
@@ -193,8 +192,8 @@ public class TimelineService {
                 max = max == null || end.isAfter(max) ? end : max;
             }
 
-            String laneId = (String) laneMap.get(laneKey).get("id");
-            String dedupeKey = laneKey + "|" + formatTime(start) + "|" + formatTime(end)
+            String laneId = (String) laneMap.get(personName).get("id");
+            String dedupeKey = personName + "|" + formatTime(start) + "|" + formatTime(end)
                 + "|" + nvl(e.getLabel(), "") + "|" + e.getEventId();
             if (!seenEventKeys.add(dedupeKey)) continue;
 
@@ -333,12 +332,11 @@ public class TimelineService {
         return anchorBySort.values().stream().min(LocalDateTime::compareTo).orElse(null);
     }
 
-    private Map<String, Object> newLane(String laneKey, String stmtName, String roleKey) {
-        String id = "lane_" + Integer.toHexString(laneKey.hashCode());
+    private Map<String, Object> newLane(String personName, String roleKey) {
+        String id = "lane_" + Integer.toHexString(personName.hashCode());
         Map<String, Object> lane = new LinkedHashMap<>();
         lane.put("id", id);
-        lane.put("laneKey", laneKey);
-        lane.put("name", nvl(stmtName, laneKey));
+        lane.put("name", personName);
         lane.put("roleKey", roleKey);
         lane.put("role", roleKeyToLabel(roleKey));
         lane.put("color", ROLE_COLORS.getOrDefault(roleKey, DEFAULT_LANE_COLOR));
@@ -366,12 +364,11 @@ public class TimelineService {
             }
         }
         for (TimelineEvent e : rows) {
-            String name = nvl(e.getStmtName(), e.getLaneKey());
+            String name = nvl(e.getStmtName(), "");
             if (name.isBlank()) continue;
             String rk = resolveRoleKey(e.getStmtType());
             if (!"statement".equals(rk)) {
                 mergePersonRole(map, normPersonName(name), rk);
-                mergePersonRole(map, normPersonName(e.getLaneKey()), rk);
             }
         }
         return map;
@@ -385,12 +382,12 @@ public class TimelineService {
         }
     }
 
-    private static String resolvePersonRoleKey(String personName, String laneKey,
-                                               String stmtType, Map<String, String> personRoles) {
+    private static String resolvePersonRoleKey(String personName, String stmtType,
+                                               Map<String, String> personRoles) {
         String fromStmt = resolveRoleKey(stmtType);
         if (!"statement".equals(fromStmt)) return fromStmt;
-        for (String key : List.of(normPersonName(personName), normPersonName(laneKey))) {
-            if (key.isBlank()) continue;
+        String key = normPersonName(personName);
+        if (!key.isBlank()) {
             String mapped = personRoles.get(key);
             if (mapped != null) return mapped;
         }
@@ -445,10 +442,10 @@ public class TimelineService {
         int gapSeq = 0;
 
         Map<String, List<TimelineEvent>> byLane = rows.stream()
-            .collect(Collectors.groupingBy(e -> nvl(e.getLaneKey(), "미상")));
+            .collect(Collectors.groupingBy(e -> nvl(e.getStmtName(), "미상")));
 
         for (Map.Entry<String, List<TimelineEvent>> entry : byLane.entrySet()) {
-            String laneKey = entry.getKey();
+            String personName = entry.getKey();
             List<TimelineEvent> alibis = entry.getValue().stream()
                 .filter(e -> "alibi".equalsIgnoreCase(e.getEventType()))
                 .filter(e -> e.getTimeStart() != null)
@@ -468,7 +465,7 @@ public class TimelineService {
             }
             if (!covered) {
                 @SuppressWarnings("unchecked")
-                String laneId = (String) laneMap.get(laneKey).get("id");
+                String laneId = (String) laneMap.get(personName).get("id");
                 Map<String, Object> gap = new LinkedHashMap<>();
                 gap.put("id", "gap_" + (++gapSeq));
                 gap.put("laneId", laneId);
@@ -745,7 +742,7 @@ public class TimelineService {
             return 0;
         }
         String caseId = tr.getCaseId();
-        String laneKey = nvl(tr.getStmtName(), "미상");
+        String defaultActor = nvl(tr.getStmtName(), "미상");
         Map<String, String> personRoles = buildPersonRoleMap(
             caseId, caseRepo.findById(caseId), List.of());
         int order = 0;
@@ -759,6 +756,7 @@ public class TimelineService {
             String quote = pickEventQuote(ev);
             if (quote == null || quote.isBlank()) continue;
 
+            String actorName = resolveEventActorName(ev, defaultActor);
             String eventType = nvl(ev.optString("event_type", ev.optString("eventType", "")), "unknown");
             Integer anchorSort = optInteger(ev, "anchor_sort_order", "anchorSortOrder");
             Integer anchorIdx = optInteger(ev, "anchor_index", "anchorIndex");
@@ -771,11 +769,9 @@ public class TimelineService {
             TimelineEvent row = TimelineEvent.builder()
                 .caseId(caseId)
                 .transcriptId(transcriptId)
-                .laneKey(nvl(ev.optString("lane_key", ev.optString("laneKey", "")), laneKey))
-                .stmtName(nvl(ev.optString("stmt_name", ev.optString("stmtName", "")), tr.getStmtName()))
+                .stmtName(actorName)
                 .stmtType(roleKeyToLabel(resolvePersonRoleKeyForExtract(
-                    nvl(ev.optString("lane_key", ev.optString("laneKey", "")), laneKey),
-                    nvl(ev.optString("stmt_name", ev.optString("stmtName", "")), tr.getStmtName()),
+                    actorName,
                     nvl(ev.optString("stmt_type", ev.optString("stmtType", "")), tr.getStmtType()), tr, personRoles)))
                 .eventType(eventType)
                 .timeStart(parseDateTime(ev.optString("time_start", ev.optString("timeStart", null))))
@@ -862,15 +858,25 @@ public class TimelineService {
         return (s == null || s.isBlank()) ? def : s.trim();
     }
 
-    private String resolvePersonRoleKeyForExtract(String laneKey, String stmtName,
-                                                  String aiStmtType, Transcript tr,
+    private static String resolveEventActorName(JSONObject ev, String defaultActor) {
+        String name = nvl(ev.optString("stmt_name", ev.optString("stmtName", "")), "").trim();
+        if (name.isEmpty()) {
+            name = nvl(ev.optString("lane_key", ev.optString("laneKey", "")), "").trim();
+        }
+        if (name.isEmpty()) {
+            name = defaultActor;
+        }
+        return name;
+    }
+
+    private String resolvePersonRoleKeyForExtract(String actorName, String aiStmtType, Transcript tr,
                                                   Map<String, String> personRoles) {
         String fromAi = resolveRoleKey(aiStmtType);
         if (!"statement".equals(fromAi)) return fromAi;
-        String rk = resolvePersonRoleKey(stmtName, laneKey, aiStmtType, personRoles);
+        String rk = resolvePersonRoleKey(actorName, aiStmtType, personRoles);
         if (!"statement".equals(rk)) return rk;
         String trName = normPersonName(tr.getStmtName());
-        String person = normPersonName(nvl(stmtName, laneKey));
+        String person = normPersonName(actorName);
         if (!person.isBlank() && person.equals(trName)) {
             String trRole = resolveRoleKey(tr.getStmtType());
             if (!"statement".equals(trRole)) return trRole;

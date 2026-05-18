@@ -25,10 +25,7 @@ public class TimelineEvent {
     @Column(name = "transcript_id")
     private Integer transcriptId;
 
-    @Column(name = "lane_key", nullable = false, length = 100)
-    private String laneKey;
-
-    @Column(name = "stmt_name", length = 100)
+    @Column(name = "stmt_name", nullable = false, length = 100)
     private String stmtName;
 
     @Column(name = "stmt_type", length = 50)

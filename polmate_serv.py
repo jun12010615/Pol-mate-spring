@@ -448,42 +448,231 @@ def _filter_timeline_time_only(events: list) -> list:
 
 
 def _timeline_extract_prompt(case_id: str, stmt_name: str, stmt_type: str, text: str) -> str:
-    return f"""형사 조서에서 **시간·시각·순서와 직접 관련된 행적·행위만** JSON 객체 하나로 추출한다. 설명·마크다운·코드펜스 금지.
-모순·진술 불일치는 추출하지 않는다.
+    return f"""{NO_MARKDOWN}
+조서 원문에서 시간·시각·순서와 직접 관련된 행적·행위만 뽑아 JSON 객체 하나만 출력한다. 설명·마크다운·코드펜스 금지. JSON 밖 문장은 쓰지 마라.
+모순·진술 대조·관계망 인물 추출은 하지 않는다.
 
 사건: {case_id}
-진술 조서 작성자(이 조서의 화자): {stmt_name} ({stmt_type})
+이 조서 화자(진술자): {stmt_name} ({stmt_type})
 
 [조서]
 {text}
 
-출력 형식(키 이름 그대로):
-{{"events":[
-  {{"lane_key":"행위 주체 인물명(이 조서 화자가 아니면 그 인물명)","stmt_name":"해당 인물명","stmt_type":"피의자|피해자|목격자|참고인|진술자 중 하나",
-    "event_type":"alibi|action|movement|other",
-    "time_precision":"exact|approximate|relative",
-    "time_start":"YYYY-MM-DDTHH:MM:SS 또는 null",
-    "time_end":"YYYY-MM-DDTHH:MM:SS 또는 null",
-    "time_text":"본문의 시간·순서 표현(필수, 모호·상대 포함)",
-    "anchor_index":null,
-    "anchor_sort_order":null,
-    "offset_minutes":null,
-    "offset_end_minutes":null,
-    "place":"장소 또는 null",
-    "label":"한 줄 요약(시간 맥락 포함, 빈 문자열 금지)",
-    "quote":"근거가 되는 본문 문장 일부(필수, 1문장 이상)",
-    "confidence":"high|medium|low",
-    "sort_order":10}}
-]}}
+원문 보존(타임라인·모순 대조에 쓰이므로 생략·왜곡 금지):
+1. time_text, quote는 [조서]에 나온 시간·순서·행위 표현을 가능한 한 원문 그대로 적는다.
+2. 날짜·시각·장소·인물·행위를 추측으로 보완하지 말 것. 불명확하면 time_precision을 approximate 또는 relative로 두고 time_text에 원문 표현을 남긴다.
+3. 부정·전면 부정(전혀, 일절, 한 번도, 없다, 하지 않았다 등)과 부분·긍정 표현은 quote에서 빼거나 약화하지 말 것.
 
-필수 규칙:
-- stmt_type은 역할(피의자/피해자/목격자/참고인)만. event_type(alibi/action 등)을 stmt_type에 넣지 말 것.
-- label, time_text, quote는 반드시 채울 것. 근거 없으면 그 이벤트는 넣지 말 것.
-- lane_key·stmt_name은 **그 행위를 한 사람** 이름. 이 조서 화자({stmt_name})와 다른 인물이면 그 인물 이름을 쓸 것.
-- exact/approximate/relative 구분. relative는 anchor_index·offset_minutes.
-- event_type: alibi=행적·체류, action=행위·목격, movement=이동
-- events는 시간순, sort_order 10,20,30…
-- 해당 없으면 {{"events":[]}}"""
+반드시 아래 JSON 형식으로만 답하라. 키 이름은 그대로 쓴다.
+
+필드(events 배열 각 항목):
+stmt_name: 그 행위를 한 사람 이름(이 조서 화자가 한 행위면 {stmt_name}). 타임라인 레인은 이 이름으로 묶인다.
+stmt_type: 피의자, 피해자, 목격자, 참고인, 진술자 중 하나. 이 조서 화자의 행위면 조서 유형({stmt_type})에 맞출 것. event_type 값을 stmt_type에 넣지 말 것.
+event_type: alibi(행적·체류), action(행위·목격·범행), movement(이동), other
+time_precision: exact, approximate, relative, unknown
+time_start, time_end: YYYY-MM-DDTHH:MM:SS 또는 null
+time_text: 본문의 시간·순서 표현(필수. 상대시간·모호 표현 포함)
+anchor_index, anchor_sort_order, offset_minutes, offset_end_minutes: time_precision이 relative일 때만 숫자, 아니면 null
+place: 장소 또는 null
+label: 시간 맥락이 드러나는 한 줄 요약(빈 문자열 금지)
+quote: 근거가 되는 본문 문장 일부(필수, 1문장 이상)
+confidence: high, medium, low
+sort_order: 10, 20, 30 … 시간순
+
+핵심 규칙:
+1. label, time_text, quote 중 하나라도 비거나 근거가 없으면 그 이벤트는 넣지 말 것.
+2. 시간·순서 단서가 전혀 없는 일반 서술은 넣지 말 것.
+3. stmt_name은 행위 주체 이름. 다른 인물의 행위면 그 인물 이름을 쓸 것.
+4. quote에 적힌 시각과 time_start, time_text가 반드시 같아야 한다. quote가 밤 10시 40분이면 time_text도 밤 10시 40분, time_start는 22:40이어야 하며 11시 40분(23:40)으로 쓰지 말 것.
+5. exact는 본문에 구체 시각이 있을 때, approximate는 대략·경·쯤, relative는 N분 후·이후·전 등(anchor_index·offset_minutes 사용).
+6. events는 시간순, sort_order 오름차순.
+7. 해당 없으면 {{"events":[]}}
+
+JSON 형식:
+{{
+  "events": [
+    {{
+      "stmt_name": "홍길동",
+      "stmt_type": "피의자",
+      "event_type": "action",
+      "time_precision": "exact",
+      "time_start": "2024-05-01T14:30:00",
+      "time_end": null,
+      "time_text": "2024년 5월 1일 오후 2시 30분경",
+      "anchor_index": null,
+      "anchor_sort_order": null,
+      "offset_minutes": null,
+      "offset_end_minutes": null,
+      "place": "역삼동 주택",
+      "label": "오후 2시 30분경 역삼동 주택 앞에서 피해자를 만남",
+      "quote": "그때 역삼동 집 앞에서 김철수를 만났다.",
+      "confidence": "high",
+      "sort_order": 10
+    }}
+  ]
+}}"""
+
+
+_KR_CLOCK_PATTERNS = (
+    (re.compile(r"(오전)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "am"),
+    (re.compile(r"(오후)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "pm"),
+    (re.compile(r"(밤)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "pm"),
+    (re.compile(r"(저녁)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "pm"),
+    (re.compile(r"(새벽)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "am"),
+    (re.compile(r"(낮)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "am"),
+)
+
+
+def _korean_period_to_24h(hour12: int, minute: int, period: str) -> tuple[int, int]:
+    h = max(1, min(12, int(hour12)))
+    m = max(0, min(59, int(minute)))
+    if period == "am":
+        return (0 if h == 12 else h, m)
+    return (12 if h == 12 else h + 12, m)
+
+
+def _find_korean_clock_in_text(text: str):
+    """quote/time_text에서 (hour24, minute, matched_phrase) 또는 None."""
+    if not text or not str(text).strip():
+        return None
+    src = str(text)
+    for pat, period in _KR_CLOCK_PATTERNS:
+        m = pat.search(src)
+        if not m:
+            continue
+        try:
+            h = int(m.group(2))
+            g3 = m.group(3)
+            minute = int(g3) if g3 else 0
+            h24, mi = _korean_period_to_24h(h, minute, period)
+            phrase = m.group(0).strip()
+            return h24, mi, phrase
+        except (TypeError, ValueError, IndexError):
+            continue
+    return None
+
+
+def _reconcile_timeline_event_times(ev: dict) -> dict:
+    """quote의 시각을 우선해 time_start·time_text가 어긋나면 보정."""
+    if not isinstance(ev, dict):
+        return ev
+    quote = (ev.get("quote") or "").strip()
+    if not quote:
+        return ev
+
+    found = _find_korean_clock_in_text(quote)
+    if not found:
+        return ev
+    h24, minute, phrase = found
+
+    from datetime import timedelta
+    ts = _parse_timeline_iso(ev.get("time_start"))
+    if ts:
+        old_start = ts
+        corrected = ts.replace(hour=h24, minute=minute, second=0, microsecond=0)
+        if corrected != old_start:
+            ev["time_start"] = corrected.strftime("%Y-%m-%dT%H:%M:%S")
+            te = _parse_timeline_iso(ev.get("time_end"))
+            if te:
+                dur = te - old_start
+                if dur.total_seconds() <= 0 or dur.total_seconds() > 86400:
+                    dur = timedelta(minutes=5)
+                ev["time_end"] = (corrected + dur).strftime("%Y-%m-%dT%H:%M:%S")
+            elif ev.get("time_end") is None:
+                ev["time_end"] = (corrected + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    tt_found = _find_korean_clock_in_text((ev.get("time_text") or "").strip())
+    if tt_found and (tt_found[0], tt_found[1]) != (h24, minute):
+        ev["time_text"] = phrase
+    elif not (ev.get("time_text") or "").strip():
+        ev["time_text"] = phrase
+
+    return ev
+
+
+def _reconcile_timeline_events_from_quotes(events: list) -> list:
+    return [_reconcile_timeline_event_times(ev) for ev in events]
+
+
+_KR_CLOCK_PATTERNS = (
+    (re.compile(r"(오전)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "am"),
+    (re.compile(r"(오후)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "pm"),
+    (re.compile(r"(밤)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "pm"),
+    (re.compile(r"(저녁)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "pm"),
+    (re.compile(r"(새벽)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "am"),
+    (re.compile(r"(낮)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "am"),
+)
+
+
+def _korean_period_to_24h(hour12: int, minute: int, period: str) -> tuple[int, int]:
+    h = max(1, min(12, int(hour12)))
+    m = max(0, min(59, int(minute)))
+    if period == "am":
+        return (0 if h == 12 else h, m)
+    return (12 if h == 12 else h + 12, m)
+
+
+def _find_korean_clock_in_text(text: str):
+    """quote/time_text에서 (hour24, minute, matched_phrase) 또는 None."""
+    if not text or not str(text).strip():
+        return None
+    src = str(text)
+    for pat, period in _KR_CLOCK_PATTERNS:
+        m = pat.search(src)
+        if not m:
+            continue
+        try:
+            h = int(m.group(2))
+            g3 = m.group(3)
+            minute = int(g3) if g3 else 0
+            h24, mi = _korean_period_to_24h(h, minute, period)
+            phrase = m.group(0).strip()
+            return h24, mi, phrase
+        except (TypeError, ValueError, IndexError):
+            continue
+    return None
+
+
+def _reconcile_timeline_event_times(ev: dict) -> dict:
+    """quote의 시각을 우선해 time_start·time_text가 어긋나면 보정."""
+    if not isinstance(ev, dict):
+        return ev
+    quote = (ev.get("quote") or "").strip()
+    if not quote:
+        return ev
+
+    found = _find_korean_clock_in_text(quote)
+    if not found:
+        return ev
+    h24, minute, phrase = found
+
+    from datetime import timedelta
+    ts = _parse_timeline_iso(ev.get("time_start"))
+    if ts:
+        old_start = ts
+        corrected = ts.replace(hour=h24, minute=minute, second=0, microsecond=0)
+        if corrected != old_start:
+            ev["time_start"] = corrected.strftime("%Y-%m-%dT%H:%M:%S")
+            te = _parse_timeline_iso(ev.get("time_end"))
+            if te:
+                dur = te - old_start
+                if dur.total_seconds() <= 0 or dur.total_seconds() > 86400:
+                    dur = timedelta(minutes=5)
+                ev["time_end"] = (corrected + dur).strftime("%Y-%m-%dT%H:%M:%S")
+            elif ev.get("time_end") is None:
+                ev["time_end"] = (corrected + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    tt_found = _find_korean_clock_in_text((ev.get("time_text") or "").strip())
+    if tt_found and (tt_found[0], tt_found[1]) != (h24, minute):
+        ev["time_text"] = phrase
+    elif not (ev.get("time_text") or "").strip():
+        ev["time_text"] = phrase
+
+    return ev
+
+
+def _reconcile_timeline_events_from_quotes(events: list) -> list:
+    return [_reconcile_timeline_event_times(ev) for ev in events]
 
 
 def _parse_timeline_iso(s: str):
@@ -1639,6 +1828,7 @@ def timeline_extract():
 
     events = [e for e in parsed["events"] if isinstance(e, dict)]
     events = _resolve_timeline_relative_times(events)
+    events = _reconcile_timeline_events_from_quotes(events)
     events = _filter_timeline_time_only(events)
     return jsonify({"success": True, "events": events, "model": MODEL})
 
