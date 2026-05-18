@@ -8,6 +8,7 @@ polmate_serv.py  ·  통합 Flask 서버
   POST /analyze/stream      - 진술 분석 SSE 스트리밍
   POST /summarize           - 진술 구조 요약(패스1)만 반환
   POST /relation_map        - 사건 관계망 JSON 추출
+  POST /timeline/extract    - 조서 1건에서 타임라인 이벤트 JSON 추출
 
 [CCTV 번호판 분석]  (구 app.py)
   POST /cctv/analyze        - 영상 업로드 후 번호판 분석 작업 시작
@@ -204,6 +205,50 @@ def call_ollama(prompt: str, expect_json: bool = False) -> str:
     return ""
 
 
+TIMELINE_MAX_TEXT = int(os.environ.get("TIMELINE_MAX_TEXT", "9000"))
+TIMELINE_NUM_PREDICT = int(os.environ.get("TIMELINE_NUM_PREDICT", "3072"))
+TIMELINE_OLLAMA_TIMEOUT = int(os.environ.get("TIMELINE_OLLAMA_TIMEOUT", "180"))
+
+
+def _truncate_timeline_text(text: str, max_chars=None) -> str:
+    limit = max_chars if max_chars is not None else TIMELINE_MAX_TEXT
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    nl = cut.rfind("\n")
+    if nl > limit * 7 // 10:
+        cut = cut[:nl]
+    return cut + "\n…(이하 생략)"
+
+
+def call_ollama_timeline(prompt: str) -> str:
+    """타임라인 전용: 출력 토큰 상한·짧은 타임아웃으로 속도 우선."""
+    opts = {
+        "temperature": 0.05,
+        "repeat_penalty": 1.0,
+        "num_predict": TIMELINE_NUM_PREDICT,
+        "num_ctx": int(os.environ.get("TIMELINE_NUM_CTX", "8192")),
+    }
+    for attempt in range(2):
+        try:
+            res = requests.post(OLLAMA_URL, json={
+                "model": MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "options": opts,
+            }, timeout=TIMELINE_OLLAMA_TIMEOUT)
+            res.raise_for_status()
+            text = res.json().get("response", "")
+            match = re.search(r'\{[\s\S]*\}', text)
+            if match:
+                return match.group(0)
+        except Exception as e:
+            if attempt == 1:
+                raise e
+    return ""
+
+
 def iter_ollama_tokens(prompt: str):
     with requests.post(
         OLLAMA_URL,
@@ -375,6 +420,169 @@ def _relation_map_prompt(case_id: str, case_name: str, persons_meta: str, transc
 relType: accomplice=공동범행·공모·방조 등이 나올 때만. 업무·접대·카드·식사만이면 acquaint. 진술 충돌은 witness+mismatch. 피의자↔피해자는 harm(피해관계). persons에 피의자와 피해자가 모두 있으면 **모든 피의자–피해자 쌍**에 harm edge가 있어야 한다(누락 금지). edge 1개 이상, 임의 인물 남발 금지.
 
 예: {{"persons":[{{"name":"홍길동","role":"suspect","memo":""}},{{"name":"김철수","role":"victim","memo":""}}],"edges":[{{"src":"홍길동","dst":"김철수","relType":"harm","status":"unknown","context":""}}]}}"""
+
+
+def _timeline_event_has_time_signal(ev: dict) -> bool:
+    """시간 단서가 있는 이벤트만 타임라인 대상."""
+    if not isinstance(ev, dict):
+        return False
+    if _parse_timeline_iso(ev.get("time_start")):
+        return True
+    tt = (ev.get("time_text") or "").strip()
+    prec = (ev.get("time_precision") or "").lower()
+    if prec in ("exact", "approximate", "relative") and tt:
+        return True
+    if ev.get("offset_minutes") is not None:
+        return True
+    if ev.get("anchor_index") is not None or ev.get("anchor_sort_order") is not None:
+        return bool(tt or ev.get("offset_minutes") is not None)
+    # 본문에 시간·순서 표현이 있으면 포함
+    if tt and prec != "unknown":
+        return True
+    time_hints = ("시", "분", "쯤", "경", "전", "후", "뒤", "이후", "이전", "당시", "무렵", "경", "오전", "오후", "새벽", "저녁", "낮")
+    return any(h in tt for h in time_hints)
+
+
+def _filter_timeline_time_only(events: list) -> list:
+    return [e for e in events if isinstance(e, dict) and _timeline_event_has_time_signal(e)]
+
+
+def _timeline_extract_prompt(case_id: str, stmt_name: str, stmt_type: str, text: str) -> str:
+    return f"""형사 조서에서 **시간·시각·순서와 직접 관련된 행적·행위만** JSON 객체 하나로 추출한다. 설명·마크다운·코드펜스 금지.
+모순·진술 불일치는 추출하지 않는다.
+
+사건: {case_id}
+진술 조서 작성자(이 조서의 화자): {stmt_name} ({stmt_type})
+
+[조서]
+{text}
+
+출력 형식(키 이름 그대로):
+{{"events":[
+  {{"lane_key":"행위 주체 인물명(이 조서 화자가 아니면 그 인물명)","stmt_name":"해당 인물명","stmt_type":"피의자|피해자|목격자|참고인|진술자 중 하나",
+    "event_type":"alibi|action|movement|other",
+    "time_precision":"exact|approximate|relative",
+    "time_start":"YYYY-MM-DDTHH:MM:SS 또는 null",
+    "time_end":"YYYY-MM-DDTHH:MM:SS 또는 null",
+    "time_text":"본문의 시간·순서 표현(필수, 모호·상대 포함)",
+    "anchor_index":null,
+    "anchor_sort_order":null,
+    "offset_minutes":null,
+    "offset_end_minutes":null,
+    "place":"장소 또는 null",
+    "label":"한 줄 요약(시간 맥락 포함, 빈 문자열 금지)",
+    "quote":"근거가 되는 본문 문장 일부(필수, 1문장 이상)",
+    "confidence":"high|medium|low",
+    "sort_order":10}}
+]}}
+
+필수 규칙:
+- stmt_type은 역할(피의자/피해자/목격자/참고인)만. event_type(alibi/action 등)을 stmt_type에 넣지 말 것.
+- label, time_text, quote는 반드시 채울 것. 근거 없으면 그 이벤트는 넣지 말 것.
+- lane_key·stmt_name은 **그 행위를 한 사람** 이름. 이 조서 화자({stmt_name})와 다른 인물이면 그 인물 이름을 쓸 것.
+- exact/approximate/relative 구분. relative는 anchor_index·offset_minutes.
+- event_type: alibi=행적·체류, action=행위·목격, movement=이동
+- events는 시간순, sort_order 10,20,30…
+- 해당 없으면 {{"events":[]}}"""
+
+
+def _parse_timeline_iso(s: str):
+    if not s or not str(s).strip():
+        return None
+    from datetime import datetime
+    v = str(s).strip().replace(" ", "T")
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(v[:19] if "T" in v else v, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _resolve_timeline_relative_times(events: list) -> list:
+    """조서 내 이벤트끼리 anchor/offset으로 time_start·time_end 보정."""
+    if not events:
+        return events
+    from datetime import timedelta
+
+    ordered = sorted(events, key=lambda e: int(e.get("sort_order") or 0))
+    resolved_by_idx: dict[int, object] = {}
+    resolved_by_sort: dict[int, object] = {}
+
+    def _set_resolved(idx: int, ev: dict, dt) -> None:
+        if dt is None:
+            return
+        ev["time_start"] = dt.strftime("%Y-%m-%dT%H:%M:%S")
+        resolved_by_idx[idx] = dt
+        resolved_by_sort[int(ev.get("sort_order") or (idx + 1) * 10)] = dt
+
+    for idx, ev in enumerate(ordered):
+        if not isinstance(ev, dict):
+            continue
+        ts = _parse_timeline_iso(ev.get("time_start"))
+        if ts:
+            _set_resolved(idx, ev, ts)
+            te = _parse_timeline_iso(ev.get("time_end"))
+            if te:
+                ev["time_end"] = te.strftime("%Y-%m-%dT%H:%M:%S")
+            elif ev.get("time_precision") in ("approximate", "relative", None):
+                ev["time_end"] = (ts + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    for idx, ev in enumerate(ordered):
+        if not isinstance(ev, dict):
+            continue
+        if _parse_timeline_iso(ev.get("time_start")):
+            continue
+
+        precision = (ev.get("time_precision") or "unknown").lower()
+        anchor_idx = ev.get("anchor_index")
+        anchor_sort = ev.get("anchor_sort_order")
+        off_start = ev.get("offset_minutes")
+        off_end = ev.get("offset_end_minutes")
+
+        anchor_dt = None
+        if anchor_idx is not None:
+            try:
+                ai = int(anchor_idx)
+                if 0 <= ai < len(ordered):
+                    anchor_dt = resolved_by_idx.get(ai) or _parse_timeline_iso(ordered[ai].get("time_start"))
+            except (TypeError, ValueError):
+                pass
+        if anchor_dt is None and anchor_sort is not None:
+            try:
+                anchor_dt = resolved_by_sort.get(int(anchor_sort))
+            except (TypeError, ValueError):
+                pass
+        if anchor_dt is None:
+            for j in range(idx - 1, -1, -1):
+                anchor_dt = resolved_by_idx.get(j) or _parse_timeline_iso(ordered[j].get("time_start"))
+                if anchor_dt:
+                    break
+
+        if anchor_dt is not None and off_start is not None:
+            try:
+                start = anchor_dt + timedelta(minutes=int(off_start))
+                _set_resolved(idx, ev, start)
+                if off_end is not None:
+                    ev["time_end"] = (anchor_dt + timedelta(minutes=int(off_end))).strftime("%Y-%m-%dT%H:%M:%S")
+                else:
+                    ev["time_end"] = (start + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+                if precision == "unknown":
+                    ev["time_precision"] = "relative"
+                continue
+            except (TypeError, ValueError):
+                pass
+
+        if precision == "approximate" and anchor_dt is not None:
+            try:
+                guess = int(off_start) if off_start is not None else 0
+                start = anchor_dt + timedelta(minutes=guess)
+                _set_resolved(idx, ev, start)
+                ev["time_end"] = (start + timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%S")
+            except (TypeError, ValueError):
+                pass
+
+    return events
 
 
 # ── 관계망 — 인물 병합 / 역할 보정 헬퍼 ────────────────────────────────────
@@ -1400,6 +1608,39 @@ def relation_map():
 
     out_raw = _rewrite_relation_response(raw, transcripts, transcript_block)
     return jsonify({"success": True, "response": out_raw, "model": MODEL})
+
+
+@app.route("/timeline/extract", methods=["POST", "OPTIONS"])
+def timeline_extract():
+    if request.method == "OPTIONS":
+        return "", 204
+
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "요청 데이터가 없습니다.", "events": []}), 400
+
+    case_id   = (data.get("caseId") or data.get("case_id") or "").strip()
+    stmt_name = (data.get("stmtName") or data.get("stmt_name") or "미입력").strip()
+    stmt_type = (data.get("stmtType") or data.get("stmt_type") or "진술자").strip()
+    text      = _truncate_timeline_text((data.get("text") or "").strip())
+
+    if not text:
+        return jsonify({"success": False, "error": "조서 본문이 비어 있습니다.", "events": []}), 400
+
+    prompt = _timeline_extract_prompt(case_id, stmt_name, stmt_type, text)
+    try:
+        raw = call_ollama_timeline(prompt)
+    except Exception as ex:
+        return jsonify({"success": False, "error": f"모델 호출 실패: {ex}", "events": []}), 502
+
+    parsed = _extract_json_object(raw or "")
+    if not parsed or not isinstance(parsed.get("events"), list):
+        return jsonify({"success": False, "error": "이벤트 JSON 파싱 실패", "events": []}), 502
+
+    events = [e for e in parsed["events"] if isinstance(e, dict)]
+    events = _resolve_timeline_relative_times(events)
+    events = _filter_timeline_time_only(events)
+    return jsonify({"success": True, "events": events, "model": MODEL})
 
 
 # ════════════════════════════════════════════════════════════════════════════

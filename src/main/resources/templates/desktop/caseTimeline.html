@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POL-MATE | 사건 타임라인</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" th:href="@{/css/polmate.css}">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script th:inline="javascript">
+var _ctx = '';
+var _initCaseId = /*[[${param.caseId ?: ''}]]*/ '';
+</script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f4f6fb; color: #1a1a2e; -webkit-font-smoothing: antialiased; overflow: hidden; }
+.pm-content { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+.page-toolbar {
+    background: #fff; border-bottom: 1px solid #e2e5ee;
+    padding: 10px 20px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+.toolbar-title { font-size: 15px; font-weight: 500; color: #0d1a33; }
+.toolbar-case { font-size: 12px; color: #6b7280; background: #f4f6fb; border: 1px solid #e2e5ee; border-radius: 7px; padding: 4px 11px; }
+.toolbar-badge { font-size: 10px; padding: 3px 9px; border-radius: 10px; background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.toolbar-spacer { flex: 1; }
+.btn-toolbar { display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 9px; border: 1.5px solid #e2e5ee; background: transparent; color: #6b7280; font-size: 12px; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; transition: all 0.13s; white-space: nowrap; }
+.btn-toolbar:hover { border-color: #0d1a33; color: #0d1a33; }
+.btn-toolbar:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-toolbar svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; flex-shrink: 0; }
+.toolbar-divider { width: 1px; height: 22px; background: #e2e5ee; }
+
+.map-layout { display: flex; flex: 1; overflow: hidden; }
+.left-panel { width: 320px; flex-shrink: 0; border-right: 1px solid #e2e5ee; background: #fff; display: flex; flex-direction: column; overflow: hidden; }
+.right-panel { flex: 1; background: #0d1a33; position: relative; overflow: hidden; }
+
+.panel-content { flex: 1; overflow-y: auto; padding: 14px; scrollbar-width: thin; }
+
+.case-item { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; cursor: pointer; transition: background 0.13s; border: 1px solid transparent; margin-bottom: 6px; }
+.case-item:hover { background: #f4f6fb; }
+.case-item.selected { background: #eff6ff; border-color: #4a7cdc; }
+.case-icon { width: 34px; height: 34px; border-radius: 9px; background: #f0f3f9; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.case-icon svg { width: 16px; height: 16px; stroke: #1a2744; fill: none; stroke-width: 1.8; stroke-linecap: round; }
+.case-info { flex: 1; min-width: 0; }
+.case-id-text { font-size: 10px; color: #9ca3af; }
+.case-name { font-size: 13px; font-weight: 500; color: #1a1a2e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.case-badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
+.badge-active { background: #f0fdf4; color: #16a34a; }
+.badge-done { background: #eff6ff; color: #1e40af; }
+.badge-warn { background: #fffbeb; color: #92400e; }
+.badge-danger { background: #fef2f2; color: #dc2626; }
+
+.panel-hint { font-size: 11px; color: #9ca3af; line-height: 1.7; margin-bottom: 12px; }
+.btn-rebuild { width: 100%; padding: 10px; border-radius: 9px; border: 1.5px solid #e2e5ee; background: #fff; color: #0d1a33; font-size: 12px; font-weight: 500; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; display: none; align-items: center; justify-content: center; gap: 6px; margin-top: 10px; transition: all 0.13s; }
+.btn-rebuild.show { display: flex; }
+.btn-rebuild:hover:not(:disabled) { border-color: #4a7cdc; color: #1d4ed8; background: #eff6ff; }
+.btn-rebuild:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-rebuild svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+.case-summary { background: #f4f6fb; border: 1px solid #e2e5ee; border-radius: 10px; padding: 12px 13px; margin-bottom: 14px; display: none; }
+.case-summary.show { display: block; }
+.case-summary-title { font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.case-summary-row { font-size: 12px; color: #374151; margin-bottom: 4px; }
+.case-summary-row strong { color: #0d1a33; font-weight: 500; }
+.case-summary-msg { font-size: 11px; color: #6b7280; margin-top: 8px; line-height: 1.6; }
+.timeline-loading { display: none; text-align: center; padding: 28px 12px; font-size: 12px; color: #9ca3af; }
+.timeline-loading.show { display: block; }
+
+#timelineMount { position: absolute; inset: 0; }
+#timelineMount svg { display: block; width: 100%; height: 100%; cursor: grab; }
+#timelineMount svg:active { cursor: grabbing; }
+
+.canvas-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1; pointer-events: none; }
+.canvas-empty-icon { width: 56px; height: 56px; margin-bottom: 14px; flex-shrink: 0; }
+.canvas-empty-icon svg { width: 100%; height: 100%; display: block; }
+.canvas-empty-icon--idle svg { stroke: rgba(255,255,255,0.2); fill: none; stroke-width: 1.4; stroke-linecap: round; }
+.canvas-empty-icon--extract { display: none; }
+.canvas-empty.is-extracting .canvas-empty-icon--idle { display: none; }
+.canvas-empty.is-extracting .canvas-empty-icon--extract { display: block; }
+.extract-icon-outline { fill: none; stroke: rgba(255,255,255,0.22); stroke-width: 1.5; stroke-linecap: round; }
+.extract-icon-fill { fill: #4a7cdc; stroke: #6b9fff; stroke-width: 2.2; stroke-linecap: round; clip-path: inset(100% 0 0 0); animation: extractIconFillUp 1.8s ease-in-out infinite; }
+.extract-icon-fill circle { fill: #4a7cdc; stroke: #6b9fff; }
+.extract-icon-glow { fill: none; stroke: rgba(74,124,220,0.35); stroke-width: 2.5; stroke-linecap: round; opacity: 0.6; animation: extractIconPulse 1.8s ease-in-out infinite; }
+@keyframes extractIconFillUp {
+    0% { clip-path: inset(100% 0 0 0); opacity: 0.5; }
+    45% { clip-path: inset(0 0 0 0); opacity: 1; }
+    55% { clip-path: inset(0 0 0 0); opacity: 1; }
+    100% { clip-path: inset(100% 0 0 0); opacity: 0.5; }
+}
+@keyframes extractIconPulse {
+    0%, 100% { opacity: 0.25; stroke-width: 2; }
+    50% { opacity: 0.7; stroke-width: 3; }
+}
+.canvas-empty.is-extracting p { color: rgba(147,197,253,0.95); }
+.canvas-empty p { font-size: 13px; color: rgba(255,255,255,0.45); text-align: center; line-height: 1.8; max-width: 320px; transition: color 0.2s; }
+
+.canvas-toolbar { position: absolute; top: 12px; right: 12px; z-index: 5; display: none; flex-direction: column; gap: 6px; }
+.canvas-toolbar.show { display: flex; }
+.canvas-tool-btn { width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.13s; }
+.canvas-tool-btn:hover { background: rgba(255,255,255,0.22); }
+.canvas-tool-btn svg { width: 14px; height: 14px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+
+.canvas-legend { position: absolute; bottom: 12px; left: 12px; z-index: 5; display: none; background: rgba(10,20,50,0.88); border-radius: 10px; padding: 9px 12px; flex-wrap: wrap; gap: 7px 12px; max-width: 340px; }
+.canvas-legend.show { display: flex; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: rgba(255,255,255,0.78); }
+.legend-swatch { width: 14px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.legend-gap { width: 14px; height: 8px; border: 1px dashed #f87171; background: rgba(220,38,38,0.15); border-radius: 2px; }
+
+.canvas-hint { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 5; display: none; background: rgba(0,0,0,0.5); border-radius: 20px; padding: 5px 14px; font-size: 10px; color: rgba(255,255,255,0.7); white-space: nowrap; pointer-events: none; }
+.canvas-hint.show { display: block; }
+
+.evt-label { fill: rgba(255,255,255,0.9); font-size: 10px; pointer-events: none; }
+.lane-label-name { fill: rgba(255,255,255,0.92); font-size: 12px; font-weight: 500; }
+.lane-label-role { font-size: 10px; font-weight: 500; }
+.detail-role-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 10px; margin-right: 6px; }
+.detail-role-suspect { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.detail-role-victim { background: #f0fdf4; color: #3d8f6a; border: 1px solid #bbf7d0; }
+.detail-role-witness { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+.detail-role-reference { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+.detail-role-statement { background: #f4f6fb; color: #6b7280; border: 1px solid #e2e5ee; }
+.axis text { fill: rgba(255,255,255,0.55); font-size: 10px; }
+.axis line, .axis path { stroke: rgba(255,255,255,0.15); }
+.axis-x-top path.domain { stroke: rgba(255,255,255,0.22); }
+.axis-x-top .tick line { stroke: rgba(255,255,255,0.12); }
+
+.detail-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 300; }
+.detail-overlay.open { display: block; }
+.detail-panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 400px; max-width: 92vw;
+    background: #fff; box-shadow: -4px 0 32px rgba(0,0,0,0.14); z-index: 301;
+    display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+.detail-panel.open { transform: translateX(0); }
+.detail-header { padding: 18px 20px 14px; border-bottom: 1px solid #e2e5ee; display: flex; align-items: flex-start; gap: 12px; flex-shrink: 0; }
+.detail-close { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e2e5ee; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #6b7280; flex-shrink: 0; }
+.detail-close:hover { background: #f4f6fb; }
+.detail-title { font-size: 15px; font-weight: 500; flex: 1; margin-top: 2px; }
+.detail-sub { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+.detail-body { flex: 1; overflow-y: auto; padding: 18px 20px; }
+.detail-row { margin-bottom: 16px; }
+.detail-label { font-size: 10px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 5px; }
+.detail-value { font-size: 13px; color: #1a1a2e; line-height: 1.65; }
+.detail-transcript-link { color: #2563eb; font-weight: 500; text-decoration: none; }
+.detail-transcript-link:hover { color: #1d4ed8; text-decoration: underline; }
+.detail-source-type { color: #6b7280; }
+.detail-quote { background: #f4f6fb; border-left: 3px solid #4a7cdc; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 12px; color: #374151; line-height: 1.7; }
+.detail-tag { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px; margin-right: 4px; }
+.tag-alibi { background: #eff6ff; color: #1d4ed8; }
+.tag-action { background: #f0fdf4; color: #16a34a; }
+.tag-gap { background: #fef2f2; color: #dc2626; }
+
+.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1a2744; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif; opacity: 0; transition: all 0.25s; z-index: 9999; white-space: nowrap; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@keyframes bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-5px); } }
+</style>
+</head>
+<body>
+<div class="pm-layout">
+
+<th:block th:replace="~{desktop/fragments/sidebar :: sidebar('timeline')}"></th:block>
+<div class="pm-content" style="height:100vh;overflow:hidden;">
+<th:block th:replace="~{desktop/fragments/appbar :: appbar('POL-MATE,수사 도구,사건 타임라인')}"></th:block>
+
+<div class="page-toolbar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0d1a33" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/><circle cx="18" cy="18" r="3"/></svg>
+    <span class="toolbar-title">사건 타임라인</span>
+    <span class="toolbar-case" id="toolbarCaseName">사건을 선택해 주세요</span>
+    <span class="toolbar-badge" id="toolbarStatus" style="display:none;"></span>
+    <div class="toolbar-spacer"></div>
+    <button type="button" class="btn-toolbar" id="btnRebuild" onclick="rebuildTimeline()" disabled>
+        <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>이벤트 재추출
+    </button>
+    <button type="button" class="btn-toolbar" id="btnZoomReset" onclick="resetTimelineZoom()" disabled>
+        <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>보기 초기화
+    </button>
+</div>
+
+<div class="map-layout">
+    <div class="left-panel">
+    <div class="panel-content" id="panel-cases" style="padding-top:16px;">
+        <div class="panel-hint">시간·순서가 있는 행적만 표시합니다. 모순·불일치는 모순 탐지에서 확인하세요.</div>
+        <div class="case-summary" id="caseSummary">
+            <div class="case-summary-title">선택 사건 요약</div>
+            <div class="case-summary-row">조서 <strong id="sumTranscripts">0</strong>건 · 이벤트 <strong id="sumEvents">0</strong>건</div>
+            <div class="case-summary-msg" id="sumMessage"></div>
+        </div>
+        <button type="button" class="btn-rebuild" id="btnRebuildPanel" onclick="rebuildTimeline()">
+            <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            이벤트 재추출
+        </button>
+        <div class="timeline-loading show" id="timelinePanelLoading">사건 목록 불러오는 중...</div>
+        <div id="caseListMount"></div>
+    </div>
+</div>
+
+<div class="right-panel" id="rightPanel">
+    <div class="canvas-empty" id="canvasEmpty">
+        <div class="canvas-empty-icon canvas-empty-icon--idle" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/><circle cx="18" cy="18" r="3"/></svg>
+        </div>
+        <div class="canvas-empty-icon canvas-empty-icon--extract" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+                <g class="extract-icon-glow">
+                    <line x1="4" y1="6" x2="20" y2="6"/>
+                    <line x1="4" y1="12" x2="20" y2="12"/>
+                    <line x1="4" y1="18" x2="14" y2="18"/>
+                    <circle cx="18" cy="18" r="3"/>
+                </g>
+                <g class="extract-icon-fill">
+                    <line x1="4" y1="6" x2="20" y2="6"/>
+                    <line x1="4" y1="12" x2="20" y2="12"/>
+                    <line x1="4" y1="18" x2="14" y2="18"/>
+                    <circle cx="18" cy="18" r="3"/>
+                </g>
+                <g class="extract-icon-outline">
+                    <line x1="4" y1="6" x2="20" y2="6"/>
+                    <line x1="4" y1="12" x2="20" y2="12"/>
+                    <line x1="4" y1="18" x2="14" y2="18"/>
+                    <circle cx="18" cy="18" r="3"/>
+                </g>
+            </svg>
+        </div>
+        <p id="canvasEmptyText">왼쪽에서 사건을 선택하면<br>타임라인이 표시됩니다.</p>
+    </div>
+    <div id="timelineMount"></div>
+    <div class="canvas-toolbar" id="canvasToolbar">
+        <button type="button" class="canvas-tool-btn" onclick="zoomTimeline(1.25)" title="확대"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        <button type="button" class="canvas-tool-btn" onclick="zoomTimeline(0.8)" title="축소"><svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        <button type="button" class="canvas-tool-btn" onclick="resetTimelineZoom()" title="초기화"><svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg></button>
+    </div>
+    <div class="canvas-legend" id="canvasLegend">
+        <div class="legend-item"><span class="legend-swatch" style="background:#dc2626"></span>피의자</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#3d8f6a"></span>피해자</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#4a7cdc"></span>목격자</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:rgba(74,124,220,0.65)"></span>알리바이</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:rgba(255,255,255,0.35)"></span>행위</div>
+        <div class="legend-item"><span class="legend-gap"></span>알리바이 공백</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:rgba(255,255,255,0.25);border:1px dashed rgba(255,255,255,0.5)"></span>추정·상대 시간</div>
+    </div>
+    <div class="canvas-hint" id="canvasHint">드래그로 이동 · 스크롤로 확대/축소 · 이벤트 클릭 시 상세</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+<div class="detail-overlay" id="detailOverlay" onclick="closeDetailPanel(event)"></div>
+<div class="detail-panel" id="detailPanel">
+    <div class="detail-header">
+        <button type="button" class="detail-close" onclick="closeDetailPanel()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <div>
+            <div class="detail-title" id="detailTitle">이벤트 상세</div>
+            <div class="detail-sub" id="detailSub"></div>
+        </div>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script th:inline="none">
+var currentCaseId = '', currentCaseName = '';
+var timelineData = null;
+var timelineLaneLayout = null;
+var zoomBehavior = null;
+var zoomRootG = null;
+var baseXScale = null;
+var currentTransform = d3.zoomIdentity;
+
+var rebuildPollTimer = null;
+
+function setRebuildButtonsEnabled(on) {
+    var tb = document.getElementById('btnRebuild');
+    var pb = document.getElementById('btnRebuildPanel');
+    if (tb) tb.disabled = !on;
+    if (pb) {
+        pb.disabled = !on;
+        if (on) pb.classList.add('show');
+        else pb.classList.remove('show');
+    }
+}
+
+function selectCase(caseId, caseName) {
+    currentCaseId = caseId;
+    currentCaseName = caseName;
+    document.querySelectorAll('.case-item').forEach(function(el) { el.classList.remove('selected'); });
+    var el = document.getElementById('ci_' + caseId.replace(/-/g, '_'));
+    if (el) el.classList.add('selected');
+    document.getElementById('toolbarCaseName').textContent = caseId + ' ' + caseName;
+    setRebuildButtonsEnabled(true);
+    loadTimeline(caseId);
+}
+
+function loadTimeline(caseId) {
+    clearTimelineView();
+    setCanvasEmptyMessage('타임라인을 불러오는 중…');
+    var panelLoad = document.getElementById('timelinePanelLoading');
+    if (panelLoad) { panelLoad.classList.add('show'); panelLoad.textContent = '타임라인 불러오는 중…'; }
+
+    fetch('/timelineApi?action=get&caseId=' + encodeURIComponent(caseId), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (panelLoad) panelLoad.classList.remove('show');
+            if (!res.success) {
+                showToast(res.error || '타임라인 조회 실패');
+                updateCaseSummary(null);
+                setCanvasEmptyMessage(res.error || '조회에 실패했습니다.');
+                return;
+            }
+            updateCaseSummary(res);
+            var badge = document.getElementById('toolbarStatus');
+            if (res.status === 'ready') {
+                badge.style.display = '';
+                badge.textContent = '이벤트 ' + (res.eventCount || 0) + '건';
+                badge.style.background = '#f0fdf4';
+                badge.style.color = '#16a34a';
+                badge.style.borderColor = '#bbf7d0';
+            } else if (res.status === 'extracting') {
+                badge.style.display = '';
+                badge.textContent = 'AI 추출 중';
+                badge.style.background = '#eff6ff';
+                badge.style.color = '#1d4ed8';
+                badge.style.borderColor = '#bfdbfe';
+            } else if (res.status === 'failed') {
+                badge.style.display = '';
+                badge.textContent = '추출 실패';
+                badge.style.background = '#fef2f2';
+                badge.style.color = '#dc2626';
+                badge.style.borderColor = '#fecaca';
+            } else {
+                badge.style.display = '';
+                badge.textContent = res.status === 'empty' ? '데이터 없음' : res.status === 'pending' ? '추출 대기' : (res.status || '');
+                badge.style.background = '#fffbeb';
+                badge.style.color = '#92400e';
+                badge.style.borderColor = '#fde68a';
+            }
+            if (res.status !== 'ready' || !res.timeline) {
+                setCanvasEmptyMessage(res.message || '표시할 타임라인이 없습니다.', res.status === 'extracting');
+                return;
+            }
+            timelineData = res.timeline;
+            renderTimeline(timelineData);
+        })
+        .catch(function() {
+            if (panelLoad) panelLoad.classList.remove('show');
+            showToast('타임라인 API 연결 실패');
+            setCanvasEmptyMessage('타임라인을 불러오지 못했습니다.');
+        });
+}
+
+function updateCaseSummary(res) {
+    var box = document.getElementById('caseSummary');
+    if (!res || !res.success) { box.classList.remove('show'); return; }
+    box.classList.add('show');
+    document.getElementById('sumTranscripts').textContent = res.transcriptCount != null ? res.transcriptCount : 0;
+    document.getElementById('sumEvents').textContent = res.eventCount != null ? res.eventCount : 0;
+    var msg = res.message || '';
+    if (res.rebuildJob && res.rebuildJob.message) msg = res.rebuildJob.message;
+    document.getElementById('sumMessage').textContent = msg;
+    var panelBtn = document.getElementById('btnRebuildPanel');
+    if (panelBtn) panelBtn.classList.add('show');
+}
+
+function showRebuildProgress(res) {
+    clearTimelineView();
+    var msg = (res && res.rebuildJob && res.rebuildJob.message)
+        ? res.rebuildJob.message
+        : (res && res.message) ? res.message : '조서별 AI 타임라인 추출 중…';
+    setCanvasEmptyMessage(msg, true);
+    document.getElementById('canvasToolbar').classList.remove('show');
+    document.getElementById('canvasLegend').classList.remove('show');
+    document.getElementById('canvasHint').classList.remove('show');
+}
+
+function rebuildTimeline() {
+    if (!currentCaseId) { showToast('사건을 먼저 선택해 주세요.'); return; }
+    var tb = document.getElementById('btnRebuild');
+    var pb = document.getElementById('btnRebuildPanel');
+    if (tb) tb.disabled = true;
+    if (pb) pb.disabled = true;
+    showRebuildProgress({ message: '재추출 요청 중…' });
+    fetch('/timelineApi?action=rebuild&caseId=' + encodeURIComponent(currentCaseId), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (!res.success) {
+                showToast(res.error || res.message || '재추출 요청 실패');
+                setRebuildButtonsEnabled(!!currentCaseId);
+                loadTimeline(currentCaseId);
+                return;
+            }
+            showToast(res.message || '조서별 AI 추출을 시작했습니다.');
+            updateCaseSummary(res);
+            showRebuildProgress(res);
+            pollTimelineAfterRebuild(0);
+        })
+        .catch(function() {
+            showToast('재추출 API 연결 실패');
+            setRebuildButtonsEnabled(!!currentCaseId);
+            loadTimeline(currentCaseId);
+        });
+}
+
+function pollTimelineAfterRebuild(attempt) {
+    if (rebuildPollTimer) clearTimeout(rebuildPollTimer);
+    if (attempt > 60) {
+        setRebuildButtonsEnabled(!!currentCaseId);
+        showToast('추출 시간이 길어지고 있습니다. 잠시 후 다시 조회합니다.');
+        loadTimeline(currentCaseId);
+        return;
+    }
+    var delay = attempt === 0 ? 2000 : 3000;
+    rebuildPollTimer = setTimeout(function() {
+        fetch('/timelineApi?action=get&caseId=' + encodeURIComponent(currentCaseId), { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (!res.success) {
+                    pollTimelineAfterRebuild(attempt + 1);
+                    return;
+                }
+                updateCaseSummary(res);
+
+                var job = res.rebuildJob;
+                if (job && job.status === 'running') {
+                    showRebuildProgress(res);
+                    pollTimelineAfterRebuild(attempt + 1);
+                    return;
+                }
+                if (res.status === 'extracting') {
+                    showRebuildProgress(res);
+                    pollTimelineAfterRebuild(attempt + 1);
+                    return;
+                }
+                if (job && job.status === 'failed') {
+                    setRebuildButtonsEnabled(!!currentCaseId);
+                    showToast(job.message || '재추출에 실패했습니다.');
+                    loadTimeline(currentCaseId);
+                    return;
+                }
+                setRebuildButtonsEnabled(!!currentCaseId);
+                loadTimeline(currentCaseId);
+                if (res.status === 'ready' && (res.eventCount || 0) > 0) {
+                    showToast(job && job.message ? job.message : '타임라인이 갱신되었습니다.');
+                } else if (job && job.status === 'completed') {
+                    showToast(job.message || '추출이 완료되었습니다.');
+                }
+            })
+            .catch(function() { pollTimelineAfterRebuild(attempt + 1); });
+    }, delay);
+}
+
+function setCanvasEmptyMessage(msg, extracting) {
+    var box = document.getElementById('canvasEmpty');
+    var p = document.getElementById('canvasEmptyText');
+    if (p) {
+        if (extracting && msg.indexOf('\n') === -1) {
+            p.innerHTML = escHtml(msg).replace(/\((\d+)\/(\d+)\)/, '<strong>($1/$2)</strong>');
+        } else {
+            p.textContent = msg;
+        }
+    }
+    if (box) {
+        box.style.display = '';
+        if (extracting) box.classList.add('is-extracting');
+        else box.classList.remove('is-extracting');
+    }
+}
+
+
+function clearTimelineView() {
+    timelineData = null;
+    document.getElementById('timelineMount').innerHTML = '';
+    var box = document.getElementById('canvasEmpty');
+    if (box) {
+        box.style.display = '';
+        box.classList.remove('is-extracting');
+    }
+    document.getElementById('canvasToolbar').classList.remove('show');
+    document.getElementById('canvasLegend').classList.remove('show');
+    document.getElementById('canvasHint').classList.remove('show');
+    document.getElementById('btnZoomReset').disabled = true;
+    closeDetailPanel();
+}
+
+function laneIndex(data, laneId) {
+    return data.lanes.findIndex(function(l) { return l.id === laneId; });
+}
+
+var ROLE_COLORS = {
+    suspect: '#dc2626',
+    victim: '#3d8f6a',
+    witness: '#4a7cdc',
+    reference: '#8b5cf6',
+    statement: '#9ca3af'
+};
+
+function roleColor(roleKey) {
+    return ROLE_COLORS[roleKey] || ROLE_COLORS.statement;
+}
+
+function roleDetailClass(roleKey) {
+    return 'detail-role-' + (roleKey || 'statement');
+}
+
+function laneColor(data, laneId) {
+    var lane = data.lanes.find(function(l) { return l.id === laneId; });
+    if (!lane) return ROLE_COLORS.statement;
+    return lane.color || roleColor(lane.roleKey);
+}
+
+function eventTimeRange(ev) {
+    var s = new Date(ev.start).getTime();
+    if (isNaN(s)) return [0, 0];
+    var e = ev.end ? new Date(ev.end).getTime() : s + 5 * 60 * 1000;
+    if (isNaN(e) || e <= s) e = s + 60 * 1000;
+    return [s, e];
+}
+
+function eventsTimeOverlap(a, b) {
+    var ar = eventTimeRange(a), br = eventTimeRange(b);
+    return ar[0] < br[1] && br[0] < ar[1];
+}
+
+function assignStackRows(events) {
+    if (!events.length) return 1;
+    var sorted = events.slice().sort(function(a, b) {
+        return eventTimeRange(a)[0] - eventTimeRange(b)[0];
+    });
+    var rows = [];
+    sorted.forEach(function(ev) {
+        var placed = false;
+        for (var r = 0; r < rows.length; r++) {
+            if (rows[r].every(function(other) { return !eventsShouldStack(ev, other); })) {
+                rows[r].push(ev);
+                ev._stackRow = r;
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) {
+            ev._stackRow = rows.length;
+            rows.push([ev]);
+        }
+    });
+    return Math.max(1, rows.length);
+}
+
+/** 시간 구간 겹침 또는 시작 시각이 가까우면(축소 시 라벨 겹침 방지) 다른 행에 배치 */
+function eventsShouldStack(a, b) {
+    if (eventsTimeOverlap(a, b)) return true;
+    var as = eventTimeRange(a)[0], bs = eventTimeRange(b)[0];
+    return Math.abs(as - bs) < 3 * 60 * 1000;
+}
+
+function buildTimelineLaneLayout(data) {
+    var EVT_ROW_H = 28;
+    var EVT_GAP = 3;
+    var LANE_PAD = 10;
+    var LANE_H_MIN = 56;
+    var LANE_H_MAX = 360;
+
+    var plotEvents = (data.events || []).filter(function(d) {
+        return d.start && !isNaN(new Date(d.start).getTime());
+    });
+    plotEvents.forEach(function(e) { delete e._stackRow; });
+
+    var laneList = [];
+    var byId = {};
+    var y = 0;
+    (data.lanes || []).forEach(function(lane) {
+        var laneEvents = plotEvents.filter(function(e) { return e.laneId === lane.id; });
+        var stackCount = assignStackRows(laneEvents);
+        var rowH = EVT_ROW_H;
+        var gap = EVT_GAP;
+        var height = LANE_H_MIN;
+        if (stackCount > 1) {
+            var natural = LANE_PAD * 2 + stackCount * EVT_ROW_H + (stackCount - 1) * EVT_GAP;
+            height = Math.min(LANE_H_MAX, natural);
+            if (natural > LANE_H_MAX) {
+                var inner = LANE_H_MAX - LANE_PAD * 2;
+                gap = Math.max(1, Math.floor(EVT_GAP * inner / natural));
+                rowH = Math.max(18, (inner - (stackCount - 1) * gap) / stackCount);
+            }
+        }
+        var entry = {
+            id: lane.id,
+            y0: y,
+            height: height,
+            stackCount: stackCount,
+            pad: LANE_PAD,
+            evtRowH: rowH,
+            evtGap: gap
+        };
+        laneList.push(entry);
+        byId[lane.id] = entry;
+        y += height;
+    });
+    return { lanes: laneList, byId: byId, chartH: y, plotEvents: plotEvents };
+}
+
+function eventBlockY(ev, layout) {
+    var lane = layout.byId[ev.laneId];
+    if (!lane) return 0;
+    var row = ev._stackRow || 0;
+    if (lane.stackCount <= 1) {
+        var barH = Math.min(32, lane.height - lane.pad * 2);
+        return lane.y0 + (lane.height - barH) / 2;
+    }
+    return lane.y0 + lane.pad + row * (lane.evtRowH + lane.evtGap);
+}
+
+function eventBlockHeight(ev, layout) {
+    var lane = layout.byId[ev.laneId];
+    if (!lane) return 28;
+    if (lane.stackCount <= 1) return Math.min(32, lane.height - lane.pad * 2);
+    return lane.evtRowH;
+}
+
+function eventLabelY(ev, layout) {
+    return eventBlockY(ev, layout) + eventBlockHeight(ev, layout) / 2 + 4;
+}
+
+function renderTimeline(data) {
+    var mount = document.getElementById('timelineMount');
+    mount.innerHTML = '';
+    document.getElementById('canvasEmpty').style.display = 'none';
+    document.getElementById('canvasToolbar').classList.add('show');
+    document.getElementById('canvasLegend').classList.add('show');
+    document.getElementById('canvasHint').classList.add('show');
+    document.getElementById('btnZoomReset').disabled = false;
+
+    var W = mount.clientWidth || 800;
+    var H = mount.clientHeight || 500;
+    var plotTop = 36;
+    var margin = { top: 40, right: 28, bottom: 32, left: 128 };
+    var innerW = Math.max(200, W - margin.left - margin.right);
+    var plotAreaH = H - margin.top - margin.bottom - plotTop;
+    timelineLaneLayout = buildTimelineLaneLayout(data);
+    var layout = timelineLaneLayout;
+    var chartH = layout.chartH;
+    var chartPadY = Math.max(0, (plotAreaH - chartH) / 2);
+    var chartTop = plotTop + chartPadY;
+
+    baseXScale = d3.scaleTime()
+        .domain([new Date(data.range.start), new Date(data.range.end)])
+        .range([0, innerW]);
+
+    var svg = d3.select(mount).append('svg')
+        .attr('width', W).attr('height', H);
+
+    zoomRootG = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    var xAxisG = zoomRootG.append('g')
+        .attr('class', 'axis axis-x axis-x-top')
+        .call(d3.axisTop(baseXScale).ticks(6).tickFormat(d3.timeFormat('%m/%d %H:%M')));
+
+    zoomRootG.append('line')
+        .attr('class', 'axis-x-baseline')
+        .attr('x1', 0).attr('x2', innerW)
+        .attr('y1', plotTop - 1).attr('y2', plotTop - 1)
+        .attr('stroke', 'rgba(255,255,255,0.18)');
+
+    var chartG = zoomRootG.append('g')
+        .attr('class', 'chart-root')
+        .attr('transform', 'translate(0, ' + chartTop + ')');
+
+    data.lanes.forEach(function(lane) {
+        var le = layout.byId[lane.id];
+        if (!le) return;
+        var laneG = chartG.append('g')
+            .attr('class', 'lane-label-group')
+            .attr('transform', 'translate(-10, ' + (le.y0 + le.height / 2) + ')');
+        laneG.append('text')
+            .attr('class', 'lane-label-name')
+            .attr('text-anchor', 'end')
+            .attr('x', 0)
+            .attr('y', -5)
+            .text(lane.name || lane.laneKey);
+        laneG.append('text')
+            .attr('class', 'lane-label-role')
+            .attr('text-anchor', 'end')
+            .attr('x', 0)
+            .attr('y', 9)
+            .attr('fill', roleColor(lane.roleKey))
+            .text(lane.role || '진술자');
+        chartG.append('line')
+            .attr('x1', 0).attr('x2', innerW)
+            .attr('y1', le.y0 + le.height).attr('y2', le.y0 + le.height)
+            .attr('stroke', 'rgba(255,255,255,0.08)');
+    });
+
+    function drawLayer(xScale) {
+        var lay = timelineLaneLayout;
+        chartG.selectAll('.layer-gap, .layer-evt, .layer-evt-label').remove();
+
+        chartG.selectAll('.layer-gap').data(data.gaps || []).join('rect')
+            .attr('class', 'layer-gap')
+            .attr('x', function(d) { return xScale(new Date(d.start)); })
+            .attr('width', function(d) { return Math.max(6, xScale(new Date(d.end)) - xScale(new Date(d.start))); })
+            .attr('y', function(d) {
+                var lane = lay.byId[d.laneId];
+                return lane ? lane.y0 + lane.pad : 0;
+            })
+            .attr('height', function(d) {
+                var lane = lay.byId[d.laneId];
+                return lane ? lane.height - lane.pad * 2 : 36;
+            })
+            .attr('fill', 'rgba(220,38,38,0.14)')
+            .attr('stroke', '#f87171')
+            .attr('stroke-dasharray', '5 4')
+            .attr('rx', 4)
+            .style('cursor', 'pointer')
+            .on('click', function(ev, d) { openGapDetail(d); });
+
+        var plotEvents = lay.plotEvents;
+
+        chartG.selectAll('.layer-evt').data(plotEvents).join('rect')
+            .attr('class', function(d) { return 'layer-evt' + (d.timeUncertain ? ' layer-evt-uncertain' : ''); })
+            .attr('x', function(d) { return xScale(new Date(d.start)); })
+            .attr('width', function(d) {
+                var end = d.end ? new Date(d.end) : new Date(d.start);
+                var w = xScale(end) - xScale(new Date(d.start));
+                return Math.max(d.timeUncertain ? 10 : 8, w + (d.end ? 0 : 6));
+            })
+            .attr('y', function(d) { return eventBlockY(d, lay); })
+            .attr('height', function(d) { return eventBlockHeight(d, lay); })
+            .attr('rx', 5)
+            .attr('fill', function(d) {
+                if (d.type === 'alibi') return d.timeUncertain ? 'rgba(74,124,220,0.35)' : 'rgba(74,124,220,0.58)';
+                return d.timeUncertain ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.32)';
+            })
+            .attr('stroke', function(d) { return laneColor(data, d.laneId); })
+            .attr('stroke-width', 1.2)
+            .attr('stroke-dasharray', function(d) { return d.timeUncertain ? '4 3' : null; })
+            .style('cursor', 'pointer')
+            .on('click', function(ev, d) { openEventDetail(d); });
+
+        var labelData = plotEvents.filter(function(d) {
+            var end = d.end ? new Date(d.end) : new Date(d.start);
+            var w = xScale(end) - xScale(new Date(d.start));
+            var bw = Math.max(d.timeUncertain ? 10 : 8, w + (d.end ? 0 : 6));
+            var bh = eventBlockHeight(d, lay);
+            return bw >= 28 && bh >= 14;
+        });
+
+        chartG.selectAll('.layer-evt-label').data(labelData, function(d) { return d.id; }).join('text')
+            .attr('class', 'evt-label layer-evt-label')
+            .attr('x', function(d) { return xScale(new Date(d.start)) + 4; })
+            .attr('y', function(d) { return eventLabelY(d, lay); })
+            .attr('text-anchor', 'start')
+            .attr('dominant-baseline', 'middle')
+            .each(function(d) {
+                var end = d.end ? new Date(d.end) : new Date(d.start);
+                var x0 = xScale(new Date(d.start));
+                var x1 = xScale(end);
+                var bw = Math.max(8, x1 - x0 + (d.end ? 0 : 6));
+                var chars = Math.max(4, Math.floor((bw - 8) / 6));
+                var prefix = d.timeUncertain ? '~ ' : '';
+                var lbl = d.label || '';
+                var text = prefix + (lbl.length > chars ? lbl.slice(0, Math.max(1, chars - 1)) + '…' : lbl);
+                d3.select(this).text(text);
+            });
+
+        chartG.selectAll('.layer-evt').attr('title', function(d) {
+            var prefix = d.timeUncertain ? '~ ' : '';
+            return prefix + (d.label || '');
+        });
+    }
+
+    drawLayer(baseXScale);
+
+    zoomBehavior = d3.zoom()
+        .scaleExtent([0.5, 12])
+        .translateExtent([[-innerW, -chartH], [innerW * 2, chartH * 2]])
+        .on('zoom', function(ev) {
+            currentTransform = ev.transform;
+            var zx = ev.transform.rescaleX(baseXScale);
+            xAxisG.call(d3.axisTop(zx).ticks(6).tickFormat(d3.timeFormat('%m/%d %H:%M')));
+            drawLayer(zx);
+        });
+
+    svg.call(zoomBehavior);
+    currentTransform = d3.zoomIdentity;
+}
+
+function zoomTimeline(factor) {
+    var mount = document.getElementById('timelineMount');
+    var svg = d3.select(mount).select('svg');
+    if (svg.empty() || !zoomBehavior) return;
+    svg.transition().duration(200).call(zoomBehavior.scaleBy, factor);
+}
+
+function resetTimelineZoom() {
+    var mount = document.getElementById('timelineMount');
+    var svg = d3.select(mount).select('svg');
+    if (svg.empty() || !zoomBehavior) return;
+    svg.transition().duration(250).call(zoomBehavior.transform, d3.zoomIdentity);
+}
+
+function formatSourceTranscriptHtml(source, actorRole) {
+    if (!source) return '—';
+    var name = escHtml(source.stmtName || '미입력');
+    var type = escHtml(actorRole || source.stmtType || '');
+    var tid = source.transcriptId;
+    if (tid && Number(tid) > 0) {
+        var linkText = name + ' (조서 #' + tid + ')';
+        var href = '/desktop/writeTranscript?transcriptId=' + encodeURIComponent(tid);
+        var link = '<a class="detail-transcript-link" href="' + href + '">' + linkText + '</a>';
+        return type ? '<span class="detail-source-type">' + type + '</span> · ' + link : link;
+    }
+    return (name + (type ? ' · ' + type : '')) || '—';
+}
+
+function openEventDetail(ev) {
+    var tagCls = ev.type === 'alibi' ? 'tag-alibi' : 'tag-action';
+    var tagLabel = ev.type === 'alibi' ? '알리바이' : (ev.type === 'observation' ? '목격' : '행위');
+    var roleKey = ev.actorRoleKey || 'statement';
+    var roleLabel = ev.actorRole || '진술자';
+    var actorName = ev.actorName || (ev.source && ev.source.stmtName) || '';
+    document.getElementById('detailTitle').textContent = ev.label || '이벤트';
+    document.getElementById('detailSub').textContent =
+        (actorName ? actorName + ' · ' : '') + formatTimeRange(ev.start, ev.end, ev.timeText, ev.timeUncertain);
+    document.getElementById('detailBody').innerHTML =
+        '<div class="detail-row">' +
+        '<span class="detail-role-tag ' + roleDetailClass(roleKey) + '">' + escHtml(roleLabel) + '</span>' +
+        '<span class="detail-tag ' + tagCls + '">' + tagLabel + '</span>' +
+        (ev.timeUncertain ? '<span class="detail-tag" style="background:#fffbeb;color:#92400e">추정·상대시간</span>' : '') + '</div>' +
+        '<div class="detail-row"><div class="detail-label">시간 표현</div><div class="detail-value">' + escHtml(ev.timeText || '—') + '</div></div>' +
+        '<div class="detail-row"><div class="detail-label">장소</div><div class="detail-value">' + escHtml(ev.place || '—') + '</div></div>' +
+        '<div class="detail-row"><div class="detail-label">원문 인용</div><div class="detail-quote">' + escHtml(ev.quote || '') + '</div></div>' +
+        '<div class="detail-row"><div class="detail-label">출처 조서</div><div class="detail-value">' + formatSourceTranscriptHtml(ev.source, ev.actorRole) + '</div></div>';
+    openDetailPanel();
+}
+
+function openGapDetail(gap) {
+    var lane = timelineData && timelineData.lanes.find(function(l) { return l.id === gap.laneId; });
+    document.getElementById('detailTitle').textContent = '알리바이 공백';
+    var laneRole = lane && lane.role && lane.role !== '진술자' ? ' (' + lane.role + ')' : '';
+    document.getElementById('detailSub').textContent =
+        (lane ? lane.name + laneRole : '') + ' · ' + formatTimeRange(gap.start, gap.end);
+    document.getElementById('detailBody').innerHTML =
+        '<div class="detail-row"><span class="detail-tag tag-gap">공백 구간</span></div>' +
+        '<div class="detail-row"><div class="detail-label">판단 근거</div><div class="detail-value">' + escHtml(gap.reason || '') + '</div></div>' +
+        '<div class="detail-row"><div class="detail-label">안내</div><div class="detail-value" style="color:#6b7280;font-size:12px;">추후 DB에 저장된 이벤트·범행 추정 시각을 기준으로 자동 계산됩니다.</div></div>';
+    openDetailPanel();
+}
+
+function formatTimeRange(start, end, timeText, uncertain) {
+    if (timeText && uncertain) return '추정: ' + timeText;
+    if (timeText && !start) return timeText;
+    var fmt = d3.timeFormat('%Y-%m-%d %H:%M');
+    var s = start ? fmt(new Date(start)) : '';
+    var e = end ? fmt(new Date(end)) : '';
+    var range = e && e !== s ? s + ' ~ ' + e : s;
+    if (timeText && range) return range + ' (' + timeText + ')';
+    return range || timeText || '';
+}
+
+function openDetailPanel() {
+    document.getElementById('detailOverlay').classList.add('open');
+    document.getElementById('detailPanel').classList.add('open');
+}
+
+function closeDetailPanel(e) {
+    if (e && e.target !== document.getElementById('detailOverlay')) return;
+    document.getElementById('detailOverlay').classList.remove('open');
+    document.getElementById('detailPanel').classList.remove('open');
+}
+
+function escHtml(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(function() { t.classList.remove('show'); }, 2600);
+}
+
+function loadCasePanel() {
+    var initCaseId = _initCaseId || '';
+    var mount = document.getElementById('caseListMount');
+    var loading = document.getElementById('timelinePanelLoading');
+    mount.innerHTML = '';
+    if (loading) { loading.classList.add('show'); loading.textContent = '사건 목록 불러오는 중…'; }
+
+    fetch('/caseApi?action=caseList', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (loading) loading.classList.remove('show');
+            var cases = Array.isArray(data) ? data : [];
+            if (!cases.length) {
+                mount.innerHTML = '<div style="text-align:center;padding:36px 0;font-size:12px;color:#9ca3af;">등록된 사건이 없습니다.</div>';
+                return;
+            }
+            cases.forEach(function(c) {
+                var cid = String(c.id || '');
+                var cname = c.name || '';
+                var cstatus = c.status || '';
+                var statusBadge = cstatus === '진행중' ? 'badge-active' : cstatus === '완료' ? 'badge-done' : cstatus === '모순발견' ? 'badge-danger' : 'badge-warn';
+                var div = document.createElement('div');
+                div.className = 'case-item';
+                div.id = 'ci_' + cid.replace(/-/g, '_');
+                div.innerHTML =
+                    '<div class="case-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>' +
+                    '<div class="case-info"><div class="case-id-text">' + escHtml(cid) + '</div><div class="case-name">' + escHtml(cname) + '</div></div>' +
+                    '<span class="case-badge ' + statusBadge + '">' + escHtml(cstatus || '미설정') + '</span>';
+                (function(id, name) {
+                    div.addEventListener('click', function() { selectCase(id, name); });
+                })(cid, cname);
+                mount.appendChild(div);
+            });
+            if (initCaseId) {
+                var target = cases.find(function(c) { return String(c.id) === initCaseId; });
+                if (target) selectCase(String(target.id), target.name || '');
+            }
+        })
+        .catch(function() {
+            if (loading) { loading.textContent = '사건 목록을 불러오지 못했습니다.'; loading.style.color = '#dc2626'; }
+        });
+}
+
+(function boot() {
+    loadCasePanel();
+    window.addEventListener('resize', function() {
+        if (timelineData) renderTimeline(timelineData);
+    });
+})();
+</script>
+</body>
+</html>
