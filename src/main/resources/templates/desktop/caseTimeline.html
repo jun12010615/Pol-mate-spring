@@ -822,12 +822,20 @@ function openEventDetail(ev) {
     var actorName = ev.actorName || (ev.source && ev.source.stmtName) || '';
     document.getElementById('detailTitle').textContent = ev.label || '이벤트';
     document.getElementById('detailSub').textContent =
-        (actorName ? actorName + ' · ' : '') + formatTimeRange(ev.start, ev.end, ev.timeText, ev.timeUncertain);
+        (actorName ? actorName + ' · ' : '') + formatTimeRange(ev.start, ev.end, ev.timeText, ev.timeUncertain, ev.timePrecision);
+    var timeKindTag = '';
+    if (ev.timePrecision === 'exact') {
+        timeKindTag = '<span class="detail-tag" style="background:#ecfdf5;color:#047857">절대시간</span>';
+    } else if (ev.timePrecision === 'relative' || ev.timeUncertain) {
+        timeKindTag = '<span class="detail-tag" style="background:#fffbeb;color:#92400e">추정·상대시간</span>';
+    } else if (ev.timePrecision === 'approximate') {
+        timeKindTag = '<span class="detail-tag" style="background:#fff7ed;color:#c2410c">추정·대략</span>';
+    }
     document.getElementById('detailBody').innerHTML =
         '<div class="detail-row">' +
         '<span class="detail-role-tag ' + roleDetailClass(roleKey) + '">' + escHtml(roleLabel) + '</span>' +
         '<span class="detail-tag ' + tagCls + '">' + tagLabel + '</span>' +
-        (ev.timeUncertain ? '<span class="detail-tag" style="background:#fffbeb;color:#92400e">추정·상대시간</span>' : '') + '</div>' +
+        timeKindTag + '</div>' +
         '<div class="detail-row"><div class="detail-label">시간 표현</div><div class="detail-value">' + escHtml(ev.timeText || '—') + '</div></div>' +
         '<div class="detail-row"><div class="detail-label">장소</div><div class="detail-value">' + escHtml(ev.place || '—') + '</div></div>' +
         '<div class="detail-row"><div class="detail-label">원문 인용</div><div class="detail-quote">' + escHtml(ev.quote || '') + '</div></div>' +
@@ -848,9 +856,47 @@ function openGapDetail(gap) {
     openDetailPanel();
 }
 
-function formatTimeRange(start, end, timeText, uncertain) {
+function formatKoreanClock(isoOrDate, withApproxPrefix) {
+    var d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+    if (!d || isNaN(d.getTime())) return '';
+    var h = d.getHours();
+    var m = d.getMinutes();
+    var period;
+    if (h >= 0 && h < 5) period = '새벽 ';
+    else if (h < 12) period = '오전 ';
+    else if (h < 17) period = '오후 ';
+    else if (h < 22) period = '저녁 ';
+    else period = '밤 ';
+    var h12 = h % 12;
+    if (h12 === 0) h12 = 12;
+    var prefix = withApproxPrefix ? '약 ' : '';
+    return prefix + period + h12 + '시' + (m > 0 ? ' ' + m + '분' : '');
+}
+
+function formatTimeRange(start, end, timeText, uncertain, precision) {
+    var prec = precision || '';
+    if (start && prec === 'exact') {
+        var abs = formatKoreanClock(start, false);
+        if (abs) return abs;
+    }
+    if (start && prec === 'relative') {
+        var est = formatKoreanClock(start, true);
+        if (est) return '추정: ' + est;
+    }
+    if (start && prec === 'approximate') {
+        var approxAbs = formatKoreanClock(start, true);
+        if (approxAbs) return '추정: ' + approxAbs;
+    }
+    if (uncertain && start) {
+        var approx = formatKoreanClock(start, true);
+        if (approx) return '추정: ' + approx;
+    }
     if (timeText && uncertain) return '추정: ' + timeText;
     if (timeText && !start) return timeText;
+    if (start && !uncertain) {
+        var plain = formatKoreanClock(start, false);
+        if (plain) return plain;
+    }
     var fmt = d3.timeFormat('%Y-%m-%d %H:%M');
     var s = start ? fmt(new Date(start)) : '';
     var e = end ? fmt(new Date(end)) : '';

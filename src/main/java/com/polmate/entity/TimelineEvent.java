@@ -46,15 +46,6 @@ public class TimelineEvent {
     @Column(name = "time_precision", length = 20)
     private String timePrecision;
 
-    @Column(name = "anchor_sort_order")
-    private Integer anchorSortOrder;
-
-    @Column(name = "offset_minutes")
-    private Integer offsetMinutes;
-
-    @Column(name = "offset_end_minutes")
-    private Integer offsetEndMinutes;
-
     @Column(name = "place", length = 200)
     private String place;
 

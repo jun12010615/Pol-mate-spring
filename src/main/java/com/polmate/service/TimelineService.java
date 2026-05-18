@@ -21,10 +21,14 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -72,6 +76,19 @@ public class TimelineService {
         "action", "alibi", "movement", "other", "unknown"
     );
 
+    private record KoreanClock(int hour24, int minute, String phrase, int position) {}
+
+    private static final Pattern[] KR_CLOCK_PATTERNS = {
+        Pattern.compile("(오전)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(오후)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(밤)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(저녁)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(새벽)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(낮)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
+    };
+
+    private static final boolean[] KR_CLOCK_IS_PM = {false, true, true, true, false, false};
+
     private final TimelineEventRepository eventRepo;
     private final CaseRepository caseRepo;
     private final TranscriptRepository transcriptRepo;
@@ -107,7 +124,8 @@ public class TimelineService {
         String caseName = caseRepo.findById(caseId).map(Case::getCaseName).orElse("");
         long transcriptCount = transcriptRepo.findByCaseIdOrderByCreatedAtDesc(caseId).size();
         List<TimelineEvent> rows = eventRepo.findByCaseIdOrderBySortOrderAscTimeStartAscEventIdAsc(caseId);
-        List<TimelineEvent> resolved = resolveVagueEventTimes(new ArrayList<>(rows)).stream()
+        persistTimelineTimeNormalization(rows);
+        List<TimelineEvent> resolved = rows.stream()
             .filter(this::hasTimeSignal)
             .filter(e -> e.getTimeStart() != null)
             .toList();
@@ -178,8 +196,14 @@ public class TimelineService {
 
             LocalDateTime start = e.getTimeStart();
             LocalDateTime end = e.getTimeEnd();
-            String precision = nvl(e.getTimePrecision(), "exact");
-            boolean timeUncertain = "approximate".equals(precision) || "relative".equals(precision);
+            String precision = nvl(e.getTimePrecision(), "");
+            if (precision.isBlank()) {
+                precision = e.getTimeStart() != null ? "exact" : "unknown";
+            }
+            boolean hasClockInQuote = !findAllKoreanClocks(nvl(e.getQuote(), "")).isEmpty();
+            boolean timeUncertain = "relative".equals(precision)
+                || "unknown".equals(precision)
+                || ("approximate".equals(precision) && !hasClockInQuote);
 
             if (end == null) {
                 end = start.plusMinutes(5);
@@ -252,10 +276,207 @@ public class TimelineService {
         return timeline;
     }
 
+    private static int koreanTo24Hour(int hour12, int minute, boolean pm) {
+        int h = Math.max(1, Math.min(12, hour12));
+        int m = Math.max(0, Math.min(59, minute));
+        if (!pm) {
+            return h == 12 ? 0 : h;
+        }
+        return h == 12 ? 12 : (h < 12 ? h + 12 : h);
+    }
+
+    private static List<KoreanClock> findAllKoreanClocks(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+        List<KoreanClock> hits = new ArrayList<>();
+        for (int i = 0; i < KR_CLOCK_PATTERNS.length; i++) {
+            Matcher m = KR_CLOCK_PATTERNS[i].matcher(text);
+            boolean pm = KR_CLOCK_IS_PM[i];
+            while (m.find()) {
+                try {
+                    int h12 = Integer.parseInt(m.group(2));
+                    String minGroup = m.group(3);
+                    int minute = minGroup != null && !minGroup.isBlank() ? Integer.parseInt(minGroup) : 0;
+                    int h24 = koreanTo24Hour(h12, minute, pm);
+                    hits.add(new KoreanClock(h24, minute, m.group(0).trim(), m.start()));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        hits.sort(Comparator.comparingInt(KoreanClock::position));
+        List<KoreanClock> out = new ArrayList<>();
+        for (KoreanClock c : hits) {
+            if (!out.isEmpty()) {
+                KoreanClock prev = out.get(out.size() - 1);
+                if (prev.hour24() == c.hour24() && prev.minute() == c.minute()) {
+                    continue;
+                }
+            }
+            out.add(c);
+        }
+        return out;
+    }
+
+    private static String mergeDatePrefixTimeText(String existing, String startPhrase, String endPhrase) {
+        String ex = nvl(existing, "").trim();
+        String datePrefix = "";
+        Matcher dm = Pattern.compile("\\d{4}\\s*년\\s*\\d{1,2}\\s*월\\s*\\d{1,2}\\s*일").matcher(ex);
+        if (dm.find()) {
+            datePrefix = dm.group().trim() + " ";
+        }
+        String body = (endPhrase != null && !endPhrase.isBlank() && !endPhrase.equals(startPhrase))
+            ? startPhrase + " ~ " + endPhrase
+            : startPhrase;
+        if (!datePrefix.isEmpty() && !body.contains(datePrefix.trim())) {
+            return datePrefix + body;
+        }
+        return body.isBlank() ? ex : body;
+    }
+
+    /** quote에 여러 시각이 있으면 첫 시각=시작, 마지막 시각=종료로 보정 (표시·기존 DB용). */
+    private void reconcileEventTimesFromQuote(TimelineEvent e) {
+        String quote = nvl(e.getQuote(), "");
+        if (quote.isBlank()) {
+            return;
+        }
+        List<KoreanClock> clocks = findAllKoreanClocks(quote);
+        if (clocks.isEmpty()) {
+            return;
+        }
+
+        KoreanClock start = clocks.get(0);
+        LocalDate base = e.getTimeStart() != null
+            ? e.getTimeStart().toLocalDate()
+            : LocalDate.now();
+        LocalDateTime startDt = LocalDateTime.of(base, LocalTime.of(start.hour24(), start.minute()));
+        e.setTimeStart(startDt);
+
+        if (clocks.size() >= 2) {
+            KoreanClock end = clocks.get(clocks.size() - 1);
+            LocalDateTime endDt = LocalDateTime.of(base, LocalTime.of(end.hour24(), end.minute()));
+            if (!endDt.isAfter(startDt)) {
+                endDt = endDt.plusDays(1);
+            }
+            e.setTimeEnd(endDt);
+            e.setTimeText(mergeDatePrefixTimeText(e.getTimeText(), start.phrase(), end.phrase()));
+        } else {
+            LocalDateTime endDt = e.getTimeEnd();
+            if (endDt == null || !endDt.isAfter(startDt)) {
+                e.setTimeEnd(startDt.plusMinutes(5));
+            }
+            if (nvl(e.getTimeText(), "").isBlank()) {
+                e.setTimeText(start.phrase());
+            }
+        }
+        e.setTimePrecision(inferClockPrecisionFromQuote(quote, start, clocks.size() >= 2 ? clocks.get(clocks.size() - 1) : null));
+    }
+
+    /** quote·시각 구문 주변의 경/쯤/대략 등 → approximate, 아니면 exact */
+    private static String inferClockPrecisionFromQuote(String quote, KoreanClock start, KoreanClock end) {
+        if (isApproximateClockContext(quote, nvl(start.phrase(), ""), start.position())) {
+            return "approximate";
+        }
+        if (end != null && isApproximateClockContext(quote, nvl(end.phrase(), ""), end.position())) {
+            return "approximate";
+        }
+        return "exact";
+    }
+
+    private static boolean isApproximateClockContext(String quote, String phrase, int position) {
+        if (phrase != null && (phrase.contains("경") || phrase.contains("쯤")
+            || phrase.contains("대략") || phrase.contains("무렵"))) {
+            return true;
+        }
+        if (quote == null || quote.isBlank()) {
+            return false;
+        }
+        int from = Math.max(0, position);
+        int to = Math.min(quote.length(), from + Math.max(phrase != null ? phrase.length() : 0, 0) + 4);
+        if (from < to) {
+            String window = quote.substring(from, to);
+            if (window.contains("경") || window.contains("쯤")
+                || window.contains("대략") || window.contains("무렵")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void normalizeTimelineEventTimes(List<TimelineEvent> rows) {
+        for (TimelineEvent row : rows) {
+            reconcileEventTimesFromQuote(row);
+        }
+        resolveRelativeDurationsFromText(rows);
+        resolveVagueEventTimes(rows);
+    }
+
+    private void persistTimelineTimeNormalization(List<TimelineEvent> rows) {
+        if (rows.isEmpty()) {
+            return;
+        }
+        Map<Long, TimelineTimeSnapshot> before = new HashMap<>();
+        for (TimelineEvent row : rows) {
+            if (row.getEventId() != null) {
+                before.put(row.getEventId(), TimelineTimeSnapshot.of(row));
+            }
+        }
+        normalizeTimelineEventTimes(rows);
+        List<TimelineEvent> dirty = new ArrayList<>();
+        for (TimelineEvent row : rows) {
+            if (row.getEventId() == null) {
+                continue;
+            }
+            TimelineTimeSnapshot snap = before.get(row.getEventId());
+            if (snap != null && !snap.matches(row)) {
+                dirty.add(row);
+            }
+        }
+        if (dirty.isEmpty()) {
+            return;
+        }
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            for (TimelineEvent row : dirty) {
+                eventRepo.save(row);
+            }
+        });
+    }
+
+    private static final class TimelineTimeSnapshot {
+        private final LocalDateTime timeStart;
+        private final LocalDateTime timeEnd;
+        private final String timePrecision;
+        private final String timeText;
+
+        private TimelineTimeSnapshot(LocalDateTime timeStart, LocalDateTime timeEnd,
+                                     String timePrecision, String timeText) {
+            this.timeStart = timeStart;
+            this.timeEnd = timeEnd;
+            this.timePrecision = timePrecision;
+            this.timeText = timeText;
+        }
+
+        static TimelineTimeSnapshot of(TimelineEvent e) {
+            return new TimelineTimeSnapshot(
+                e.getTimeStart(), e.getTimeEnd(), e.getTimePrecision(), e.getTimeText());
+        }
+
+        boolean matches(TimelineEvent e) {
+            return Objects.equals(timeStart, e.getTimeStart())
+                && Objects.equals(timeEnd, e.getTimeEnd())
+                && Objects.equals(timePrecision, e.getTimePrecision())
+                && Objects.equals(timeText, e.getTimeText());
+        }
+    }
+
+    private static String relativeChainKey(TimelineEvent e) {
+        int tid = e.getTranscriptId() != null ? e.getTranscriptId() : 0;
+        return tid + "|" + normPersonName(nvl(e.getStmtName(), ""));
+    }
+
     /** 타임라인 저장·표시 대상: 시간 단서가 있는 이벤트만 */
     private boolean hasTimeSignal(TimelineEvent e) {
         if (e.getTimeStart() != null) return true;
-        if (e.getOffsetMinutes() != null) return true;
         String prec = nvl(e.getTimePrecision(), "");
         String tt = nvl(e.getTimeText(), "");
         if (tt.isEmpty()) return false;
@@ -267,69 +488,94 @@ public class TimelineService {
         return false;
     }
 
-    private List<TimelineEvent> resolveVagueEventTimes(List<TimelineEvent> rows) {
-        Map<Integer, List<TimelineEvent>> byTranscript = rows.stream()
-            .collect(Collectors.groupingBy(e -> e.getTranscriptId() != null ? e.getTranscriptId() : 0));
+    private static final Pattern REL_MINUTES_AFTER = Pattern.compile(
+        "(?:약|대략|그때부터|출발(?:한)?\\s*지)?\\s*(\\d{1,4})\\s*분\\s*(?:후|뒤|이후|지난|지나|경과)",
+        Pattern.CASE_INSENSITIVE);
+    private static final Pattern REL_MINUTES_ELAPSED = Pattern.compile(
+        "(?:약|대략)?\\s*(\\d{1,4})\\s*분(?:이|이)?\\s*(?:지난|지나|경과|후|뒤)",
+        Pattern.CASE_INSENSITIVE);
+    private static final Pattern REL_HOURS_AFTER = Pattern.compile(
+        "(?:약|대략)?\\s*(\\d{1,2})\\s*시간\\s*(?:후|뒤|이후|지난|경과|정도)",
+        Pattern.CASE_INSENSITIVE);
 
-        for (List<TimelineEvent> group : byTranscript.values()) {
-            group.sort(Comparator.comparingInt(TimelineEvent::getSortOrder));
-            Map<Integer, LocalDateTime> anchorBySort = new HashMap<>();
+    /** quote의 'N분 후' → 같은 조서·같은 행위 주체(stmt_name)의 직전 이벤트 time_start + N분. */
+    private void resolveRelativeDurationsFromText(List<TimelineEvent> rows) {
+        Map<String, List<TimelineEvent>> byChain = rows.stream()
+            .collect(Collectors.groupingBy(TimelineService::relativeChainKey));
 
+        for (List<TimelineEvent> group : byChain.values()) {
+            group.sort(Comparator.comparingInt(TimelineEvent::getSortOrder)
+                .thenComparing(e -> e.getEventId() != null ? e.getEventId() : 0L));
+            LocalDateTime lastAnchor = null;
             for (TimelineEvent e : group) {
-                if (e.getTimeStart() != null) {
-                    anchorBySort.put(e.getSortOrder(), e.getTimeStart());
+                String quote = nvl(e.getQuote(), "");
+                if (!findAllKoreanClocks(quote).isEmpty()) {
+                    lastAnchor = chainAnchorAfterEvent(e);
+                    continue;
                 }
-            }
-
-            for (TimelineEvent e : group) {
-                if (e.getTimeStart() != null) continue;
-
-                LocalDateTime anchor = null;
-                if (e.getAnchorSortOrder() != null) {
-                    anchor = anchorBySort.get(e.getAnchorSortOrder());
-                }
-                if (anchor == null) {
-                    anchor = findPriorAnchorTime(e, group, anchorBySort);
-                }
-                if (anchor != null && e.getOffsetMinutes() != null) {
-                    LocalDateTime start = anchor.plusMinutes(e.getOffsetMinutes());
-                    e.setTimeStart(start);
-                    int endOff = e.getOffsetEndMinutes() != null ? e.getOffsetEndMinutes() : e.getOffsetMinutes() + 5;
-                    e.setTimeEnd(anchor.plusMinutes(endOff));
-                    if (e.getTimePrecision() == null || e.getTimePrecision().isBlank()) {
-                        e.setTimePrecision("relative");
+                String src = quote.isBlank() ? nvl(e.getTimeText(), "") : quote;
+                int offMin = parseRelativeOffsetMinutes(src);
+                if (offMin < 0) {
+                    if (e.getTimeStart() != null) {
+                        lastAnchor = chainAnchorAfterEvent(e);
                     }
-                    anchorBySort.put(e.getSortOrder(), start);
+                    continue;
+                }
+                if (lastAnchor == null) {
+                    continue;
+                }
+                LocalDateTime start = lastAnchor.plusMinutes(offMin);
+                e.setTimeStart(start);
+                e.setTimeEnd(start.plusMinutes(5));
+                e.setTimePrecision("relative");
+                if (nvl(e.getTimeText(), "").isBlank() && !quote.isBlank()) {
+                    e.setTimeText(quote.length() > 200 ? quote.substring(0, 199) + "…" : quote);
+                }
+                lastAnchor = start;
+            }
+        }
+    }
+
+    private static LocalDateTime chainAnchorAfterEvent(TimelineEvent e) {
+        return e.getTimeStart();
+    }
+
+    /** 분 단위 오프셋, 없으면 -1 */
+    private static int parseRelativeOffsetMinutes(String text) {
+        if (text == null || text.isBlank()) {
+            return -1;
+        }
+        if (!findAllKoreanClocks(text).isEmpty()) {
+            return -1;
+        }
+        for (Pattern pat : new Pattern[] { REL_MINUTES_AFTER, REL_MINUTES_ELAPSED }) {
+            Matcher m = pat.matcher(text);
+            if (m.find()) {
+                try {
+                    return Integer.parseInt(m.group(1));
+                } catch (NumberFormatException ignored) {
                 }
             }
         }
+        Matcher m = REL_HOURS_AFTER.matcher(text);
+        if (m.find()) {
+            try {
+                return Integer.parseInt(m.group(1)) * 60;
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return -1;
+    }
 
-        LocalDateTime caseAnchor = rows.stream()
-            .map(TimelineEvent::getTimeStart)
-            .filter(Objects::nonNull)
-            .min(LocalDateTime::compareTo)
-            .orElse(null);
-
+    /** time_end 미설정 시 짧은 기본 구간만 부여. */
+    private List<TimelineEvent> resolveVagueEventTimes(List<TimelineEvent> rows) {
         for (TimelineEvent e : rows) {
-            if (e.getTimeStart() != null || e.getOffsetMinutes() == null || caseAnchor == null) continue;
-            e.setTimeStart(caseAnchor.plusMinutes(e.getOffsetMinutes()));
-            int endOff = e.getOffsetEndMinutes() != null ? e.getOffsetEndMinutes() : e.getOffsetMinutes() + 5;
-            e.setTimeEnd(caseAnchor.plusMinutes(endOff));
-            if (e.getTimePrecision() == null || e.getTimePrecision().isBlank()) {
-                e.setTimePrecision("relative");
+            if (e.getTimeStart() == null) continue;
+            if (e.getTimeEnd() == null || !e.getTimeEnd().isAfter(e.getTimeStart())) {
+                e.setTimeEnd(e.getTimeStart().plusMinutes(5));
             }
         }
         return rows;
-    }
-
-    private LocalDateTime findPriorAnchorTime(TimelineEvent current, List<TimelineEvent> group,
-                                              Map<Integer, LocalDateTime> anchorBySort) {
-        for (int i = group.size() - 1; i >= 0; i--) {
-            TimelineEvent e = group.get(i);
-            if (e.getSortOrder() >= current.getSortOrder()) continue;
-            if (e.getTimeStart() != null) return e.getTimeStart();
-        }
-        return anchorBySort.values().stream().min(LocalDateTime::compareTo).orElse(null);
     }
 
     private Map<String, Object> newLane(String personName, String roleKey) {
@@ -746,7 +992,7 @@ public class TimelineService {
         Map<String, String> personRoles = buildPersonRoleMap(
             caseId, caseRepo.findById(caseId), List.of());
         int order = 0;
-        int saved = 0;
+        List<TimelineEvent> batch = new ArrayList<>();
         for (int i = 0; i < events.length(); i++) {
             JSONObject ev = events.optJSONObject(i);
             if (ev == null) continue;
@@ -758,14 +1004,6 @@ public class TimelineService {
 
             String actorName = resolveEventActorName(ev, defaultActor);
             String eventType = nvl(ev.optString("event_type", ev.optString("eventType", "")), "unknown");
-            Integer anchorSort = optInteger(ev, "anchor_sort_order", "anchorSortOrder");
-            Integer anchorIdx = optInteger(ev, "anchor_index", "anchorIndex");
-            if (anchorSort == null && anchorIdx != null && anchorIdx >= 0 && anchorIdx < events.length()) {
-                JSONObject anchorEv = events.optJSONObject(anchorIdx);
-                if (anchorEv != null) {
-                    anchorSort = optInteger(anchorEv, "sort_order", "sortOrder");
-                }
-            }
             TimelineEvent row = TimelineEvent.builder()
                 .caseId(caseId)
                 .transcriptId(transcriptId)
@@ -778,15 +1016,17 @@ public class TimelineService {
                 .timeEnd(parseDateTime(ev.optString("time_end", ev.optString("timeEnd", null))))
                 .timeText(optString(ev, "time_text", "timeText"))
                 .timePrecision(optString(ev, "time_precision", "timePrecision"))
-                .anchorSortOrder(anchorSort)
-                .offsetMinutes(optInteger(ev, "offset_minutes", "offsetMinutes"))
-                .offsetEndMinutes(optInteger(ev, "offset_end_minutes", "offsetEndMinutes"))
                 .place(ev.optString("place", null))
                 .label(label)
                 .quote(quote)
                 .confidence(nvl(ev.optString("confidence", ""), "medium"))
                 .sortOrder(ev.optInt("sort_order", ev.optInt("sortOrder", (++order) * 10)))
                 .build();
+            batch.add(row);
+        }
+        normalizeTimelineEventTimes(batch);
+        int saved = 0;
+        for (TimelineEvent row : batch) {
             eventRepo.save(row);
             saved++;
         }
@@ -915,7 +1155,6 @@ public class TimelineService {
         if (parseDateTime(ev.optString("time_start", ev.optString("timeStart", null))) != null) {
             return true;
         }
-        if (optInteger(ev, "offset_minutes", "offsetMinutes") != null) return true;
         String tt = nvl(optString(ev, "time_text", "timeText"), "");
         if (tt.isEmpty()) return false;
         String prec = nvl(optString(ev, "time_precision", "timePrecision"), "");
