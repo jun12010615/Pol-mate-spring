@@ -50,17 +50,18 @@ public class RelationBoardService {
             "u.user_name AS updater_name, b.board_json " +
             "FROM relation_boards b JOIN cases c ON b.case_id=c.case_id " +
             "LEFT JOIN users u ON b.updated_by=u.user_id " +
-            "WHERE (c.user_id=? OR c.user_id IN (" +
-            "  SELECT u2.user_id FROM users u2 JOIN users me ON me.user_id=? " +
-            "  WHERE u2.dept_id=me.dept_id AND me.dept_id IS NOT NULL)) " +
-            "ORDER BY b.updated_at DESC", userId, userId);
+            "WHERE c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?) " +
+            "ORDER BY b.updated_at DESC", userId);
     }
 
     @Transactional
     public Map<String, Object> save(String userId, String caseId, String boardJson, boolean isUpdate) {
         Map<String, Object> result = new HashMap<>();
         if (!hasAccess(caseId, userId)) {
-            result.put("success", false); result.put("message", "접근 권한이 없습니다."); return result;
+            result.put("success", false);
+            result.put("message", "접근 권한이 없습니다.");
+            result.put("error", "접근 권한이 없습니다.");
+            return result;
         }
         boolean exists = boardRepo.existsByCaseId(caseId);
         if (exists) {
@@ -149,6 +150,8 @@ public class RelationBoardService {
                 .caseId(caseId).userId(userId)
                 .action("보드 저장: 인물 " + pCount + "명, 관계선 " + eCount + "개")
                 .createdAt(LocalDateTime.now()).build());
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) {
+            throw new IllegalStateException("관계망 인물·관계선 동기화 실패: " + e.getMessage(), e);
+        }
     }
 }
