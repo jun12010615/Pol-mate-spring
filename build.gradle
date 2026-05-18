@@ -30,6 +30,9 @@ dependencies {
     // MySQL
     runtimeOnly 'com.mysql:mysql-connector-j'
 
+    // Security (BCrypt 비밀번호 해싱)
+    implementation 'org.springframework.security:spring-security-crypto'
+
     // JSON
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'org.json:json:20240303'

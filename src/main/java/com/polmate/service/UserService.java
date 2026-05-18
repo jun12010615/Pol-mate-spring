@@ -5,6 +5,7 @@ import com.polmate.entity.User;
 import com.polmate.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +32,7 @@ public class UserService {
     private final BoardTagRepository tagRepo;
     private final BoardLinkRepository linkRepo;
     private final JdbcTemplate jdbc;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public Optional<User> findById(String userId) {
         return userRepo.findById(userId);
@@ -46,7 +48,7 @@ public class UserService {
 
     public boolean authenticate(String userId, String rawPw) {
         return userRepo.findById(userId)
-                       .map(u -> rawPw.equals(u.getUserPw()))
+                       .map(u -> passwordEncoder.matches(rawPw, u.getUserPw()))
                        .orElse(false);
     }
 
@@ -70,7 +72,7 @@ public class UserService {
                          String userEmail, String userOrg, String userRank,
                          Integer deptId, String badgeNum) {
         User user = User.builder()
-            .userId(userId).userPw(userPw).userName(userName)
+            .userId(userId).userPw(passwordEncoder.encode(userPw)).userName(userName)
             .userPhone(userPhone.isEmpty() ? null : userPhone)
             .userEmail(userEmail).userOrg(userOrg).userRank(userRank)
             .deptId(deptId).badgeNum(badgeNum)
@@ -112,13 +114,13 @@ public class UserService {
 
     public boolean checkPassword(String userId, String rawPw) {
         return userRepo.findById(userId)
-                       .map(u -> rawPw.equals(u.getUserPw()))
+                       .map(u -> passwordEncoder.matches(rawPw, u.getUserPw()))
                        .orElse(false);
     }
 
     @Transactional
     public boolean changePassword(String userId, String newPw) {
-        return userRepo.updatePassword(userId, newPw, LocalDateTime.now()) > 0;
+        return userRepo.updatePassword(userId, passwordEncoder.encode(newPw), LocalDateTime.now()) > 0;
     }
 
     @Transactional

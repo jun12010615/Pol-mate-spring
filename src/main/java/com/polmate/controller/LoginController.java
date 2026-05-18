@@ -38,7 +38,7 @@ public class LoginController {
         }
 
         Optional<User> opt = userService.findById(userId.trim());
-        if (opt.isEmpty() || !userPw.equals(opt.get().getUserPw())) {
+        if (opt.isEmpty() || !userService.authenticate(userId.trim(), userPw)) {
             model.addAttribute("loginError", "아이디 또는 비밀번호가 올바르지 않습니다.");
             return errorView;
         }
