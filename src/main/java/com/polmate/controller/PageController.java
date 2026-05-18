@@ -46,5 +46,6 @@ public class PageController {
     @GetMapping("/desktop/voiceTranscript") public String desktopVoiceTranscript() { return "desktop/voiceTranscript"; }
     @GetMapping("/desktop/writeTranscript") public String desktopWriteTranscript() { return "desktop/writeTranscript"; }
     @GetMapping("/desktop/caseRelationMap") public String desktopCaseRelationMap() { return "desktop/caseRelationMap"; }
+    @GetMapping("/desktop/caseTimeline")     public String desktopCaseTimeline()     { return "desktop/caseTimeline"; }
     @GetMapping("/desktop/cctvAnalysis") public String desktopCctvAnalysis() { return "desktop/cctvAnalysis"; }
 }
