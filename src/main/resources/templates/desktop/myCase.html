@@ -431,6 +431,11 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
     <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-title">새 사건 등록</div>
         <div class="form-field">
+            <label class="form-label">사건번호 <span style="color:#dc2626">*</span></label>
+            <input type="text" class="form-input" id="newCaseId" placeholder="예: 2025-0001" maxlength="9">
+            <div style="font-size:10px; color:#9ca3af; margin-top:4px;">연도-4자리 번호 형식 (예: 2025-0001)</div>
+        </div>
+        <div class="form-field">
             <label class="form-label">사건명 <span style="color:#dc2626">*</span></label>
             <input type="text" class="form-input" id="newCaseName" placeholder="사건명 입력">
         </div>
@@ -440,7 +445,7 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
         </div>
         <div class="form-field">
             <label class="form-label">종류</label>
-            <input type="text" class="form-input" id="newCharge" placeholder="종류명 (예: 절도주거즼)">
+            <input type="text" class="form-input" id="newCharge" placeholder="예: 절도, 폭행 등">
         </div>
         <div class="modal-actions">
             <button class="btn-cancel" onclick="closeNewModal()">취소</button>
@@ -756,28 +761,36 @@ function doDelete(caseId) {
 }
 
 function openNewModal() { document.getElementById('newModal').classList.add('open'); }
-function closeNewModal() { document.getElementById('newModal').classList.remove('open'); }
+function closeNewModal() {
+    document.getElementById('newModal').classList.remove('open');
+    document.getElementById('newCaseId').value = '';
+    document.getElementById('newCaseName').value = '';
+    document.getElementById('newSuspect').value = '';
+    document.getElementById('newCharge').value = '';
+}
 
 function createCase() {
+    var caseId = document.getElementById('newCaseId').value.trim();
     var name = document.getElementById('newCaseName').value.trim();
+    if (!caseId) { showToast('사건번호를 입력해 주세요.'); return; }
+    if (!/^\d{4}-\d{4}$/.test(caseId)) { showToast('사건번호 형식이 올바르지 않습니다. (예: 2025-0001)'); return; }
     if (!name) { showToast('사건명을 입력해 주세요.'); return; }
     var fd = new FormData();
     fd.append('action', 'caseCreate');
+    fd.append('caseId', caseId);
     fd.append('caseName', name);
     fd.append('suspect', document.getElementById('newSuspect').value.trim());
     fd.append('charge',  document.getElementById('newCharge').value.trim());
     fetch('/caseApi', {method: 'POST', body: fd, credentials: 'same-origin'})
         .then(function(r) { return r.json(); })
         .then(function(d) {
+            if (!d.success) { showToast(d.message || '등록에 실패했습니다.'); return; }
             closeNewModal();
-            document.getElementById('newCaseName').value = '';
-            document.getElementById('newSuspect').value = '';
-            document.getElementById('newCharge').value = '';
             showToast('사건이 등록되었습니다.');
             loadCases();
             if (d.caseId) openDetail(d.caseId);
         })
-        .catch(function() { showToast('등록 중 오류가 발생피습니다.'); });
+        .catch(function() { showToast('등록 중 오류가 발생했습니다.'); });
 }
 
 function showToast(msg) {
