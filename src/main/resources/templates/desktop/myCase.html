@@ -140,6 +140,52 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
     font-size: 12px; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; transition: background 0.13s;
 }
 .btn-save:hover { background: #1a2744; }
+.case-tool-row {
+    display: flex;
+    width: 100%;
+    margin-bottom: 16px;
+}
+.case-tool-btn {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: 'Noto Sans KR', sans-serif;
+    text-decoration: none;
+    text-align: center;
+    line-height: 1.35;
+    border: 1.5px solid #e2e5ee;
+    background: #f4f6fb;
+    color: #0d1a33;
+    cursor: pointer;
+    transition: background 0.13s, border-color 0.13s, color 0.13s;
+}
+.case-tool-btn + .case-tool-btn { border-left: none; }
+.case-tool-btn:first-child {
+    border-radius: 12px 0 0 12px;
+}
+.case-tool-btn:last-child {
+    border-radius: 0 12px 12px 0;
+}
+.case-tool-btn:hover {
+    background: #e8ecf4;
+    border-color: #c5cad6;
+}
+.case-tool-btn:hover + .case-tool-btn { border-left-color: #c5cad6; }
+.case-tool-btn-primary {
+    background: #0d1a33;
+    color: #fff;
+    border-color: #0d1a33;
+}
+.case-tool-btn-primary:hover {
+    background: #1a2744;
+    border-color: #1a2744;
+}
+.case-tool-btn-primary:hover + .case-tool-btn { border-left-color: #1a2744; }
 .btn-danger {
     padding: 8px 14px; background: transparent; color: #dc2626; border: 1px solid #fecaca;
     border-radius: 10px; font-size: 12px; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; transition: all 0.13s;
@@ -347,7 +393,12 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
         </div>
         <div class="tab-pane active" id="tabInfo">
             <div class="info-grid" id="dpInfoGrid"></div>
-            <div class="sec-label" style="margin-top:16px">상태 변경</div>
+            <div class="sec-label" style="margin-top:16px">수사 도구</div>
+            <div class="case-tool-row">
+                <a class="case-tool-btn case-tool-btn-primary" id="btnCaseTimeline" href="#">사건 타임라인</a>
+                <a class="case-tool-btn" id="btnCaseRelation" href="#">사건 관계망</a>
+            </div>
+            <div class="sec-label" style="margin-top:4px">상태 변경</div>
             <div class="status-form">
                 <select class="status-select" id="dpStatusSel">
                     <option>진행중</option>
@@ -572,6 +623,8 @@ function openDetail(caseId) {
                 }).join('');
             }
             document.getElementById('btnNewDoc').href = '/desktop/writeTranscript?caseId=' + encodeURIComponent(caseId);
+            document.getElementById('btnCaseTimeline').href = '/desktop/caseTimeline?caseId=' + encodeURIComponent(caseId);
+            document.getElementById('btnCaseRelation').href = '/desktop/caseRelationMap?caseId=' + encodeURIComponent(caseId);
         })
         .catch(function() { showToast('사건 상세를 불러올 수 없습니다.'); });
 }

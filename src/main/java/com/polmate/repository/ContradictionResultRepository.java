@@ -12,6 +12,8 @@ public interface ContradictionResultRepository extends JpaRepository<Contradicti
 
     List<ContradictionResult> findByUserIdOrderByCreatedAtDesc(String userId);
 
+    List<ContradictionResult> findByCaseIdAndHasContradiction(String caseId, boolean hasContradiction);
+
     @Query(value =
         "SELECT cr.*, c.case_name FROM contradiction_results cr " +
         "LEFT JOIN cases c ON cr.case_id = c.case_id " +

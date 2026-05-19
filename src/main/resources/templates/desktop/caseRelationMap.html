@@ -545,7 +545,7 @@ function saveBoard(isUpdate) {
                 document.getElementById('btnSave').style.display = 'none';
                 document.getElementById('btnUpdate').style.display = '';
                 showToast(isUpdate ? '보드가 업데이트되었습니다.' : '보드가 저장되었습니다.');
-            } else { showToast(data.error || '저장에 실패했습니다.'); }
+            } else { showToast(data.error || data.message || '저장에 실패했습니다.'); }
         }).catch(function() { showToast('서버 연결 오류가 발생했습니다.'); });
 }
 

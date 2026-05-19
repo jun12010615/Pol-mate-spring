@@ -6,6 +6,7 @@ import com.polmate.entity.Notification;
 import com.polmate.repository.CaseRepository;
 import com.polmate.repository.CaseSimilarCacheRepository;
 import com.polmate.repository.NotificationRepository;
+import com.polmate.repository.TimelineEventRepository;
 import com.polmate.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.json.JSONArray;
@@ -32,6 +33,7 @@ public class CaseService {
     private final UserRepository userRepo;
     private final NotificationRepository notifRepo;
     private final CaseSimilarCacheRepository simCacheRepo;
+    private final TimelineEventRepository timelineEventRepo;
     private final JdbcTemplate jdbc;
 
     @Value("${polmate.serv.base-url}")
@@ -170,6 +172,7 @@ public class CaseService {
             result.put("success", false); result.put("message", "삭제 권한이 없습니다. (등록자만 삭제 가능)"); return result;
         }
         simCacheRepo.deleteById(caseId);
+        timelineEventRepo.deleteByCaseId(caseId);
         caseRepo.deleteById(caseId);
         result.put("success", true); result.put("message", "사건이 삭제됐습니다.");
         return result;

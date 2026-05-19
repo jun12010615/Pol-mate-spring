@@ -27,6 +27,7 @@ public class TranscriptService {
     private final TranscriptRepository transcriptRepo;
     private final TranscriptScoreRepository scoreRepo;
     private final NotificationRepository notifRepo;
+    private final TimelineService timelineService;
     private final JdbcTemplate jdbc;
 
     @Value("${polmate.serv.base-url}")
@@ -73,6 +74,7 @@ public class TranscriptService {
         }
         result.put("success", true); result.put("transcriptId", saved.getTranscriptId());
         result.put("message", "조서가 저장됐습니다.");
+        timelineService.scheduleExtractForTranscript(saved.getTranscriptId());
         return result;
     }
 

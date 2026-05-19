@@ -10,12 +10,10 @@ import java.util.Optional;
 
 public interface CaseRepository extends JpaRepository<Case, String> {
 
-    // 접근 권한 확인 (같은 부서 또는 본인 등록)
+    // 접근 권한 확인 (사건 목록/상세와 동일: 동일 부서 사건)
     @Query(value =
-        "SELECT 1 FROM cases WHERE case_id = :caseId " +
-        "AND (user_id = :userId OR user_id IN (" +
-        "  SELECT u2.user_id FROM users u2 JOIN users me ON me.user_id = :userId " +
-        "  WHERE u2.dept_id = me.dept_id AND me.dept_id IS NOT NULL))",
+        "SELECT 1 FROM cases c WHERE c.case_id = :caseId " +
+        "AND c.dept_id = (SELECT me.dept_id FROM users me WHERE me.user_id = :userId)",
         nativeQuery = true)
     Optional<Integer> checkAccess(@Param("caseId") String caseId, @Param("userId") String userId);
 
