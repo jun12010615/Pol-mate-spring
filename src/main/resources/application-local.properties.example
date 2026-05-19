@@ -1,0 +1,17 @@
+# ── 로컬 개발 전용 시크릿 템플릿 ─────────────────────────────────
+# 이 파일을 복사하여 application-local.properties 로 이름 변경 후
+# 실제 값을 채워 넣으세요. (application-local.properties는 git에 커밋하지 마세요)
+
+# DB
+DB_URL=jdbc:mysql://<host>:<port>/pol-mate?characterEncoding=UTF-8&serverTimezone=Asia%2FSeoul
+DB_USERNAME=<db-username>
+DB_PASSWORD=<db-password>
+
+# Gmail SMTP (앱 비밀번호 발급: Google 계정 → 보안 → 앱 비밀번호)
+MAIL_USERNAME=<gmail-address>
+MAIL_PASSWORD=<gmail-app-password>
+
+# 외부 서비스
+POLMATE_SERV_URL=http://localhost:5001
+CLOVA_SECRET_KEY=<clova-speech-secret-key>
+OLLAMA_URL=http://localhost:11434/api/generate
