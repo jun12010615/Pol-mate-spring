@@ -36,7 +36,7 @@ public class TranscriptService {
     // ── 조서 원문 + 요약 조회 ────────────────────────────────────
     public Optional<Map<String, Object>> getText(Integer transcriptId, String userId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT t.transcript_id, t.original_text, t.stmt_type, t.stmt_name, t.ai_result " +
+            "SELECT t.transcript_id, t.case_id, t.original_text, t.stmt_type, t.stmt_name, t.ai_result " +
             "FROM transcripts t JOIN cases c ON t.case_id=c.case_id WHERE t.transcript_id=? " +
             "AND c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?)",
             transcriptId, userId);
@@ -75,6 +75,45 @@ public class TranscriptService {
         result.put("success", true); result.put("transcriptId", saved.getTranscriptId());
         result.put("message", "조서가 저장됐습니다.");
         timelineService.scheduleExtractForTranscript(saved.getTranscriptId());
+        return result;
+    }
+
+    // ── 조서 수정 ────────────────────────────────────────────────
+    @Transactional
+    public Map<String, Object> update(String userId, int transcriptId, String caseId,
+                                        String stmtType, String stmtName, String originalText) {
+        Map<String, Object> result = new HashMap<>();
+        if (getText(transcriptId, userId).isEmpty()) {
+            result.put("success", false);
+            result.put("message", "조서를 찾을 수 없거나 접근 권한이 없습니다.");
+            return result;
+        }
+        int check = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM cases WHERE case_id=? AND dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?)",
+            Integer.class, caseId, userId);
+        if (check == 0) {
+            result.put("success", false);
+            result.put("message", "접근 권한이 없습니다.");
+            return result;
+        }
+
+        Transcript t = transcriptRepo.findById(transcriptId).orElse(null);
+        if (t == null) {
+            result.put("success", false);
+            result.put("message", "조서를 찾을 수 없습니다.");
+            return result;
+        }
+        t.setCaseId(caseId);
+        t.setStmtType(stmtType.isEmpty() ? null : stmtType);
+        t.setStmtName(stmtName.isEmpty() ? null : stmtName);
+        t.setOriginalText(originalText);
+        transcriptRepo.save(t);
+
+        result.put("success", true);
+        result.put("transcriptId", transcriptId);
+        result.put("updated", true);
+        result.put("message", "조서가 수정되었습니다.");
+        timelineService.scheduleExtractForTranscript(transcriptId);
         return result;
     }
 

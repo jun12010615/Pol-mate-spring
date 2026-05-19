@@ -807,7 +807,8 @@ function formatSourceTranscriptHtml(source, actorRole) {
     var tid = source.transcriptId;
     if (tid && Number(tid) > 0) {
         var linkText = name + ' (조서 #' + tid + ')';
-        var href = '/desktop/writeTranscript?transcriptId=' + encodeURIComponent(tid);
+        var href = '/desktop/writeTranscript?transcriptId=' + encodeURIComponent(tid)
+            + (currentCaseId ? '&caseId=' + encodeURIComponent(currentCaseId) : '');
         var link = '<a class="detail-transcript-link" href="' + href + '">' + linkText + '</a>';
         return type ? '<span class="detail-source-type">' + type + '</span> · ' + link : link;
     }

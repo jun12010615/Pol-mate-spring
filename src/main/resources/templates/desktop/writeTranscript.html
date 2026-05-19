@@ -8,8 +8,6 @@
 <link rel="stylesheet" th:href="@{/css/polmate.css}">
 <script th:inline="javascript">
 var _ctx = '';
-var _initCaseId = /*[[${param.caseId ?: ''}]]*/ '';
-var _initTranscriptId = /*[[${param.transcriptId ?: ''}]]*/ '';
 </script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -297,12 +295,88 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 <div class="toast" id="toast"></div>
 
 <script>
+var _urlParams = new URLSearchParams(window.location.search);
+var _initCaseId = _urlParams.get('caseId') || '';
+var _initTranscriptId = _urlParams.get('transcriptId') || '';
+var _editingTranscriptId = _initTranscriptId || '';
+var _desiredCaseId = _initCaseId;
+var _caseListReady = false;
+
+var _confirmBtnIcon = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ';
+
 var _isRecording = false;
 var _recTimer = null;
 var _recSeconds = 0;
 var _sttText = '';
 var _mediaRecorder = null;
 var _audioChunks = [];
+
+function setDesiredCaseId(caseId) {
+    if (!caseId) return;
+    _desiredCaseId = String(caseId);
+    tryApplyCaseSelection();
+}
+
+function setSelectValueIfPresent(sel, val) {
+    if (!sel || !val) return;
+    var v = String(val).trim();
+    if (!v) return;
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === v || sel.options[i].text === v) {
+            sel.value = sel.options[i].value;
+            return;
+        }
+    }
+    var opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    sel.appendChild(opt);
+    sel.value = v;
+}
+
+function tryApplyCaseSelection() {
+    if (!_desiredCaseId || !_caseListReady) return;
+    var sel = document.getElementById('selCase');
+    var pre = _desiredCaseId;
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === pre) {
+            sel.value = pre;
+            return;
+        }
+    }
+    fetch('/caseApi?action=caseDetail&caseId=' + encodeURIComponent(pre), {credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(c) {
+            if (c.error || !c.id) return;
+            var opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.id + ' · ' + (c.name || '');
+            sel.appendChild(opt);
+            sel.value = c.id;
+        }).catch(function() {});
+}
+
+function enterEditMode(transcriptId) {
+    _editingTranscriptId = String(transcriptId);
+    document.getElementById('pageTitle').textContent = '조서 확인';
+    document.getElementById('btnConfirm').innerHTML = _confirmBtnIcon + '수정 저장';
+}
+
+function resetConfirmBtn() {
+    var btn = document.getElementById('btnConfirm');
+    btn.innerHTML = _confirmBtnIcon + (_editingTranscriptId ? '수정 저장' : '조서 확정');
+}
+
+function applyTranscriptMeta(d) {
+    if (d.id) enterEditMode(d.id);
+    if (d.caseId) setDesiredCaseId(d.caseId);
+    setSelectValueIfPresent(document.getElementById('selStmtType'), d.type);
+    if (d.name) document.getElementById('inputStmtName').value = d.name;
+    if (d.text) {
+        document.getElementById('editor').innerText = d.text;
+        updateCharCount();
+    }
+}
 
 // 사건 목록 로딩
 (function() {
@@ -320,23 +394,24 @@ var _audioChunks = [];
             var sel = document.getElementById('selCase');
             sel.innerHTML = '<option value="">-- 사건 선택 --</option>' +
                 cases.map(function(c) {
-                    var sel_attr = c.id === _initCaseId ? ' selected' : '';
-                    return '<option value="' + c.id + '"' + sel_attr + '>' + c.id + ' · ' + (c.name||'') + '</option>';
+                    var id = String(c.id || '');
+                    return '<option value="' + id + '">' + id + ' · ' + (c.name||'') + '</option>';
                 }).join('');
+            _caseListReady = true;
+            tryApplyCaseSelection();
         }).catch(function() {
             document.getElementById('selCase').innerHTML = '<option value="">사건 목록 로드 실패</option>';
+            _caseListReady = true;
         });
 })();
 
 if (_initTranscriptId) {
-    fetch('/caseApi?action=transcriptText&transcriptId=' + _initTranscriptId, {credentials: 'same-origin'})
+    enterEditMode(_initTranscriptId);
+    fetch('/caseApi?action=transcriptText&transcriptId=' + encodeURIComponent(_initTranscriptId), {credentials: 'same-origin'})
         .then(function(r) { return r.json(); })
         .then(function(d) {
-            if (d.text) {
-                document.getElementById('editor').innerText = d.text;
-                updateCharCount();
-                document.getElementById('pageTitle').textContent = '조서 확인';
-            }
+            if (d.error) return;
+            applyTranscriptMeta(d);
         }).catch(function() {});
 }
 
@@ -513,8 +588,10 @@ function confirmSave() {
     btn.disabled = true;
     btn.textContent = '저장 중...';
 
+    var isUpdate = !!_editingTranscriptId;
     var fd = new FormData();
-    fd.append('action', 'transcriptSave');
+    fd.append('action', isUpdate ? 'transcriptUpdate' : 'transcriptSave');
+    if (isUpdate) fd.append('transcriptId', _editingTranscriptId);
     fd.append('caseId', caseId);
     fd.append('stmtType', document.getElementById('selStmtType').value);
     fd.append('stmtName', document.getElementById('inputStmtName').value);
@@ -524,18 +601,18 @@ function confirmSave() {
         .then(function(r) { return r.json(); })
         .then(function(d) {
             btn.disabled = false;
-            btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> 조서 확정';
+            resetConfirmBtn();
             if (d.success || d.transcriptId) {
-                showToast('조서가 저장되었습니다.');
+                showToast(isUpdate ? '조서가 수정되었습니다.' : '조서가 저장되었습니다.');
                 setTimeout(function() {
                     location.href = '/desktop/myCase?caseId=' + encodeURIComponent(caseId);
                 }, 1200);
             } else {
-                showToast(d.message || '저장 중 오류가 발생했습니다.');
+                showToast(d.message || d.error || '저장 중 오류가 발생했습니다.');
             }
         }).catch(function() {
             btn.disabled = false;
-            btn.textContent = '조서 확정';
+            resetConfirmBtn();
             showToast('저장 중 오류가 발생했습니다.');
         });
 }

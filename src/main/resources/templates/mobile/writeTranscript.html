@@ -399,6 +399,16 @@
    담당 사건 상세 (caseApi caseDetail)
 ══════════════════════════════════════════════════════ */
 var lastCaseDetail = null;
+var _urlParams = new URLSearchParams(window.location.search);
+var _editingTranscriptId = _urlParams.get('transcriptId') || '';
+var _saveBtnDefaultHtml = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>저장';
+
+function enterEditMode(transcriptId) {
+  _editingTranscriptId = String(transcriptId);
+  document.querySelector('.header-title').textContent = '조서 확인';
+  document.querySelector('.header-sub').textContent = '내용 수정 후 저장하면 기존 조서가 갱신됩니다';
+  document.getElementById('saveBtn').innerHTML = _saveBtnDefaultHtml.replace('저장', '수정 저장');
+}
 
 function clearCaseDetailSummary() {
   lastCaseDetail = null;
@@ -449,6 +459,54 @@ function loadCaseDetailForSelect() {
     });
 }
 
+function applyTranscriptMeta(d) {
+  if (d.id) enterEditMode(d.id);
+  if (d.caseId) {
+    var pre = String(d.caseId);
+    var sel = document.getElementById('caseId');
+    var hasOpt = Array.prototype.some.call(sel.options, function(o) { return o.value === pre; });
+    if (hasOpt) {
+      sel.value = pre;
+      loadCaseDetailForSelect();
+    } else {
+      fetch('/caseApi?action=caseDetail&caseId=' + encodeURIComponent(pre))
+        .then(function(r) { return r.json(); })
+        .then(function(c) {
+          if (c.error) return;
+          var opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.id + ' · ' + (c.name || '');
+          sel.appendChild(opt);
+          sel.value = c.id;
+          renderCaseDetailSummary(c);
+        }).catch(function() {});
+    }
+  }
+  setSelectValueIfPresent(document.getElementById('stmtType'), d.type);
+  if (d.name) document.getElementById('stmtName').value = d.name;
+  if (d.text) {
+    document.getElementById('stmtText').value = d.text;
+    document.getElementById('charCount').textContent = d.text.length + '자';
+  }
+}
+
+function setSelectValueIfPresent(sel, val) {
+  if (!sel || !val) return;
+  var v = String(val).trim();
+  if (!v) return;
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === v || sel.options[i].text === v) {
+      sel.value = sel.options[i].value;
+      return;
+    }
+  }
+  var opt = document.createElement('option');
+  opt.value = v;
+  opt.textContent = v;
+  sel.appendChild(opt);
+  sel.value = v;
+}
+
 function initCaseFromUrl() {
   var pre = new URLSearchParams(window.location.search).get('caseId');
   if (!pre) return;
@@ -496,6 +554,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       }
       initCaseFromUrl();
+      var tid = _urlParams.get('transcriptId');
+      if (tid) {
+        enterEditMode(tid);
+        fetch('/caseApi?action=transcriptText&transcriptId=' + encodeURIComponent(tid), {credentials: 'same-origin'})
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (d.error) {
+              showToast(d.error);
+              return;
+            }
+            applyTranscriptMeta(d);
+          })
+          .catch(function() { showToast('조서를 불러오지 못했습니다.'); });
+      }
     })
     .catch(function() { initCaseFromUrl(); });
 });
@@ -685,8 +757,10 @@ function saveTranscript() {
   saveBtn.disabled = true;
   saveBtn.textContent = '저장...';
 
+  var isUpdate = !!_editingTranscriptId;
   var params = new URLSearchParams();
-  params.append('action',       'transcriptSave');
+  params.append('action', isUpdate ? 'transcriptUpdate' : 'transcriptSave');
+  if (isUpdate) params.append('transcriptId', _editingTranscriptId);
   params.append('caseId',       caseId);
   params.append('stmtType',     stmtType);
   params.append('stmtName',     stmtName);
@@ -700,6 +774,23 @@ function saveTranscript() {
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.success) {
+      if (isUpdate) {
+        showToast('조서가 수정되었습니다.');
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = _saveBtnDefaultHtml.replace('저장', '수정 저장');
+        var tid = d.transcriptId || _editingTranscriptId;
+        if (tid) {
+          fetch('/caseApi', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'action=transcriptSummarize&transcriptId=' + encodeURIComponent(tid)
+          }).catch(function() {});
+        }
+        setTimeout(function() {
+          location.href = 'myCase?caseId=' + encodeURIComponent(caseId);
+        }, 1200);
+        return;
+      }
       setStep(3);
       document.getElementById('inputSection').style.display = 'none';
       document.getElementById('doneSection').style.display  = 'block';

@@ -80,6 +80,9 @@ public class CaseController {
             case "transcriptSave":
                 writeMap(res, transcriptService.save(loginUser, caseId, nvl(stmtType,""), nvl(stmtName,""), nvl(originalText,"")));
                 break;
+            case "transcriptUpdate":
+                handleTranscriptUpdate(res, loginUser, transcriptId, caseId, stmtType, stmtName, originalText);
+                break;
             case "transcriptSummarize":
                 handleTranscriptSummarize(res, loginUser, transcriptId);
                 break;
@@ -243,6 +246,7 @@ public class CaseController {
             Map<String, Object> row = opt.get();
             JSONObject result = new JSONObject();
             result.put("id",      num(row.get("transcript_id")));
+            result.put("caseId",  nvl((String) row.get("case_id"),       ""));
             result.put("text",    nvl((String) row.get("original_text"), ""));
             result.put("type",    nvl((String) row.get("stmt_type"),     ""));
             result.put("name",    nvl((String) row.get("stmt_name"),     ""));
@@ -253,6 +257,22 @@ public class CaseController {
             res.getWriter().write("{\"error\":\"잘못된 transcriptId\"}");
         } catch (Exception e) {
             e.printStackTrace(); res.getWriter().write("{\"error\":\"조서 원문 조회 중 오류가 발생했습니다.\"}");
+        }
+    }
+
+    private void handleTranscriptUpdate(HttpServletResponse res, String loginUser, String idStr,
+                                        String caseId, String stmtType, String stmtName,
+                                        String originalText) throws IOException {
+        if (isEmpty(idStr)) { res.getWriter().write("{\"error\":\"transcriptId가 필요합니다.\"}"); return; }
+        if (isEmpty(caseId)) { res.getWriter().write("{\"success\":false,\"message\":\"caseId가 필요합니다.\"}"); return; }
+        try {
+            writeMap(res, transcriptService.update(loginUser, Integer.parseInt(idStr), caseId,
+                nvl(stmtType, ""), nvl(stmtName, ""), nvl(originalText, "")));
+        } catch (NumberFormatException e) {
+            res.getWriter().write("{\"success\":false,\"message\":\"잘못된 transcriptId\"}");
+        } catch (Exception e) {
+            e.printStackTrace();
+            res.getWriter().write("{\"success\":false,\"message\":\"조서 수정 중 오류가 발생했습니다.\"}");
         }
     }
 
