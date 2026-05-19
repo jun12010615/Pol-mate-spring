@@ -1487,13 +1487,17 @@ function submitWithdraw() {
 }
 
 function confirmLogout() {
-  if (confirm('로그아웃 하시겠습니까?')) {
-    var params = new URLSearchParams();
-    params.append('action', 'logout');
-    fetch('/mypage', { method: 'POST', body: params })
-      .then(function() { location.href = 'login'; })
-      .catch(function() { location.href = 'login'; });
-  }
+  document.getElementById('mobileLogoutModal').style.display = 'flex';
+}
+function closeMobileLogoutModal() {
+  document.getElementById('mobileLogoutModal').style.display = 'none';
+}
+function doMobileLogout() {
+  var params = new URLSearchParams();
+  params.append('action', 'logout');
+  fetch('/mypage', { method: 'POST', body: params, credentials: 'same-origin' })
+    .then(function() { location.href = '/mobile/login'; })
+    .catch(function() { location.href = '/mobile/login'; });
 }
 
 // ── 내 조서 이력 로드 ─────────────────────────────────────────────
@@ -1822,6 +1826,27 @@ function saveSettings() {
 }
 </script>
 
+<!-- 로그아웃 확인 모달 -->
+<div id="mobileLogoutModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:600; align-items:center; justify-content:center; padding:24px;"
+     onclick="if(event.target===this) closeMobileLogoutModal();">
+  <div style="background:#fff; border-radius:18px; padding:28px 24px 22px; width:100%; max-width:300px; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+    <div style="width:48px; height:48px; border-radius:13px; background:#fef2f2; display:flex; align-items:center; justify-content:center; margin:0 auto 14px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+    </div>
+    <div style="font-size:16px; font-weight:600; color:#1a1a2e; margin-bottom:6px;">로그아웃</div>
+    <div style="font-size:13px; color:#6b7280; margin-bottom:22px;">정말 로그아웃 하시겠습니까?</div>
+    <div style="display:flex; gap:8px;">
+      <button onclick="closeMobileLogoutModal()"
+              style="flex:1; padding:11px; background:#f4f6fb; border:none; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; color:#6b7280; cursor:pointer;">취소</button>
+      <button onclick="doMobileLogout()"
+              style="flex:1; padding:11px; background:#dc2626; border:none; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; color:#fff; font-weight:500; cursor:pointer;">로그아웃</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
 

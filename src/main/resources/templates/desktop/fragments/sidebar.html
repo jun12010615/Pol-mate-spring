@@ -77,9 +77,13 @@
 .pm-sb-officer {
     padding: 14px 16px; border-top: 1px solid rgba(255,255,255,0.06);
     display: flex; align-items: center; gap: 10px;
-    transition: background 0.13s; text-decoration: none; flex-shrink: 0;
+    flex-shrink: 0;
 }
-.pm-sb-officer:hover { background: rgba(255,255,255,0.04); }
+.pm-sb-officer-link {
+    display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+    text-decoration: none; transition: opacity 0.13s;
+}
+.pm-sb-officer-link:hover { opacity: 0.8; }
 .pm-officer-avatar {
     width: 36px; height: 36px; border-radius: 10px;
     background: rgba(255,255,255,0.08); border: 1px solid rgba(240,192,64,0.28);
@@ -96,6 +100,17 @@
     transition: background 0.13s, color 0.13s; flex-shrink: 0;
 }
 .pm-logout-btn:hover { background: rgba(255,255,255,0.10); color: #fff; }
+.pm-lo-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:600; align-items:center; justify-content:center; }
+.pm-lo-backdrop.open { display:flex; }
+.pm-lo-card { background:#fff; border-radius:18px; padding:32px 28px 24px; width:320px; text-align:center; box-shadow:0 24px 64px rgba(0,0,0,0.22); }
+.pm-lo-icon { width:52px; height:52px; border-radius:14px; background:#fef2f2; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; }
+.pm-lo-title { font-size:16px; font-weight:600; color:#1a1a2e; margin-bottom:6px; }
+.pm-lo-desc { font-size:12px; color:#6b7280; margin-bottom:22px; }
+.pm-lo-actions { display:flex; gap:8px; }
+.pm-lo-cancel { flex:1; padding:10px; background:#f4f6fb; border:none; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; color:#6b7280; cursor:pointer; }
+.pm-lo-cancel:hover { background:#e8eaf0; }
+.pm-lo-confirm { flex:1; padding:10px; background:#dc2626; border:none; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; color:#fff; cursor:pointer; font-weight:500; }
+.pm-lo-confirm:hover { background:#b91c1c; }
 .pm-content {
     margin-left: 240px; flex: 1;
     display: flex; flex-direction: column;
@@ -213,40 +228,57 @@
 
     </nav>
 
-    <a th:href="@{/desktop/mypage}" class="pm-sb-officer">
-        <div class="pm-officer-avatar">
-            <svg width="20" height="20" viewBox="0 0 86 86" fill="none">
-                <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="#162240"/>
-                <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="#f0c040" stroke-width="2"/>
-                <circle cx="43" cy="40" r="6" fill="#4a7cdc" opacity="0.85"/>
-                <circle cx="43" cy="40" r="3" fill="#fff"/>
-                <circle cx="43" cy="22" r="2" fill="#f0c040"/>
-                <circle cx="43" cy="58" r="2" fill="#f0c040"/>
-                <circle cx="28" cy="40" r="2" fill="#f0c040"/>
-                <circle cx="58" cy="40" r="2" fill="#f0c040"/>
-            </svg>
-        </div>
-        <div class="pm-officer-info">
-            <div class="pm-officer-name">
-                <th:block th:if="${session.userRank != null and !#strings.isEmpty(session.userRank)}"
-                          th:text="${session.userRank} + ' '"></th:block><th:block th:text="${session.userName ?: ''}"></th:block>
-            </div>
-            <div class="pm-officer-dept" th:text="${session.userOrg ?: ''}"></div>
-        </div>
-        <form th:action="@{/mypage}" method="post" style="margin:0;"
-              onsubmit="return confirm('로그아웃 하시겠습니까?');">
-            <input type="hidden" name="action" value="logout">
-            <button type="submit" class="pm-logout-btn" onclick="event.stopPropagation();">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                    <polyline points="16 17 21 12 16 7"/>
-                    <line x1="21" y1="12" x2="9" y2="12"/>
+    <div class="pm-sb-officer">
+        <a th:href="@{/desktop/mypage}" class="pm-sb-officer-link">
+            <div class="pm-officer-avatar">
+                <svg width="20" height="20" viewBox="0 0 86 86" fill="none">
+                    <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="#162240"/>
+                    <path d="M43 7 L66 17 L66 41 C66 57 43 71 43 71 C43 71 20 57 20 41 L20 17 Z" fill="none" stroke="#f0c040" stroke-width="2"/>
+                    <circle cx="43" cy="40" r="6" fill="#4a7cdc" opacity="0.85"/>
+                    <circle cx="43" cy="40" r="3" fill="#fff"/>
+                    <circle cx="43" cy="22" r="2" fill="#f0c040"/>
+                    <circle cx="43" cy="58" r="2" fill="#f0c040"/>
+                    <circle cx="28" cy="40" r="2" fill="#f0c040"/>
+                    <circle cx="58" cy="40" r="2" fill="#f0c040"/>
                 </svg>
-            </button>
-        </form>
-    </a>
+            </div>
+            <div class="pm-officer-info">
+                <div class="pm-officer-name">
+                    <th:block th:if="${session.userRank != null and !#strings.isEmpty(session.userRank)}"
+                              th:text="${session.userRank} + ' '"></th:block><th:block th:text="${session.userName ?: ''}"></th:block>
+                </div>
+                <div class="pm-officer-dept" th:text="${session.userOrg ?: ''}"></div>
+            </div>
+        </a>
+        <button type="button" class="pm-logout-btn" onclick="pmShowLogoutModal();">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+        </button>
+    </div>
 
 </aside>
+
+<!-- 로그아웃 확인 모달 -->
+<div class="pm-lo-backdrop" id="pmLogoutModal" onclick="if(event.target===this) pmHideLogoutModal();">
+    <div class="pm-lo-card">
+        <div class="pm-lo-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+        </div>
+        <div class="pm-lo-title">로그아웃</div>
+        <div class="pm-lo-desc">정말 로그아웃 하시겠습니까?</div>
+        <div class="pm-lo-actions">
+            <button class="pm-lo-cancel" onclick="pmHideLogoutModal()">취소</button>
+            <button class="pm-lo-confirm" onclick="pmDoLogout()">로그아웃</button>
+        </div>
+    </div>
+</div>
 
 <script>
 (function() {
@@ -277,6 +309,19 @@
     refreshCase();
     setInterval(refreshNotif, 60000);
     setInterval(refreshCase, 120000);
+    window.pmShowLogoutModal = function() {
+        document.getElementById('pmLogoutModal').classList.add('open');
+    };
+    window.pmHideLogoutModal = function() {
+        document.getElementById('pmLogoutModal').classList.remove('open');
+    };
+    window.pmDoLogout = function() {
+        var fd = new FormData();
+        fd.append('action', 'logout');
+        fetch('/mypage', {method:'POST', body:fd, credentials:'same-origin'})
+            .then(function() { location.href = '/desktop/login'; })
+            .catch(function() { location.href = '/desktop/login'; });
+    };
     window.pmToggleSidebar = function() {
         var sb = document.getElementById('pmSidebar');
         var ov = document.getElementById('pmSbOverlay');
