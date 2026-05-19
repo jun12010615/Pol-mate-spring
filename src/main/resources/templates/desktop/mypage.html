@@ -370,12 +370,7 @@ function submitPwChange() {
 }
 
 function confirmLogout() {
-    if (!confirm('로그아웃 하시겠습니까?')) return;
-    var fd = new FormData();
-    fd.append('action', 'logout');
-    fetch('/mypage', {method:'POST', body:fd, credentials:'same-origin'})
-        .then(function() { location.href = '/desktop/login'; })
-        .catch(function() { location.href = '/desktop/login'; });
+    pmShowLogoutModal();
 }
 
 function confirmWithdraw() {
