@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POL-MATE | 모순탐지 목록</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" th:href="@{/css/polmate.css}">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f4f6fb; color: #1a1a2e; -webkit-font-smoothing: antialiased; }
+
+.pm-page { padding: 28px 32px 48px; max-width: 1100px; }
+
+/* ── 페이지 헤더 ── */
+.page-header {
+    background: #0d1a33; border-radius: 18px; padding: 28px 32px;
+    margin-bottom: 24px; position: relative; overflow: hidden;
+}
+.page-header::after { content:''; position:absolute; top:-60px; right:-60px; width:200px; height:200px; border-radius:50%; border:1px solid rgba(240,192,64,0.1); }
+.page-header-title { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+.page-header-sub   { font-size: 12px; color: rgba(255,255,255,0.55); }
+
+/* ── 통계 바 ── */
+.stat-row { display: flex; gap: 12px; margin-bottom: 20px; }
+.stat-chip {
+    background: #fff; border: 1px solid #e2e5ee; border-radius: 12px;
+    padding: 14px 20px; display: flex; align-items: center; gap: 12px;
+}
+.stat-chip-num { font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700; color: #0d1a33; }
+.stat-chip-num.red { color: #dc2626; }
+.stat-chip-lbl { font-size: 11px; color: #9ca3af; }
+
+/* ── 툴바 ── */
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.search-box {
+    flex: 1; max-width: 320px; display: flex; align-items: center; gap: 8px;
+    background: #fff; border: 1.5px solid #e2e5ee; border-radius: 12px;
+    padding: 9px 14px; transition: border-color 0.15s;
+}
+.search-box:focus-within { border-color: #0d1a33; }
+.search-box input { border: none; background: transparent; outline: none; font-size: 13px; font-family: 'Noto Sans KR', sans-serif; color: #1a1a2e; width: 100%; }
+.search-box input::placeholder { color: #9ca3af; }
+.filter-chips { display: flex; gap: 6px; }
+.chip { padding: 7px 14px; border-radius: 20px; font-size: 11px; font-family: 'Noto Sans KR', sans-serif; border: 1px solid #e2e5ee; background: #fff; color: #6b7280; cursor: pointer; transition: all 0.13s; }
+.chip.active { background: #0d1a33; color: #fff; border-color: #0d1a33; }
+.chip.active.red { background: #dc2626; border-color: #dc2626; }
+.chip:hover:not(.active) { border-color: #0d1a33; color: #0d1a33; }
+
+/* ── 결과 테이블 ── */
+.result-table { background: #fff; border: 1px solid #e2e5ee; border-radius: 16px; overflow: hidden; }
+.result-table-head {
+    display: grid; grid-template-columns: 120px 1fr 110px 90px 90px 36px;
+    padding: 10px 16px; border-bottom: 1px solid #e2e5ee; background: #f9fafb;
+}
+.th { font-size: 10px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.6px; display: flex; align-items: center; }
+
+.result-row {
+    display: grid; grid-template-columns: 120px 1fr 110px 90px 90px 36px;
+    padding: 14px 16px; border-bottom: 1px solid #f4f6fb;
+    align-items: center; cursor: pointer; transition: background 0.1s;
+}
+.result-row:last-child { border-bottom: none; }
+.result-row:hover { background: #f9fafb; }
+.td { font-size: 13px; color: #1a1a2e; }
+.td.muted { color: #9ca3af; font-size: 11px; }
+.td.case-id { font-family: 'Space Grotesk', sans-serif; font-size: 11px; font-weight: 500; color: #4a7cdc; }
+
+.badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 500; white-space: nowrap;
+}
+.badge-contra { background: #fef2f2; color: #dc2626; }
+.badge-clean  { background: #f0fdf4; color: #16a34a; }
+
+.detail-btn {
+    width: 28px; height: 28px; border-radius: 8px; border: 1px solid #e2e5ee;
+    background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    color: #9ca3af; transition: all 0.13s;
+}
+.detail-btn:hover { background: #0d1a33; border-color: #0d1a33; color: #fff; }
+
+/* ── 빈 상태 ── */
+.empty-state { text-align: center; padding: 64px 20px; }
+.empty-icon { width: 60px; height: 60px; border-radius: 50%; background: #f4f6fb; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+.empty-icon svg { width: 26px; height: 26px; stroke: #9ca3af; }
+.empty-title { font-size: 15px; font-weight: 500; color: #1a1a2e; margin-bottom: 8px; }
+.empty-desc  { font-size: 12px; color: #9ca3af; line-height: 1.7; }
+
+/* ── 상세 모달 ── */
+.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 400; align-items: center; justify-content: center; }
+.modal-backdrop.open { display: flex; }
+.detail-modal {
+    background: #fff; border-radius: 18px; width: 620px; max-width: calc(100vw - 48px);
+    max-height: calc(100vh - 80px); display: flex; flex-direction: column;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.2);
+}
+.detail-modal-head {
+    padding: 22px 24px 18px; border-bottom: 1px solid #e2e5ee;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.detail-modal-title { font-size: 16px; font-weight: 600; }
+.detail-modal-close {
+    width: 30px; height: 30px; border-radius: 8px; border: none;
+    background: #f4f6fb; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.detail-modal-close svg { width: 14px; height: 14px; stroke: #6b7280; }
+.detail-modal-body { padding: 20px 24px 24px; overflow-y: auto; }
+
+.detail-section { margin-bottom: 18px; }
+.detail-label {
+    font-size: 10px; font-weight: 500; color: #9ca3af;
+    text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px;
+}
+.detail-value {
+    font-size: 13px; color: #1a1a2e; line-height: 1.7;
+    background: #f4f6fb; border-radius: 10px; padding: 12px 14px;
+    white-space: pre-wrap; word-break: break-all;
+}
+.detail-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.detail-chip { font-size: 11px; color: #6b7280; background: #f4f6fb; border: 1px solid #e2e5ee; border-radius: 20px; padding: 4px 10px; }
+
+.btn-delete-modal {
+    width: 100%; padding: 12px; border-radius: 12px; margin-top: 8px;
+    background: #fef2f2; border: 1px solid #fecaca; color: #dc2626;
+    font-size: 13px; font-family: 'Noto Sans KR', sans-serif; font-weight: 500;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.btn-delete-modal:hover { background: #fee2e2; }
+
+/* ── 로딩 ── */
+.loading-wrap { text-align: center; padding: 56px 20px; color: #9ca3af; font-size: 13px; }
+.spinner { width: 28px; height: 28px; border: 2px solid #e2e5ee; border-top-color: #4a7cdc; border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 토스트 ── */
+.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1a2744; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 13px; opacity: 0; transition: all 0.25s; z-index: 500; white-space: nowrap; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="pm-layout" th:replace="~{desktop/fragments/sidebar :: sidebar('contradictionList')}"></div>
+<div class="pm-layout">
+    <div th:replace="~{desktop/fragments/sidebar :: sidebar('contradictionList')}"></div>
+
+    <main class="pm-content">
+        <div class="pm-page">
+
+            <div class="page-header">
+                <div class="page-header-title">모순탐지 목록</div>
+                <div class="page-header-sub">저장된 AI 모순탐지 결과를 조회하고 관리합니다.</div>
+            </div>
+
+            <div class="stat-row" id="statRow">
+                <div class="stat-chip">
+                    <div>
+                        <div class="stat-chip-num" id="statTotal">-</div>
+                        <div class="stat-chip-lbl">전체 분석 결과</div>
+                    </div>
+                </div>
+                <div class="stat-chip">
+                    <div>
+                        <div class="stat-chip-num red" id="statContra">-</div>
+                        <div class="stat-chip-lbl">모순 탐지됨</div>
+                    </div>
+                </div>
+                <div class="stat-chip">
+                    <div>
+                        <div class="stat-chip-num" id="statCases">-</div>
+                        <div class="stat-chip-lbl">연관 사건 수</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" id="searchInput" placeholder="사건번호, 진술자 검색..." oninput="applyFilter()">
+                </div>
+                <div class="filter-chips">
+                    <button class="chip active" id="chipAll"     onclick="setFilter('all')">전체</button>
+                    <button class="chip red"    id="chipContra"  onclick="setFilter('contra')">모순 있음</button>
+                    <button class="chip"        id="chipClean"   onclick="setFilter('clean')">이상 없음</button>
+                </div>
+            </div>
+
+            <div class="result-table" id="resultTable">
+                <div class="loading-wrap"><div class="spinner"></div>불러오는 중...</div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<!-- 상세 모달 -->
+<div class="modal-backdrop" id="detailModal" onclick="if(event.target===this) closeDetail()">
+    <div class="detail-modal" onclick="event.stopPropagation()">
+        <div class="detail-modal-head">
+            <div class="detail-modal-title" id="detailTitle">탐지 결과 상세</div>
+            <button class="detail-modal-close" onclick="closeDetail()">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="detail-modal-body" id="detailBody"></div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var allData = [];
+var currentFilter = 'all';
+var currentResultId = null;
+
+window.addEventListener('DOMContentLoaded', function() { loadData(); });
+
+function loadData() {
+    fetch('/contradictionApi?action=list')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            allData = Array.isArray(data) ? data : [];
+            updateStats();
+            renderTable();
+        })
+        .catch(function() {
+            document.getElementById('resultTable').innerHTML =
+                '<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div class="empty-title">불러오기 실패</div><div class="empty-desc">서버 연결을 확인해 주세요.</div></div>';
+        });
+}
+
+function updateStats() {
+    var contra = allData.filter(function(d) { return d.hasContradiction; }).length;
+    var cases  = new Set(allData.map(function(d) { return d.caseId; })).size;
+    document.getElementById('statTotal').textContent  = allData.length;
+    document.getElementById('statContra').textContent = contra;
+    document.getElementById('statCases').textContent  = cases;
+}
+
+function setFilter(f) {
+    currentFilter = f;
+    document.getElementById('chipAll').className    = 'chip' + (f === 'all'    ? ' active' : '');
+    document.getElementById('chipContra').className = 'chip red' + (f === 'contra' ? ' active' : '');
+    document.getElementById('chipClean').className  = 'chip' + (f === 'clean'  ? ' active' : '');
+    renderTable();
+}
+
+function applyFilter() { renderTable(); }
+
+function getFiltered() {
+    var keyword = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+    return allData.filter(function(d) {
+        if (currentFilter === 'contra' && !d.hasContradiction) return false;
+        if (currentFilter === 'clean'  &&  d.hasContradiction) return false;
+        if (keyword) {
+            var haystack = ((d.caseId || '') + (d.caseName || '') + (d.stmtName || '') + (d.stmtType || '')).toLowerCase();
+            if (haystack.indexOf(keyword) === -1) return false;
+        }
+        return true;
+    });
+}
+
+function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderTable() {
+    var rows = getFiltered();
+    var table = document.getElementById('resultTable');
+    if (rows.length === 0) {
+        table.innerHTML = '<div class="empty-state">' +
+            '<div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>' +
+            '<div class="empty-title">탐지 결과가 없습니다</div>' +
+            '<div class="empty-desc">모순 탐지 후 저장된 결과가 여기에 표시됩니다.</div></div>';
+        return;
+    }
+
+    var html = '<div class="result-table-head">' +
+        '<div class="th">사건번호</div>' +
+        '<div class="th">진술자</div>' +
+        '<div class="th">유형</div>' +
+        '<div class="th">결과</div>' +
+        '<div class="th">저장일</div>' +
+        '<div class="th"></div>' +
+        '</div>';
+
+    rows.forEach(function(d) {
+        var badge = d.hasContradiction
+            ? '<span class="badge badge-contra">모순 있음</span>'
+            : '<span class="badge badge-clean">이상 없음</span>';
+        html += '<div class="result-row" onclick="openDetail(' + d.resultId + ')">' +
+            '<div class="td case-id">' + esc(d.caseId) + '</div>' +
+            '<div class="td">' + esc(d.stmtName || '-') + '</div>' +
+            '<div class="td muted">' + esc(d.stmtType || '-') + '</div>' +
+            '<div class="td">' + badge + '</div>' +
+            '<div class="td muted">' + esc(d.createdAt || '') + '</div>' +
+            '<div class="td"><button class="detail-btn" onclick="event.stopPropagation();openDetail(' + d.resultId + ')">' +
+                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>' +
+            '</button></div>' +
+            '</div>';
+    });
+
+    table.innerHTML = html;
+}
+
+function openDetail(resultId) {
+    currentResultId = resultId;
+    document.getElementById('detailBody').innerHTML = '<div class="loading-wrap"><div class="spinner"></div>불러오는 중...</div>';
+    document.getElementById('detailModal').classList.add('open');
+
+    fetch('/contradictionApi?action=detail&resultId=' + resultId)
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.error) { document.getElementById('detailBody').innerHTML = '<p style="color:#dc2626;font-size:13px;">불러오기 실패: ' + esc(d.error) + '</p>'; return; }
+
+            document.getElementById('detailTitle').textContent = (d.stmtName || '') + ' 탐지 결과';
+
+            var badge = d.hasContradiction
+                ? '<span class="badge badge-contra" style="font-size:13px; padding:6px 14px;">⚠ 모순 탐지됨</span>'
+                : '<span class="badge badge-clean"  style="font-size:13px; padding:6px 14px;">✓ 이상 없음</span>';
+
+            var html = badge +
+                '<div class="detail-meta" style="margin-top:12px;">' +
+                (d.caseId   ? '<span class="detail-chip">📁 ' + esc(d.caseId) + (d.caseName ? ' ' + esc(d.caseName) : '') + '</span>' : '') +
+                (d.stmtName ? '<span class="detail-chip">👤 ' + esc(d.stmtName) + '</span>' : '') +
+                (d.stmtType ? '<span class="detail-chip">' + esc(d.stmtType) + '</span>' : '') +
+                '</div>';
+
+            if (d.aiResult) {
+                html += '<div class="detail-section"><div class="detail-label">AI 분석 결과</div>' +
+                    '<div class="detail-value">' + esc(d.aiResult) + '</div></div>';
+            }
+            if (d.stmtText) {
+                html += '<div class="detail-section"><div class="detail-label">원본 진술</div>' +
+                    '<div class="detail-value">' + esc(d.stmtText) + '</div></div>';
+            }
+
+            html += '<button class="btn-delete-modal" onclick="deleteResult(' + d.resultId + ')">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>' +
+                '이 결과 삭제</button>';
+
+            document.getElementById('detailBody').innerHTML = html;
+        })
+        .catch(function() { document.getElementById('detailBody').innerHTML = '<p style="color:#dc2626;font-size:13px;">서버 오류가 발생했습니다.</p>'; });
+}
+
+function closeDetail() {
+    document.getElementById('detailModal').classList.remove('open');
+    currentResultId = null;
+}
+
+function deleteResult(resultId) {
+    if (!confirm('이 모순탐지 결과를 삭제하시겠습니까?')) return;
+    var params = new URLSearchParams();
+    params.append('action', 'delete');
+    params.append('resultId', resultId);
+    fetch('/contradictionApi', { method: 'POST', body: params, credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.success) {
+                allData = allData.filter(function(x) { return x.resultId !== resultId; });
+                closeDetail();
+                updateStats();
+                renderTable();
+                showToast('삭제되었습니다.');
+            } else {
+                showToast('삭제에 실패했습니다.');
+            }
+        })
+        .catch(function() { showToast('서버 오류가 발생했습니다.'); });
+}
+
+function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(function() { t.classList.remove('show'); }, 2500);
+}
+</script>
+</body>
+</html>
