@@ -73,7 +73,7 @@ public class TimelineService {
     );
     private static final String DEFAULT_LANE_COLOR = "#9ca3af";
     private static final Set<String> EVENT_TYPE_WORDS = Set.of(
-        "action", "alibi", "movement", "other", "unknown"
+        "action", "alibi", "movement", "observation", "other", "unknown"
     );
 
     private record KoreanClock(int hour24, int minute, String phrase, int position) {}
@@ -277,12 +277,30 @@ public class TimelineService {
     }
 
     private static int koreanTo24Hour(int hour12, int minute, boolean pm) {
-        int h = Math.max(1, Math.min(12, hour12));
         int m = Math.max(0, Math.min(59, minute));
-        if (!pm) {
-            return h == 12 ? 0 : h;
+        int h = hour12;
+        if (h < 0 || h > 23) {
+            h = Math.max(1, Math.min(12, h));
         }
-        return h == 12 ? 12 : (h < 12 ? h + 12 : h);
+        if (!pm) {
+            if (h == 12 || h == 0) {
+                return 0;
+            }
+            if (h >= 1 && h <= 11) {
+                return h;
+            }
+            return h % 24;
+        }
+        if (h == 12) {
+            return 12;
+        }
+        if (h == 0) {
+            return 0;
+        }
+        if (h >= 1 && h <= 11) {
+            return h + 12;
+        }
+        return h;
     }
 
     private static List<KoreanClock> findAllKoreanClocks(String text) {
@@ -334,50 +352,180 @@ public class TimelineService {
         return body.isBlank() ? ex : body;
     }
 
-    /** quote에 여러 시각이 있으면 첫 시각=시작, 마지막 시각=종료로 보정 (표시·기존 DB용). */
-    private void reconcileEventTimesFromQuote(TimelineEvent e) {
-        String quote = nvl(e.getQuote(), "");
-        if (quote.isBlank()) {
-            return;
+    private static final Pattern KR_DATE_PREFIX = Pattern.compile(
+        "(\\d{4})\\s*년\\s*(\\d{1,2})\\s*월\\s*(\\d{1,2})\\s*일");
+
+    private static String eventTimeSourceText(TimelineEvent e) {
+        return nvl(e.getQuote(), "") + "\n" + nvl(e.getTimeText(), "") + "\n" + nvl(e.getLabel(), "");
+    }
+
+    private static LocalDate parseDateFromEventText(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
         }
-        List<KoreanClock> clocks = findAllKoreanClocks(quote);
-        if (clocks.isEmpty()) {
+        Matcher dm = KR_DATE_PREFIX.matcher(text);
+        if (!dm.find()) {
+            return null;
+        }
+        try {
+            return LocalDate.of(
+                Integer.parseInt(dm.group(1)),
+                Integer.parseInt(dm.group(2)),
+                Integer.parseInt(dm.group(3)));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static final Pattern ISO_DATETIME_IN_TEXT = Pattern.compile(
+        "(\\d{4})-(\\d{2})-(\\d{2})[T\\s](\\d{1,2}):(\\d{2})(?::(\\d{2}))?");
+
+    /** time_text → label → quote 순으로 날짜·시각을 읽어 time_start/end 확정 (AI time_start보다 우선). */
+    private void reconcileEventTimesFromQuote(TimelineEvent e) {
+        String timeText = nvl(e.getTimeText(), "");
+        String label = nvl(e.getLabel(), "");
+        String quote = nvl(e.getQuote(), "");
+        String sources = eventTimeSourceText(e);
+        if (sources.isBlank()) {
             return;
         }
 
-        KoreanClock start = clocks.get(0);
-        LocalDate base = e.getTimeStart() != null
-            ? e.getTimeStart().toLocalDate()
-            : LocalDate.now();
+        LocalDateTime isoStart = parseDateTimeFromTextField(timeText);
+        if (isoStart == null) {
+            isoStart = parseDateTimeFromTextField(label);
+        }
+        if (isoStart != null) {
+            e.setTimeStart(isoStart);
+            LocalDateTime endDt = e.getTimeEnd();
+            if (endDt == null || !endDt.isAfter(isoStart)) {
+                e.setTimeEnd(isoStart.plusMinutes(5));
+            }
+            e.setTimePrecision(inferClockPrecisionFromQuote(sources, null, null, timeText));
+            return;
+        }
+
+        KoreanClock start = pickStartClock(timeText, label, quote);
+        if (start == null) {
+            return;
+        }
+
+        LocalDate base = parseDateFromEventText(timeText);
+        if (base == null) {
+            base = parseDateFromEventText(label);
+        }
+        if (base == null) {
+            base = parseDateFromEventText(quote);
+        }
+        if (base == null && e.getTimeStart() != null) {
+            base = e.getTimeStart().toLocalDate();
+        }
+        if (base == null) {
+            base = LocalDate.now();
+        }
+
         LocalDateTime startDt = LocalDateTime.of(base, LocalTime.of(start.hour24(), start.minute()));
         e.setTimeStart(startDt);
 
-        if (clocks.size() >= 2) {
-            KoreanClock end = clocks.get(clocks.size() - 1);
-            LocalDateTime endDt = LocalDateTime.of(base, LocalTime.of(end.hour24(), end.minute()));
+        KoreanClock endClock = pickEndClock(timeText, label, quote, start);
+        if (endClock != null) {
+            LocalDateTime endDt = LocalDateTime.of(base, LocalTime.of(endClock.hour24(), endClock.minute()));
             if (!endDt.isAfter(startDt)) {
                 endDt = endDt.plusDays(1);
             }
             e.setTimeEnd(endDt);
-            e.setTimeText(mergeDatePrefixTimeText(e.getTimeText(), start.phrase(), end.phrase()));
+            if (timeText.isBlank() || !timeTextContainsClock(timeText, endClock)) {
+                e.setTimeText(mergeDatePrefixTimeText(e.getTimeText(), start.phrase(), endClock.phrase()));
+            }
         } else {
             LocalDateTime endDt = e.getTimeEnd();
             if (endDt == null || !endDt.isAfter(startDt)) {
                 e.setTimeEnd(startDt.plusMinutes(5));
             }
-            if (nvl(e.getTimeText(), "").isBlank()) {
-                e.setTimeText(start.phrase());
+            if (timeText.isBlank()) {
+                e.setTimeText(mergeDatePrefixTimeText("", start.phrase(), null));
             }
         }
-        e.setTimePrecision(inferClockPrecisionFromQuote(quote, start, clocks.size() >= 2 ? clocks.get(clocks.size() - 1) : null));
+        e.setTimePrecision(inferClockPrecisionFromQuote(sources, start, endClock, timeText));
     }
 
-    /** quote·시각 구문 주변의 경/쯤/대략 등 → approximate, 아니면 exact */
-    private static String inferClockPrecisionFromQuote(String quote, KoreanClock start, KoreanClock end) {
-        if (isApproximateClockContext(quote, nvl(start.phrase(), ""), start.position())) {
+    private static LocalDateTime parseDateTimeFromTextField(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        LocalDateTime direct = parseDateTime(text.trim());
+        if (direct != null) {
+            return direct;
+        }
+        Matcher m = ISO_DATETIME_IN_TEXT.matcher(text);
+        if (!m.find()) {
+            return null;
+        }
+        try {
+            int sec = m.group(6) != null ? Integer.parseInt(m.group(6)) : 0;
+            return LocalDateTime.of(
+                Integer.parseInt(m.group(1)),
+                Integer.parseInt(m.group(2)),
+                Integer.parseInt(m.group(3)),
+                Integer.parseInt(m.group(4)),
+                Integer.parseInt(m.group(5)),
+                sec);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static KoreanClock pickStartClock(String timeText, String label, String quote) {
+        for (String src : List.of(timeText, label, quote)) {
+            if (src.isBlank()) {
+                continue;
+            }
+            List<KoreanClock> clocks = findAllKoreanClocks(src);
+            if (!clocks.isEmpty()) {
+                return clocks.get(0);
+            }
+        }
+        return null;
+    }
+
+    private static KoreanClock pickEndClock(String timeText, String label, String quote, KoreanClock start) {
+        for (String src : List.of(timeText, label, quote)) {
+            if (src.isBlank()) {
+                continue;
+            }
+            List<KoreanClock> clocks = findAllKoreanClocks(src);
+            if (clocks.size() >= 2) {
+                KoreanClock end = clocks.get(clocks.size() - 1);
+                if (end.hour24() != start.hour24() || end.minute() != start.minute()) {
+                    return end;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean timeTextContainsClock(String timeText, KoreanClock clock) {
+        if (timeText.isBlank()) {
+            return false;
+        }
+        for (KoreanClock c : findAllKoreanClocks(timeText)) {
+            if (c.hour24() == clock.hour24() && c.minute() == clock.minute()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** quote·time_text·시각 구문 주변의 경/쯤/대략 등 → approximate, 아니면 exact */
+    private static String inferClockPrecisionFromQuote(String sources, KoreanClock start, KoreanClock end,
+                                                       String timeText) {
+        String precText = !nvl(timeText, "").isBlank() ? timeText : sources;
+        if (start != null && isApproximateClockContext(precText, nvl(start.phrase(), ""), start.position())) {
             return "approximate";
         }
-        if (end != null && isApproximateClockContext(quote, nvl(end.phrase(), ""), end.position())) {
+        if (end != null && isApproximateClockContext(precText, nvl(end.phrase(), ""), end.position())) {
+            return "approximate";
+        }
+        if (precText.contains("경") || precText.contains("쯤") || precText.contains("대략") || precText.contains("무렵")) {
             return "approximate";
         }
         return "exact";
@@ -403,12 +551,284 @@ public class TimelineService {
         return false;
     }
 
+    private static final String[] SAME_TIME_CONNECTORS = {
+        "대신", "그러나", "그런데", "하지만", "이어", "한편", "그리고", "그 후", "이후", "곧"
+    };
+
+    private static final Pattern DUR_HOURS_SPAN = Pattern.compile(
+        "(\\d{1,2})\\s*시간\\s*동안", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DUR_MINUTES_SPAN = Pattern.compile(
+        "(\\d{1,4})\\s*분\\s*동안", Pattern.CASE_INSENSITIVE);
+
     private void normalizeTimelineEventTimes(List<TimelineEvent> rows) {
+        normalizeTimelineEventTimes(rows, false);
+    }
+
+    private void normalizeTimelineEventTimes(List<TimelineEvent> rows, boolean deleteMergedRows) {
         for (TimelineEvent row : rows) {
             reconcileEventTimesFromQuote(row);
         }
         resolveRelativeDurationsFromText(rows);
+        applyActivityDurationEnd(rows);
+        mergeSamePeriodAlibiBlocks(rows, deleteMergedRows);
+        inheritSameTimeContext(rows);
         resolveVagueEventTimes(rows);
+    }
+
+    private void applyActivityDurationEnd(List<TimelineEvent> rows) {
+        for (TimelineEvent e : rows) {
+            LocalDateTime start = e.getTimeStart();
+            if (start == null) continue;
+            String src = nvl(e.getQuote(), "") + " " + nvl(e.getTimeText(), "");
+            Integer mins = parseActivityDurationMinutes(src);
+            if (mins == null || mins <= 0) continue;
+            e.setTimeEnd(start.plusMinutes(mins));
+        }
+    }
+
+    private static Integer parseActivityDurationMinutes(String text) {
+        if (text == null || text.isBlank()) return null;
+        Matcher hm = DUR_HOURS_SPAN.matcher(text);
+        if (hm.find()) {
+            try {
+                return Integer.parseInt(hm.group(1)) * 60;
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        Matcher mm = DUR_MINUTES_SPAN.matcher(text);
+        if (mm.find()) {
+            try {
+                return Integer.parseInt(mm.group(1));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private void mergeSamePeriodAlibiBlocks(List<TimelineEvent> rows, boolean deleteMergedRows) {
+        if (rows.isEmpty()) return;
+        List<TimelineEvent> sorted = new ArrayList<>(rows);
+        sorted.sort(Comparator.comparingInt(TimelineEvent::getSortOrder)
+            .thenComparing(e -> e.getEventId() != null ? e.getEventId() : 0L));
+        List<TimelineEvent> merged = new ArrayList<>();
+        int i = 0;
+        while (i < sorted.size()) {
+            TimelineEvent ev = sorted.get(i);
+            if (!isAlibiLikeEvent(ev)) {
+                merged.add(ev);
+                i++;
+                continue;
+            }
+            List<TimelineEvent> cluster = new ArrayList<>();
+            cluster.add(ev);
+            int j = i + 1;
+            while (j < sorted.size() && canMergeAlibiCluster(cluster.get(cluster.size() - 1), sorted.get(j))) {
+                cluster.add(sorted.get(j));
+                j++;
+            }
+            if (cluster.size() == 1) {
+                merged.add(ev);
+            } else {
+                merged.add(combineAlibiCluster(cluster, deleteMergedRows));
+            }
+            i = j;
+        }
+        rows.clear();
+        rows.addAll(merged);
+    }
+
+    private static boolean isAlibiLikeEvent(TimelineEvent e) {
+        String t = nvl(e.getEventType(), "").toLowerCase(Locale.ROOT);
+        if ("alibi".equals(t) || "movement".equals(t)) return true;
+        String q = nvl(e.getQuote(), "") + " " + nvl(e.getLabel(), "");
+        return q.contains("알리바이") || q.contains("있었") || q.contains("하지 않")
+            || q.contains("얼씬") || q.contains("당시") || q.contains("혼자") || q.contains("들어가");
+    }
+
+    private static boolean isSameSpeakerAlibiContinuation(String quote) {
+        if (quote.isBlank()) return false;
+        if (quote.matches(".*당시\\s*(저는|나는|제가).*")) return true;
+        if ((quote.contains("긴 했지만") || quote.contains("얼씬도") || quote.contains("하지 않았"))
+            && (quote.contains("저는") || quote.contains("제가") || quote.contains("나는") || quote.contains("혼자"))) {
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean canMergeAlibiCluster(TimelineEvent a, TimelineEvent b) {
+        if (!relativeChainKey(a).equals(relativeChainKey(b))) return false;
+        if (!isAlibiLikeEvent(a) || !isAlibiLikeEvent(b)) return false;
+        String bq = nvl(b.getQuote(), "");
+        if (bq.contains("대신") && (bq.contains("봤") || bq.contains("보았") || bq.contains("목격"))) {
+            return false;
+        }
+        if (isSameSpeakerAlibiContinuation(bq)) return true;
+        if (bq.contains("당시") && (bq.contains("저는") || bq.contains("제가") || bq.contains("혼자"))) {
+            return true;
+        }
+        LocalDateTime aStart = a.getTimeStart();
+        LocalDateTime bStart = b.getTimeStart();
+        if (aStart != null && bStart != null) {
+            long sec = Math.abs(java.time.Duration.between(aStart, bStart).getSeconds());
+            return sec <= 3600;
+        }
+        return false;
+    }
+
+    private static String excerptLabelFromQuote(String quote, int maxLen) {
+        String q = nvl(quote, "").trim();
+        if (q.isEmpty()) return "";
+        for (String sep : List.of("습니다.", "했습니다.", "다.", "요.", "죠.")) {
+            int idx = q.indexOf(sep);
+            if (idx > 0 && idx <= maxLen * 2) {
+                return q.substring(0, idx + sep.length()).trim();
+            }
+        }
+        if (q.length() <= maxLen) return q;
+        return q.substring(0, maxLen).stripTrailing() + "…";
+    }
+
+    private static String mergeClusterLabelFromQuotes(List<String> quotes, List<String> labels) {
+        if (quotes.size() == 1) {
+            String ex = excerptLabelFromQuote(quotes.get(0), 150);
+            if (!ex.isBlank()) return ex;
+        }
+        if (quotes.size() >= 2) {
+            String a = excerptLabelFromQuote(quotes.get(0), 60);
+            String b = excerptLabelFromQuote(quotes.get(quotes.size() - 1), 60);
+            if (!a.isBlank() && !b.isBlank()) {
+                String merged = a + " … " + b;
+                return merged.length() > 200 ? merged.substring(0, 200) : merged;
+            }
+            if (!a.isBlank()) return a;
+        }
+        if (labels.size() == 1) return labels.get(0);
+        if (labels.size() >= 2) {
+            String first = labels.get(0);
+            String last = labels.get(labels.size() - 1);
+            return first.substring(0, Math.min(80, first.length())) + " … "
+                + last.substring(0, Math.min(80, last.length()));
+        }
+        return "";
+    }
+
+    private TimelineEvent combineAlibiCluster(List<TimelineEvent> cluster, boolean deleteMergedRows) {
+        TimelineEvent base = cluster.get(0);
+        StringBuilder quotes = new StringBuilder();
+        List<String> quoteList = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        String place = null;
+        LocalDateTime maxEnd = base.getTimeEnd();
+        for (TimelineEvent ev : cluster) {
+            String q = nvl(ev.getQuote(), "").trim();
+            if (!q.isBlank()) {
+                if (!quoteList.contains(q)) quoteList.add(q);
+                if (quotes.length() > 0) quotes.append(" / ");
+                if (!quotes.toString().contains(q)) quotes.append(q);
+            }
+            String lb = nvl(ev.getLabel(), "").trim();
+            if (!lb.isBlank()) labels.add(lb);
+            if (ev.getPlace() != null && !ev.getPlace().isBlank()) place = ev.getPlace();
+            String src = nvl(ev.getQuote(), "") + " " + nvl(ev.getTimeText(), "");
+            Integer mins = parseActivityDurationMinutes(src);
+            if (base.getTimeStart() != null && mins != null) {
+                LocalDateTime cand = base.getTimeStart().plusMinutes(mins);
+                if (maxEnd == null || cand.isAfter(maxEnd)) maxEnd = cand;
+            }
+            if (ev.getTimeEnd() != null && (maxEnd == null || ev.getTimeEnd().isAfter(maxEnd))) {
+                maxEnd = ev.getTimeEnd();
+            }
+        }
+        base.setEventType("alibi");
+        if (quotes.length() > 0) {
+            String q = quotes.toString();
+            base.setQuote(q.length() > 65000 ? q.substring(0, 65000) : q);
+        }
+        String mergedLabel = mergeClusterLabelFromQuotes(quoteList, labels);
+        if (!mergedLabel.isBlank()) {
+            base.setLabel(mergedLabel);
+        }
+        if (place != null) base.setPlace(place);
+        if (maxEnd != null) base.setTimeEnd(maxEnd);
+        base.setSortOrder(cluster.stream().mapToInt(TimelineEvent::getSortOrder).min().orElse(base.getSortOrder()));
+        for (int k = 1; k < cluster.size(); k++) {
+            TimelineEvent extra = cluster.get(k);
+            if (deleteMergedRows && extra.getEventId() != null) {
+                eventRepo.delete(extra);
+            }
+        }
+        return base;
+    }
+
+    /** 앞 이벤트에만 시각이 있고 뒤 절이 대신·부재·목격 후술이면 동일 시각대 상속. */
+    private void inheritSameTimeContext(List<TimelineEvent> rows) {
+        Map<String, List<TimelineEvent>> byChain = rows.stream()
+            .collect(Collectors.groupingBy(TimelineService::relativeChainKey));
+
+        for (List<TimelineEvent> group : byChain.values()) {
+            group.sort(Comparator.comparingInt(TimelineEvent::getSortOrder)
+                .thenComparing(e -> e.getEventId() != null ? e.getEventId() : 0L));
+            TimelineEvent lastTimed = null;
+            for (TimelineEvent e : group) {
+                String quote = nvl(e.getQuote(), "");
+                if (!findAllKoreanClocks(quote).isEmpty()) {
+                    if (e.getTimeStart() != null) {
+                        lastTimed = e;
+                    }
+                    continue;
+                }
+                if (lastTimed == null || !quoteNeedsSameTimeInherit(quote)) {
+                    if (e.getTimeStart() != null) {
+                        lastTimed = e;
+                    }
+                    continue;
+                }
+                if (e.getTimeStart() != null) {
+                    lastTimed = e;
+                    continue;
+                }
+                LocalDateTime anchor = lastTimed.getTimeStart();
+                if (anchor == null) {
+                    continue;
+                }
+                e.setTimeStart(anchor);
+                e.setTimeEnd(anchor.plusMinutes(5));
+                String prec = nvl(e.getTimePrecision(), "");
+                if (!"exact".equals(prec) && !"approximate".equals(prec) && !"relative".equals(prec)) {
+                    String prevPrec = nvl(lastTimed.getTimePrecision(), "approximate");
+                    e.setTimePrecision(
+                        "exact".equals(prevPrec) || "approximate".equals(prevPrec) ? prevPrec : "approximate");
+                }
+                if (nvl(e.getTimeText(), "").isBlank()) {
+                    String prevTt = nvl(lastTimed.getTimeText(), "");
+                    if (!prevTt.isBlank()) {
+                        e.setTimeText(prevTt + " (동일 시각대)");
+                    }
+                }
+                lastTimed = e;
+            }
+        }
+    }
+
+    private static boolean quoteNeedsSameTimeInherit(String quote) {
+        if (quote.isBlank() || !findAllKoreanClocks(quote).isEmpty()) {
+            return false;
+        }
+        if (isSameSpeakerAlibiContinuation(quote)) {
+            return false;
+        }
+        if (quote.contains("대신") && (quote.contains("봤") || quote.contains("보았") || quote.contains("목격"))) {
+            return true;
+        }
+        for (String c : SAME_TIME_CONNECTORS) {
+            if ("대신".equals(c)) continue;
+            if (quote.contains(c)) return true;
+        }
+        String[] markers = {"보이지", "목격", "봤", "보았"};
+        for (String m : markers) {
+            if (quote.contains(m)) return true;
+        }
+        return false;
     }
 
     private void persistTimelineTimeNormalization(List<TimelineEvent> rows) {
@@ -421,23 +841,16 @@ public class TimelineService {
                 before.put(row.getEventId(), TimelineTimeSnapshot.of(row));
             }
         }
-        normalizeTimelineEventTimes(rows);
-        List<TimelineEvent> dirty = new ArrayList<>();
-        for (TimelineEvent row : rows) {
-            if (row.getEventId() == null) {
-                continue;
-            }
-            TimelineTimeSnapshot snap = before.get(row.getEventId());
-            if (snap != null && !snap.matches(row)) {
-                dirty.add(row);
-            }
-        }
-        if (dirty.isEmpty()) {
-            return;
-        }
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            for (TimelineEvent row : dirty) {
-                eventRepo.save(row);
+            normalizeTimelineEventTimes(rows, true);
+            for (TimelineEvent row : rows) {
+                if (row.getEventId() == null) {
+                    continue;
+                }
+                TimelineTimeSnapshot snap = before.get(row.getEventId());
+                if (snap != null && !snap.matches(row)) {
+                    eventRepo.save(row);
+                }
             }
         });
     }
@@ -447,25 +860,28 @@ public class TimelineService {
         private final LocalDateTime timeEnd;
         private final String timePrecision;
         private final String timeText;
+        private final String label;
 
         private TimelineTimeSnapshot(LocalDateTime timeStart, LocalDateTime timeEnd,
-                                     String timePrecision, String timeText) {
+                                     String timePrecision, String timeText, String label) {
             this.timeStart = timeStart;
             this.timeEnd = timeEnd;
             this.timePrecision = timePrecision;
             this.timeText = timeText;
+            this.label = label;
         }
 
         static TimelineTimeSnapshot of(TimelineEvent e) {
             return new TimelineTimeSnapshot(
-                e.getTimeStart(), e.getTimeEnd(), e.getTimePrecision(), e.getTimeText());
+                e.getTimeStart(), e.getTimeEnd(), e.getTimePrecision(), e.getTimeText(), e.getLabel());
         }
 
         boolean matches(TimelineEvent e) {
             return Objects.equals(timeStart, e.getTimeStart())
                 && Objects.equals(timeEnd, e.getTimeEnd())
                 && Objects.equals(timePrecision, e.getTimePrecision())
-                && Objects.equals(timeText, e.getTimeText());
+                && Objects.equals(timeText, e.getTimeText())
+                && Objects.equals(label, e.getLabel());
         }
     }
 
@@ -515,6 +931,9 @@ public class TimelineService {
                 }
                 String src = quote.isBlank() ? nvl(e.getTimeText(), "") : quote;
                 int offMin = parseRelativeOffsetMinutes(src);
+                if (offMin < 0 && !quote.isBlank() && !nvl(e.getTimeText(), "").isBlank()) {
+                    offMin = parseRelativeOffsetMinutes(quote);
+                }
                 if (offMin < 0) {
                     if (e.getTimeStart() != null) {
                         lastAnchor = chainAnchorAfterEvent(e);
@@ -540,14 +959,22 @@ public class TimelineService {
         return e.getTimeStart();
     }
 
-    /** 분 단위 오프셋, 없으면 -1 */
+    /** 분 단위 오프셋(N분 후 등). 상대 표현을 먼저 찾고, 없을 때만 절대 시각으로 판단. */
     private static int parseRelativeOffsetMinutes(String text) {
         if (text == null || text.isBlank()) {
             return -1;
         }
+        Integer rel = tryParseRelativeOffsetMinutes(text);
+        if (rel != null) {
+            return rel;
+        }
         if (!findAllKoreanClocks(text).isEmpty()) {
             return -1;
         }
+        return -1;
+    }
+
+    private static Integer tryParseRelativeOffsetMinutes(String text) {
         for (Pattern pat : new Pattern[] { REL_MINUTES_AFTER, REL_MINUTES_ELAPSED }) {
             Matcher m = pat.matcher(text);
             if (m.find()) {
@@ -557,14 +984,14 @@ public class TimelineService {
                 }
             }
         }
-        Matcher m = REL_HOURS_AFTER.matcher(text);
-        if (m.find()) {
+        Matcher hm = REL_HOURS_AFTER.matcher(text);
+        if (hm.find()) {
             try {
-                return Integer.parseInt(m.group(1)) * 60;
+                return Integer.parseInt(hm.group(1)) * 60;
             } catch (NumberFormatException ignored) {
             }
         }
-        return -1;
+        return null;
     }
 
     /** time_end 미설정 시 짧은 기본 구간만 부여. */
@@ -1126,11 +1553,17 @@ public class TimelineService {
 
     private static String pickEventLabel(JSONObject ev, String fallback) {
         String label = nvl(ev.optString("label", ""), "").trim();
-        if (!label.isEmpty() && !"이벤트".equals(label)) return label;
-        String timeText = nvl(optString(ev, "time_text", "timeText"), "").trim();
-        if (!timeText.isEmpty()) return timeText.length() > 80 ? timeText.substring(0, 79) + "…" : timeText;
-        String quote = nvl(ev.optString("quote", ""), "").trim();
-        if (!quote.isEmpty()) return quote.length() > 80 ? quote.substring(0, 79) + "…" : quote;
+        if (label.isEmpty() || "이벤트".equals(label)) {
+            String timeText = nvl(optString(ev, "time_text", "timeText"), "").trim();
+            if (!timeText.isEmpty()) {
+                label = timeText.length() > 80 ? timeText.substring(0, 79) + "…" : timeText;
+            } else {
+                String quote = nvl(ev.optString("quote", ""), "").trim();
+                if (!quote.isEmpty()) {
+                    label = quote.length() > 80 ? quote.substring(0, 79) + "…" : quote;
+                }
+            }
+        }
         return label.isEmpty() ? fallback : label;
     }
 
