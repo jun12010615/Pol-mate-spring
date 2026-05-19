@@ -43,3 +43,7 @@ configurations {
         exclude group: 'commons-logging', module: 'commons-logging'
     }
 }
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.add('-parameters')
+}
