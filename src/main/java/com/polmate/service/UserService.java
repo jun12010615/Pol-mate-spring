@@ -67,6 +67,12 @@ public class UserService {
                         .orElse(false);
     }
 
+    public boolean isBadgeAlreadyUsed(String badgeNum) {
+        return badgeRepo.findByBadgeNum(badgeNum)
+                        .map(b -> b.getIsUsed() == 1)
+                        .orElse(false);
+    }
+
     @Transactional
     public void register(String userId, String userPw, String userName, String userPhone,
                          String userEmail, String userOrg, String userRank,
