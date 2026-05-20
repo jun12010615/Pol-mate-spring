@@ -1,6 +1,7 @@
 package com.polmate.controller;
 
 import com.google.gson.JsonObject;
+import com.polmate.service.LoginAttemptService;
 import com.polmate.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -11,20 +12,25 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
-import java.util.Random;
+import java.security.SecureRandom;
 
 @Controller
 @RequestMapping("/findAccount")
 @RequiredArgsConstructor
 public class FindAccountController {
 
-    private static final String SESS_CODE    = "pw_code";
-    private static final String SESS_USERID  = "pw_userId";
-    private static final String SESS_EXPIRES = "pw_expires";
-    private static final long   CODE_TTL_MS  = 3 * 60 * 1000L;
+    private static final String SESS_CODE     = "pw_code";
+    private static final String SESS_USERID   = "pw_userId";
+    private static final String SESS_EXPIRES  = "pw_expires";
+    private static final String SESS_ATTEMPTS = "pw_attempts";
+    private static final long   CODE_TTL_MS   = 3 * 60 * 1000L;
+    private static final int    MAX_ATTEMPTS  = 5;
 
-    private final UserService    userService;
-    private final JavaMailSender mailSender;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    private final UserService        userService;
+    private final LoginAttemptService loginAttemptService;
+    private final JavaMailSender     mailSender;
 
     @PostMapping
     @ResponseBody
@@ -64,6 +70,12 @@ public class FindAccountController {
     }
 
     private String handleSendCode(HttpServletRequest req) {
+        String clientIp = resolveClientIp(req);
+        if (loginAttemptService.isBlocked(clientIp)) {
+            long remaining = loginAttemptService.remainingSeconds(clientIp);
+            return fail("요청이 너무 많습니다. " + remaining + "초 후 다시 시도해 주세요.");
+        }
+
         String userId = nvl(req.getParameter("userId"));
         String email  = nvl(req.getParameter("email"));
         if (userId.isEmpty()) return fail("아이디를 입력해 주세요.");
@@ -71,15 +83,18 @@ public class FindAccountController {
         if (!isValidEmail(email)) return fail("이메일 형식이 올바르지 않습니다.");
 
         if (!userService.existsByIdAndEmail(userId, email)) {
+            loginAttemptService.loginFailed(clientIp);
             return fail("아이디 또는 이메일이 일치하지 않습니다.");
         }
         try {
-            String code = String.format("%06d", new Random().nextInt(1_000_000));
+            String code = String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
             HttpSession sess = req.getSession();
-            sess.setAttribute(SESS_CODE,    code);
-            sess.setAttribute(SESS_USERID,  userId);
-            sess.setAttribute(SESS_EXPIRES, System.currentTimeMillis() + CODE_TTL_MS);
+            sess.setAttribute(SESS_CODE,     code);
+            sess.setAttribute(SESS_USERID,   userId);
+            sess.setAttribute(SESS_EXPIRES,  System.currentTimeMillis() + CODE_TTL_MS);
+            sess.setAttribute(SESS_ATTEMPTS, 0);
             sendHtmlMail(email, "[POL-MATE] 비밀번호 재설정 인증코드", buildCodeHtml(userId, code));
+            loginAttemptService.loginSucceeded(clientIp);
             return ok("인증코드가 발송되었습니다.");
         } catch (Exception e) {
             e.printStackTrace();
@@ -95,11 +110,33 @@ public class FindAccountController {
         String savedCode = (String) sess.getAttribute(SESS_CODE);
         Long   expires   = (Long)   sess.getAttribute(SESS_EXPIRES);
         if (savedCode == null || expires == null) return fail("인증코드를 먼저 발송해 주세요.");
-        if (System.currentTimeMillis() > expires) return fail("인증코드가 만료되었습니다. 재발송해 주세요.");
-        if (!savedCode.equals(inputCode)) return fail("인증코드가 올바르지 않습니다.");
+        if (System.currentTimeMillis() > expires) {
+            clearCodeFromSession(sess);
+            return fail("인증코드가 만료되었습니다. 재발송해 주세요.");
+        }
+        if (!savedCode.equals(inputCode)) {
+            int attempts = incrementAttempts(sess);
+            if (attempts >= MAX_ATTEMPTS) {
+                clearCodeFromSession(sess);
+                return fail("인증 시도 횟수(" + MAX_ATTEMPTS + "회)를 초과했습니다. 인증코드를 다시 발송해 주세요.");
+            }
+            return fail("인증코드가 올바르지 않습니다. (" + attempts + "/" + MAX_ATTEMPTS + ")");
+        }
+        clearCodeFromSession(sess);
+        return ok("인증되었습니다.");
+    }
+
+    private void clearCodeFromSession(HttpSession sess) {
         sess.removeAttribute(SESS_CODE);
         sess.removeAttribute(SESS_EXPIRES);
-        return ok("인증되었습니다.");
+        sess.removeAttribute(SESS_ATTEMPTS);
+    }
+
+    private int incrementAttempts(HttpSession sess) {
+        Integer cur = (Integer) sess.getAttribute(SESS_ATTEMPTS);
+        int next = (cur == null ? 0 : cur) + 1;
+        sess.setAttribute(SESS_ATTEMPTS, next);
+        return next;
     }
 
     private String handleResetPw(HttpServletRequest req) {
@@ -145,6 +182,12 @@ public class FindAccountController {
     private String baseHtml(String title, String body) {
         return "<!DOCTYPE html><html><body><h2>" + esc(title) + "</h2>" + body +
                "<p style='color:#999;font-size:12px'>POL-MATE 자동발송 메일입니다.</p></body></html>";
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) return forwarded.split(",")[0].trim();
+        return request.getRemoteAddr();
     }
 
     private boolean isValidEmail(String e) { return e.matches("^[\\w.+\\-]+@[\\w\\-]+\\.[\\w.]+$"); }
