@@ -356,6 +356,8 @@
 
 
 <script>
+var _initCategory = /*[[${param.category != null && !#lists.isEmpty(param.category) ? param.category[0] : ''}]]*/ '';
+var _userInitial  = /*[[${session.userName != null && session.userName.length() > 0 ? session.userName.substring(0,1) : 'U'}]]*/ 'U';
 var selectedCategory = _initCategory;
 
 // ── 카테고리 좌우 스크롤
