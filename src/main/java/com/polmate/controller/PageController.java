@@ -31,6 +31,7 @@ public class PageController {
     @GetMapping("/mobile/writeTranscript") public String mobileWriteTranscript() { return "mobile/writeTranscript"; }
     @GetMapping("/mobile/caseRelationMap") public String mobileCaseRelationMap() { return "mobile/caseRelationMap"; }
     @GetMapping("/mobile/cctvAnalysis") public String mobileCctvAnalysis() { return "mobile/cctvAnalysis"; }
+    @GetMapping("/mobile/emotionAnalysis") public String mobileEmotionAnalysis() { return "mobile/emotionAnalysis"; }
 
     // ── 데스크탑 ──────────────────────────────────────────────
     @GetMapping("/desktop/login")       public String desktopLogin()       { return "desktop/login"; }
@@ -49,4 +50,5 @@ public class PageController {
     @GetMapping("/desktop/caseTimeline")     public String desktopCaseTimeline()     { return "desktop/caseTimeline"; }
     @GetMapping("/desktop/cctvAnalysis")       public String desktopCctvAnalysis()       { return "desktop/cctvAnalysis"; }
     @GetMapping("/desktop/contradictionList")  public String desktopContradictionList()  { return "desktop/contradictionList"; }
+    @GetMapping("/desktop/emotionAnalysis")    public String desktopEmotionAnalysis()    { return "desktop/emotionAnalysis"; }
 }

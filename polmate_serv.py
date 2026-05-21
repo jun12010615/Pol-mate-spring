@@ -2381,5 +2381,480 @@ def health():
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# [섹션 8] 감정 흐름 분석 (개선 v2)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# 변경 내역
+# ─────────────────────────────────────────────────────────────────────────
+# [문제 1] 긍/부정 2분류 모델을 4감정에 억지 매핑 → neg 하나로 불안/회피/분노가
+#          동시에 움직여 그래프 평탄화 발생
+#          → 다감정 분류 모델 우선 로드, 4감정 직접 매핑으로 교체
+#
+# [문제 2] 키워드 fallback에서 매칭 없으면 모든 감정이 base=20.0 고착
+#          → 문장 길이·부정어·어미·문맥을 반영한 가중 키워드 스코어로 교체
+#          → 확신 하드코딩(max 30.0) 제거, 진술 특성 기반 동적 베이스라인 적용
+#
+# [문제 3] 변화율이 낮을 때 하이라이트가 거의 안 잡힘
+#          → z-score 기반 + 절대값 하한선 병행, 최소 1구간 보장 옵션 추가
+# ─────────────────────────────────────────────────────────────────────────
+
+import math
+import re
+
+# ── 다감정 모델 로드 (우선순위 순) ──────────────────────────────────────────
+#
+# 우선순위 기준:
+#   1. snunlp/KR-ELECTRA-discriminator-finetuned  - 한국어 7감정 분류
+#   2. hun3359/klue-bert-base-sentiment            - 7감정 (기쁨/슬픔/놀람/분노/혐오/두려움/중립)
+#   3. monologg/koelectra-base-finetuned-sentiment - 긍/부정 (최후 수단)
+#
+# 로드 실패 시 키워드 방식으로 자동 fallback
+
+_EMOTION_PIPELINE   = None
+_PIPELINE_LABEL_MAP = None   # 모델별 레이블 → 4감정 매핑 테이블
+
+# ── 모델별 레이블 매핑 정의 ───────────────────────────────────────────────────
+#
+# 각 모델이 반환하는 레이블을 (불안, 확신, 회피, 분노) 가중치로 변환
+# 가중치 합이 1.0일 필요 없음 — 이후 정규화 없이 직접 점수로 사용
+_LABEL_MAPS = {
+    # hun3359/klue-bert-base-sentiment : 7감정
+    "hun3359/klue-bert-base-sentiment": {
+        "기쁨":  {"불안": 0.00, "확신": 0.70, "회피": 0.00, "분노": 0.00},
+        "슬픔":  {"불안": 0.55, "확신": 0.10, "회피": 0.35, "분노": 0.10},
+        "놀람":  {"불안": 0.40, "확신": 0.10, "회피": 0.20, "분노": 0.10},
+        "분노":  {"불안": 0.20, "확신": 0.20, "회피": 0.10, "분노": 0.70},
+        "혐오":  {"불안": 0.10, "확신": 0.15, "회피": 0.30, "분노": 0.50},
+        "두려움":{"불안": 0.70, "확신": 0.05, "회피": 0.40, "분노": 0.05},
+        "중립":  {"불안": 0.10, "확신": 0.40, "회피": 0.10, "분노": 0.05},
+    },
+    # snunlp/KR-ELECTRA — 레이블이 동일한 7감정 체계로 확인된 경우 동일 맵 사용
+    "snunlp/KR-ELECTRA-discriminator-finetuned": {
+        "기쁨":  {"불안": 0.00, "확신": 0.70, "회피": 0.00, "분노": 0.00},
+        "슬픔":  {"불안": 0.55, "확신": 0.10, "회피": 0.35, "분노": 0.10},
+        "놀람":  {"불안": 0.40, "확신": 0.10, "회피": 0.20, "분노": 0.10},
+        "분노":  {"불안": 0.20, "확신": 0.20, "회피": 0.10, "분노": 0.70},
+        "혐오":  {"불안": 0.10, "확신": 0.15, "회피": 0.30, "분노": 0.50},
+        "두려움":{"불안": 0.70, "확신": 0.05, "회피": 0.40, "분노": 0.05},
+        "중립":  {"불안": 0.10, "확신": 0.40, "회피": 0.10, "분노": 0.05},
+    },
+    # monologg/koelectra — 긍/부정 2분류 (최후 수단, 개선된 매핑 사용)
+    "__binary__": {
+        "positive": {"불안": 0.05, "확신": 0.65, "회피": 0.05, "분노": 0.05},
+        "negative": {"불안": 0.50, "확신": 0.10, "회피": 0.35, "분노": 0.40},
+        # 별칭
+        "pos":      {"불안": 0.05, "확신": 0.65, "회피": 0.05, "분노": 0.05},
+        "neg":      {"불안": 0.50, "확신": 0.10, "회피": 0.35, "분노": 0.40},
+        "1":        {"불안": 0.05, "확신": 0.65, "회피": 0.05, "분노": 0.05},
+        "0":        {"불안": 0.50, "확신": 0.10, "회피": 0.35, "분노": 0.40},
+    },
+}
+
+
+def _try_load_emotion_model():
+    """다감정 모델 우선 로드. 실패 시 2분류 모델 → 키워드 순으로 fallback."""
+    global _EMOTION_PIPELINE, _PIPELINE_LABEL_MAP
+    try:
+        from transformers import pipeline
+    except ImportError:
+        print("[감정분석] transformers 미설치 → 키워드 방식으로 실행")
+        return False
+
+    # 1순위: 7감정 모델
+    multi_emotion_candidates = [
+        ("hun3359/klue-bert-base-sentiment",               "hun3359/klue-bert-base-sentiment"),
+        ("snunlp/KR-ELECTRA-discriminator-finetuned",      "snunlp/KR-ELECTRA-discriminator-finetuned"),
+    ]
+    for model_name, map_key in multi_emotion_candidates:
+        try:
+            _EMOTION_PIPELINE = pipeline(
+                "text-classification",
+                model=model_name,
+                tokenizer=model_name,
+                device=-1,
+                top_k=None,
+            )
+            _PIPELINE_LABEL_MAP = _LABEL_MAPS.get(map_key, _LABEL_MAPS["__binary__"])
+            print(f"[감정분석] 다감정 모델 로드 성공: {model_name}")
+            return True
+        except Exception as e:
+            print(f"[감정분석] {model_name} 로드 실패: {e}")
+            continue
+
+    # 2순위: 2분류 모델 (개선된 매핑 적용)
+    binary_candidates = [
+        "monologg/koelectra-base-finetuned-sentiment",
+        "snunlp/KR-FinBert-SC",
+    ]
+    for model_name in binary_candidates:
+        try:
+            _EMOTION_PIPELINE = pipeline(
+                "text-classification",
+                model=model_name,
+                tokenizer=model_name,
+                device=-1,
+                top_k=None,
+            )
+            _PIPELINE_LABEL_MAP = _LABEL_MAPS["__binary__"]
+            print(f"[감정분석] 2분류 모델 로드 (fallback): {model_name}")
+            return True
+        except Exception as e:
+            print(f"[감정분석] {model_name} 로드 실패: {e}")
+            continue
+
+    print("[감정분석] 모든 모델 로드 실패 → 키워드 방식으로 실행")
+    return False
+
+
+import threading as _threading
+_emotion_model_thread = _threading.Thread(target=_try_load_emotion_model, daemon=True)
+_emotion_model_thread.start()
+
+
+# ── 개선된 키워드 사전 ──────────────────────────────────────────────────────
+# 각 항목: (키워드, 가중치)
+# 가중치 기준: 감정 강도가 높을수록 높게 설정 (1.0 = 기본, 2.0 = 강한 표현)
+
+_ANXIETY_KW = [
+    ("모르겠", 1.0), ("걱정", 1.2), ("두렵", 1.5), ("불안", 1.5),
+    ("무서", 1.5), ("긴장", 1.2), ("어려워", 0.8), ("힘들", 0.8),
+    ("혹시", 0.7), ("당황", 1.3), ("떨렸", 1.4), ("겁이", 1.4),
+    ("공포", 2.0), ("떨려", 1.3), ("망설", 1.0), ("주저", 1.0),
+    ("못할 것 같", 1.1), ("불편", 0.8), ("두근", 1.2), ("어쩌지", 1.1),
+    ("무서운지", 1.5), ("어떡해", 1.2), ("두려움", 1.5), ("겁났", 1.4),
+    ("조마조마", 1.6), ("초조", 1.4), ("안절부절", 1.6),
+]
+
+_CERTAINTY_KW = [
+    ("확실히", 1.8), ("분명히", 1.8), ("절대로", 1.6), ("틀림없이", 1.8),
+    ("반드시", 1.4), ("확신", 1.8), ("단연코", 2.0), ("맞습니다", 1.2),
+    ("그렇습니다", 1.0), ("확실합니다", 1.8), ("분명합니다", 1.8),
+    ("절대", 1.4), ("정확히", 1.4), ("명백히", 1.8), ("명확히", 1.8),
+    ("틀림없", 1.8), ("했습니다", 0.5), ("있습니다", 0.4), ("없습니다", 0.6),
+    ("이었습니다", 0.5), ("확실한", 1.6), ("분명한", 1.6), ("확실하게", 1.6),
+    ("분명하게", 1.6), ("제가 봤", 1.4), ("제가 들었", 1.4),
+    ("저는 알고", 1.3), ("알고 있습니다", 1.3),
+]
+
+_AVOIDANCE_KW = [
+    ("기억이 잘", 1.4), ("잘 모르", 1.2), ("그냥", 0.6), ("아마", 0.9),
+    ("것 같아", 0.8), ("생각이 안", 1.4), ("기억나지", 1.5),
+    ("확실하지 않", 1.4), ("정확히는", 1.0), ("어떻게 말", 1.0),
+    ("정확히 기억", 1.4), ("모르겠어요", 1.2), ("기억이 없", 1.5),
+    ("생각이 나지", 1.5), ("정확하지", 1.2), ("흐릿", 1.4),
+    ("기억이 나지 않", 1.8), ("말씀드리기", 0.8), ("뭐라 해야", 1.1),
+    ("기억이 희미", 1.6), ("잘 기억이", 1.4), ("가물가물", 1.8),
+    ("잘 모르겠", 1.3), ("확실히는 모르", 1.5), ("말하기 어렵", 1.2),
+    ("뭐라고 해야", 1.1), ("어디서부터", 0.9), ("뭐랄까", 1.0),
+]
+
+_ANGER_KW = [
+    ("화가", 1.6), ("짜증", 1.4), ("억울", 1.8), ("부당", 1.6),
+    ("말도 안", 1.4), ("화났", 1.6), ("어이없", 1.4), ("황당", 1.3),
+    ("터무니없", 1.6), ("이해가 안", 1.0), ("도저히", 1.2),
+    ("진짜로", 0.9), ("어떻게 그런", 1.3), ("용납할 수", 1.6),
+    ("분통", 1.8), ("열받", 1.6), ("분개", 1.8), ("격분", 2.0),
+    ("분노", 1.8), ("화가 많이", 1.8), ("너무 화", 1.6),
+    ("억울해", 1.8), ("부당해", 1.6), ("울분", 1.8), ("분하다", 1.7),
+    ("어처구니", 1.5), ("기가 막", 1.5), ("황당하다", 1.4),
+]
+
+
+def _kw_score_weighted(text: str, keywords: list) -> float:
+    """가중치 적용 키워드 스코어. 길이 보너스 포함."""
+    text_lower = text.lower()
+    score = 0.0
+    for kw, weight in keywords:
+        if kw in text_lower:
+            score += weight
+    return score
+
+
+def _sentence_baseline(text: str) -> dict:
+    """
+    문장 특성 기반 동적 베이스라인.
+    진술서 특성상 사실 서술이 많으면 확신 기본값이 높고,
+    짧은 문장은 정보가 적어 모든 감정이 낮게 시작.
+    """
+    length = len(text)
+
+    # 길이 기반 스케일 (짧은 문장은 감정 표현이 적음)
+    if length < 15:
+        length_factor = 0.6
+    elif length < 30:
+        length_factor = 0.8
+    else:
+        length_factor = 1.0
+
+    # 서술형 어미 → 확신 베이스라인 상향
+    declarative_endings = ["습니다", "했습니다", "였습니다", "입니다", "다고 합니다"]
+    is_declarative = any(text.endswith(e) or e in text[-10:] for e in declarative_endings)
+
+    # 의문형 어미 → 회피/불안 베이스라인 상향
+    interrogative = text.strip().endswith("?") or text.strip().endswith("요?")
+
+    base_anxiety   = 15.0 * length_factor
+    base_certainty = (28.0 if is_declarative else 18.0) * length_factor
+    base_avoidance = (18.0 if interrogative else 12.0) * length_factor
+    base_anger     = 10.0 * length_factor
+
+    return {
+        "불안": base_anxiety,
+        "확신": base_certainty,
+        "회피": base_avoidance,
+        "분노": base_anger,
+    }
+
+
+def _sentence_emotion_by_keyword(sentence: str) -> dict:
+    """개선된 키워드 기반 감정 점수 산출."""
+    baseline = _sentence_baseline(sentence)
+    scale = 18.0  # 키워드 1점당 점수 증가량 (기존 35.0 → 낮춰서 과도한 상승 방지)
+
+    raw = {
+        "불안": _kw_score_weighted(sentence, _ANXIETY_KW),
+        "확신": _kw_score_weighted(sentence, _CERTAINTY_KW),
+        "회피": _kw_score_weighted(sentence, _AVOIDANCE_KW),
+        "분노": _kw_score_weighted(sentence, _ANGER_KW),
+    }
+
+    result = {}
+    for k in ["불안", "확신", "회피", "분노"]:
+        score = baseline[k] + raw[k] * scale
+        result[k] = round(min(95.0, score), 1)
+
+    # 상호 억제: 확신이 높으면 회피/불안을 낮춤 (진술서 특성)
+    if result["확신"] > 60:
+        suppression = (result["확신"] - 60) * 0.3
+        result["불안"]  = max(baseline["불안"],  result["불안"]  - suppression)
+        result["회피"] = max(baseline["회피"], result["회피"] - suppression)
+
+    # 분노가 높으면 확신도 약간 상승 (강한 주장 특성)
+    if result["분노"] > 50:
+        result["확신"] = min(95.0, result["확신"] + (result["분노"] - 50) * 0.2)
+
+    return {k: round(v, 1) for k, v in result.items()}
+
+
+def _sentence_emotion_by_model(sentence: str) -> dict | None:
+    """
+    로드된 모델로 감정 점수 산출.
+    모델 출력 레이블 → 4감정 매핑 테이블 사용.
+    키워드 스코어를 보조 신호로 블렌딩.
+    """
+    if _EMOTION_PIPELINE is None or _PIPELINE_LABEL_MAP is None:
+        return None
+    try:
+        raw_out = _EMOTION_PIPELINE(sentence[:512], truncation=True)
+        if not raw_out:
+            return None
+
+        # pipeline 출력 정규화: [[{label, score}, ...]] 또는 [{label, score}, ...]
+        items = raw_out[0] if isinstance(raw_out[0], list) else raw_out
+
+        # 레이블별 점수 합산 → 4감정 기여값 계산
+        emotion_raw = {"불안": 0.0, "확신": 0.0, "회피": 0.0, "분노": 0.0}
+        total_mapped = 0.0
+        for item in items:
+            label = item["label"].lower().strip()
+            score = float(item["score"])
+
+            # 레이블 매핑 탐색 (정확 일치 → 부분 일치)
+            mapping = _PIPELINE_LABEL_MAP.get(label)
+            if mapping is None:
+                # 한글 레이블 직접 탐색
+                for map_label, map_val in _PIPELINE_LABEL_MAP.items():
+                    if map_label in label or label in map_label:
+                        mapping = map_val
+                        break
+            if mapping is None:
+                continue
+
+            for emo, weight in mapping.items():
+                emotion_raw[emo] += score * weight
+            total_mapped += score
+
+        if total_mapped < 0.01:
+            return None
+
+        # 감정별 최대값 기준으로 정규화 후 스케일링
+        max_val = max(emotion_raw.values()) if emotion_raw else 1.0
+        if max_val < 0.01:
+            return None
+
+        # 최대 감정을 70~90 범위로 끌어올리는 동적 스케일
+        dynamic_scale = 80.0 / max_val
+        model_scores = {k: round(min(95.0, v * dynamic_scale), 1) for k, v in emotion_raw.items()}
+
+        # 키워드 보정: 모델 점수 70% + 키워드 30% 블렌딩
+        kw_scores = _sentence_emotion_by_keyword(sentence)
+        blended = {}
+        for emo in ["불안", "확신", "회피", "분노"]:
+            blended[emo] = round(model_scores[emo] * 0.70 + kw_scores[emo] * 0.30, 1)
+
+        return blended
+
+    except Exception as e:
+        print(f"[감정분석] 모델 추론 오류: {e}")
+        return None
+
+
+# ── 문장 분리 ────────────────────────────────────────────────────────────────
+
+def _split_korean_sentences(text: str) -> list:
+    """
+    한국어 진술서 문장 분리.
+    마침표·물음표·느낌표 + 최소 길이 조건.
+    너무 짧은 조각은 다음 문장에 합침.
+    """
+    text = re.sub(r'\s+', ' ', text.strip())
+
+    # 분리 기준: 문장 종결 어미 패턴
+    split_pattern = re.compile(
+        r'(?<=[.!?])\s+'
+        r'|(?<=습니다\.)\s+'
+        r'|(?<=습니다\?)\s+'
+        r'|(?<=습니다!)\s+'
+        r'|(?<=했습니다\.)\s+'
+        r'|(?<=있습니다\.)\s+'
+        r'|(?<=없습니다\.)\s+'
+        r'|(?<=입니다\.)\s+'
+        r'|(?<=겠습니다\.)\s+'
+    )
+    raw = split_pattern.split(text)
+
+    sentences = []
+    buf = ""
+    for part in raw:
+        part = part.strip()
+        if not part:
+            continue
+        buf = (buf + " " + part).strip() if buf else part
+        # 최소 10자 이상이어야 독립 문장으로 처리
+        if len(buf) >= 10:
+            sentences.append(buf)
+            buf = ""
+    # 남은 버퍼 처리
+    if buf:
+        if sentences and len(buf) < 8:
+            sentences[-1] = sentences[-1] + " " + buf
+        else:
+            sentences.append(buf)
+
+    sentences = [s.strip() for s in sentences if s.strip()]
+    return sentences if sentences else [text]
+
+
+# ── 변화율 및 하이라이트 ─────────────────────────────────────────────────────
+
+def _compute_change_rate(emotions_list: list) -> list:
+    """연속 문장 간 4감정 평균 변화량."""
+    if len(emotions_list) < 2:
+        return [0.0] * len(emotions_list)
+    rates = [0.0]
+    for i in range(1, len(emotions_list)):
+        a, b = emotions_list[i - 1], emotions_list[i]
+        diff = sum(abs(b[k] - a[k]) for k in ["불안", "확신", "회피", "분노"]) / 4.0
+        rates.append(round(diff, 2))
+    return rates
+
+
+def _detect_highlights(rates: list, threshold_factor: float = 1.2, abs_min: float = 5.0) -> list:
+    """
+    변화율 기반 하이라이트 구간 탐지 (개선).
+
+    기존 문제: threshold_factor=1.4 + 전체 변화가 작으면 아무것도 안 잡힘
+    개선:
+    - threshold_factor를 1.2로 낮춤 (더 민감하게)
+    - 절대값 하한선 abs_min 추가: 변화율이 낮아도 상대적으로 높은 구간은 탐지
+    - 전체 변화량이 매우 작은 경우(평탄한 진술) 최대 변화 구간 1개 강제 반환
+    """
+    if len(rates) < 2:
+        return []
+
+    non_zero = [r for r in rates if r > 0]
+    if not non_zero:
+        return []
+
+    mu    = sum(rates) / len(rates)
+    sigma = math.sqrt(sum((r - mu) ** 2 for r in rates) / len(rates))
+
+    # 변화량이 전반적으로 작은 경우 (sigma < 2.0): 최대값 구간 1개 강제 반환
+    if sigma < 2.0:
+        max_idx = rates.index(max(rates))
+        if rates[max_idx] > 0:
+            return [{
+                "start":     max(0, max_idx - 1),
+                "end":       max_idx,
+                "maxChange": round(rates[max_idx], 2),
+            }]
+        return []
+
+    threshold = max(mu + threshold_factor * sigma, abs_min)
+    highlights = []
+    i = 0
+    while i < len(rates):
+        if rates[i] >= threshold:
+            start = max(0, i - 1)
+            end   = i
+            while end + 1 < len(rates) and rates[end + 1] >= threshold:
+                end += 1
+            highlights.append({
+                "start":     start,
+                "end":       end,
+                "maxChange": round(max(rates[start:end + 1]), 2),
+            })
+            i = end + 1
+        else:
+            i += 1
+    return highlights
+
+
+# ── Flask 엔드포인트 ─────────────────────────────────────────────────────────
+
+@app.route("/emotion/analyze", methods=["POST"])
+def emotion_analyze():
+    data = request.get_json(force=True, silent=True) or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"success": False, "error": "진술 내용이 없습니다."}), 400
+
+    sentences = _split_korean_sentences(text)
+
+    results = []
+    for sent in sentences:
+        emotions = _sentence_emotion_by_model(sent) or _sentence_emotion_by_keyword(sent)
+        results.append({"text": sent, "emotions": emotions})
+
+    emotions_list = [r["emotions"] for r in results]
+    rates         = _compute_change_rate(emotions_list)
+    highlights    = _detect_highlights(rates)
+
+    output = []
+    for i, r in enumerate(results):
+        output.append({
+            "index":      i,
+            "text":       r["text"],
+            "불안":        r["emotions"]["불안"],
+            "확신":        r["emotions"]["확신"],
+            "회피":        r["emotions"]["회피"],
+            "분노":        r["emotions"]["분노"],
+            "changeRate": rates[i],
+        })
+
+    # 사용 중인 추론 방식 기록
+    if _EMOTION_PIPELINE is not None:
+        model_label = "multi-emotion+keyword-blend"
+    else:
+        model_label = "keyword-weighted"
+
+    return jsonify({
+        "success":    True,
+        "sentences":  output,
+        "highlights": highlights,
+        "model":      model_label,
+        "total":      len(output),
+    })
+# ════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=False)
+    app.run(host="0.0.0.0", port=5001, debug=False, threaded=True)

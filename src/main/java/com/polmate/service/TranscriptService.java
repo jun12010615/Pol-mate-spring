@@ -33,6 +33,8 @@ public class TranscriptService {
     @Value("${polmate.serv.base-url}")
     private String servBaseUrl;
 
+    public String getFlaskBaseUrl() { return servBaseUrl; }
+
     // ── 조서 원문 + 요약 조회 ────────────────────────────────────
     public Optional<Map<String, Object>> getText(Integer transcriptId, String userId) {
         List<Map<String, Object>> rows = jdbc.queryForList(

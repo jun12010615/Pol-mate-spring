@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POL-MATE | 감정 흐름 분석</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f0f2f8; -webkit-font-smoothing: antialiased; }
+
+.pm-layout { display: flex; min-height: 100vh; }
+.pm-content { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; }
+
+/* ── 상단 헤더 ── */
+.page-header {
+    background: #fff; border-bottom: 1px solid #e5e7eb;
+    padding: 20px 32px; display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 50;
+}
+.page-header-left { display: flex; align-items: center; gap: 14px; }
+.page-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: linear-gradient(135deg, #0d1a33, #1a2744);
+    display: flex; align-items: center; justify-content: center;
+}
+.page-title { font-size: 17px; font-weight: 600; color: #0d1a33; }
+.page-sub { font-size: 12px; color: #6b7280; margin-top: 2px; }
+.badge-model {
+    font-size: 10px; padding: 3px 8px; border-radius: 8px;
+    background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0;
+    font-weight: 500;
+}
+
+/* ── 본문 레이아웃 ── */
+.page-body { flex: 1; padding: 24px 32px; }
+
+/* ── 조서 선택 카드 ── */
+.select-card {
+    background: #fff; border-radius: 14px; border: 1px solid #e5e7eb;
+    padding: 20px 24px; margin-bottom: 20px;
+    display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap;
+}
+.select-card label { font-size: 11px; font-weight: 500; color: #6b7280; letter-spacing: 0.5px; text-transform: uppercase; display: block; margin-bottom: 6px; }
+.select-wrap { flex: 1; min-width: 220px; }
+.field-select {
+    width: 100%; padding: 10px 12px; border: 1.5px solid #e2e5ee;
+    border-radius: 10px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
+    color: #1a1a2e; background: #f4f6fb; outline: none; appearance: none;
+    transition: border-color 0.15s;
+}
+.field-select:focus { border-color: #0d1a33; background: #fff; }
+.btn-analyze {
+    padding: 11px 24px; background: #0d1a33; color: #fff; border: none;
+    border-radius: 10px; font-size: 13px; font-weight: 500;
+    font-family: 'Noto Sans KR', sans-serif; cursor: pointer;
+    display: flex; align-items: center; gap: 8px; white-space: nowrap;
+    transition: background 0.15s;
+}
+.btn-analyze:hover { background: #1a2744; }
+.btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-analyze svg { flex-shrink: 0; }
+
+/* ── 분석 진행 상태 ── */
+.status-bar {
+    background: #fff; border-radius: 12px; border: 1px solid #e5e7eb;
+    padding: 14px 20px; margin-bottom: 20px;
+    display: none; align-items: center; gap: 12px;
+}
+.status-bar.show { display: flex; }
+.spinner {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2.5px solid #e5e7eb; border-top-color: #0d1a33;
+    animation: spin 0.8s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.status-text { font-size: 13px; color: #6b7280; }
+
+/* ── 결과 그리드 ── */
+.result-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-bottom: 20px; }
+@media (max-width: 1100px) { .result-grid { grid-template-columns: 1fr; } }
+
+/* ── 카드 공통 ── */
+.card {
+    background: #fff; border-radius: 14px; border: 1px solid #e5e7eb;
+    overflow: hidden;
+}
+.card-header {
+    padding: 16px 20px; border-bottom: 1px solid #f0f2f8;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.card-title { font-size: 13px; font-weight: 600; color: #0d1a33; display: flex; align-items: center; gap: 8px; }
+.card-body { padding: 20px; }
+
+/* ── 차트 영역 ── */
+.chart-wrap { position: relative; height: 340px; }
+
+/* ── 범례 ── */
+.legend-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #6b7280; }
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+/* ── 하이라이트 설명 ── */
+.highlight-info {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px;
+    padding: 12px 14px; font-size: 12px; color: #991b1b; margin-top: 14px;
+    line-height: 1.6;
+}
+.highlight-info svg { flex-shrink: 0; margin-top: 1px; }
+.highlight-info-none {
+    display: flex; align-items: center; gap: 8px;
+    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px;
+    padding: 12px 14px; font-size: 12px; color: #166534; margin-top: 14px;
+}
+
+/* ── 문장 패널 ── */
+.sentence-panel { max-height: 420px; overflow-y: auto; }
+.sentence-panel::-webkit-scrollbar { width: 4px; }
+.sentence-panel::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+.sentence-item {
+    padding: 12px 16px; border-bottom: 1px solid #f0f2f8;
+    cursor: pointer; transition: background 0.1s;
+}
+.sentence-item:last-child { border-bottom: none; }
+.sentence-item:hover { background: #f9fafb; }
+.sentence-item.highlight-sent { background: #fef2f2; border-left: 3px solid #ef4444; }
+.sentence-item.highlight-sent:hover { background: #fee2e2; }
+.sentence-item.active-sent { background: #eff6ff; }
+.sent-idx { font-size: 10px; color: #9ca3af; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.sent-danger-badge {
+    font-size: 9px; padding: 1px 6px; background: #ef4444; color: #fff;
+    border-radius: 4px; font-weight: 500;
+}
+.sent-text { font-size: 12px; color: #374151; line-height: 1.6; margin-bottom: 8px; }
+.sent-bars { display: flex; gap: 8px; flex-wrap: wrap; }
+.sent-bar-item { display: flex; align-items: center; gap: 5px; }
+.sent-bar-label { font-size: 10px; color: #9ca3af; width: 22px; flex-shrink: 0; }
+.sent-bar-track { width: 60px; height: 5px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+.sent-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+.sent-bar-val { font-size: 10px; color: #6b7280; width: 26px; text-align: right; }
+
+/* ── 통계 카드 ── */
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.stat-item {
+    background: #fff; border-radius: 12px; border: 1px solid #e5e7eb;
+    padding: 16px; text-align: center;
+}
+.stat-value { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.stat-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* ── 빈 상태 ── */
+.empty-state {
+    text-align: center; padding: 60px 20px; color: #9ca3af;
+}
+.empty-state svg { margin: 0 auto 16px; display: block; }
+.empty-title { font-size: 15px; font-weight: 500; color: #6b7280; margin-bottom: 6px; }
+.empty-sub { font-size: 12px; }
+
+/* ── 색상 변수 ── */
+:root {
+    --c-anxiety: #ef4444;
+    --c-certainty: #22c55e;
+    --c-avoidance: #f59e0b;
+    --c-anger: #8b5cf6;
+}
+</style>
+</head>
+<body>
+<div class="pm-layout">
+    <th:block th:replace="~{desktop/fragments/sidebar :: sidebar('emotion')}"></th:block>
+
+    <main class="pm-content">
+        <!-- 헤더 -->
+        <div class="page-header">
+            <div class="page-header-left">
+                <div class="page-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </div>
+                <div>
+                    <div class="page-title">감정 흐름 분석</div>
+                    <div class="page-sub">진술 문장별 감정 변화 및 허위 가능성 구간 탐지</div>
+                </div>
+            </div>
+            <span class="badge-model" id="modelBadge" style="display:none;"></span>
+        </div>
+
+        <div class="page-body">
+
+            <!-- 조서 선택 -->
+            <div class="select-card">
+                <div class="select-wrap">
+                    <label>사건 선택</label>
+                    <select class="field-select" id="caseSelect" onchange="loadTranscripts()">
+                        <option value="">사건을 선택하세요</option>
+                    </select>
+                </div>
+                <div class="select-wrap">
+                    <label>조서 선택</label>
+                    <select class="field-select" id="transcriptSelect" disabled>
+                        <option value="">사건을 먼저 선택하세요</option>
+                    </select>
+                </div>
+                <button class="btn-analyze" id="analyzeBtn" onclick="runAnalysis()" disabled>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    감정 분석 실행
+                </button>
+            </div>
+
+            <!-- 진행 상태 -->
+            <div class="status-bar" id="statusBar">
+                <div class="spinner"></div>
+                <span class="status-text">KoBERT 감정 분석 중입니다. 잠시 기다려 주세요...</span>
+            </div>
+
+            <!-- 통계 요약 -->
+            <div class="stat-grid" id="statGrid" style="display:none;">
+                <div class="stat-item">
+                    <div class="stat-value" id="statSentences" style="color:#0d1a33;">—</div>
+                    <div class="stat-label">분석 문장 수</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="statHighlights" style="color:#ef4444;">—</div>
+                    <div class="stat-label">위험 구간 수</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="statPeakEmotion" style="color:#8b5cf6;">—</div>
+                    <div class="stat-label">최고 감정</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="statMaxChange" style="color:#f59e0b;">—</div>
+                    <div class="stat-label">최대 변화율</div>
+                </div>
+            </div>
+
+            <!-- 차트 + 문장 패널 -->
+            <div class="result-grid" id="resultGrid" style="display:none;">
+
+                <!-- 차트 카드 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0d1a33" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            감정 흐름 그래프
+                        </div>
+                        <div class="legend-row">
+                            <div class="legend-item"><div class="legend-dot" style="background:var(--c-anxiety);"></div>불안</div>
+                            <div class="legend-item"><div class="legend-dot" style="background:var(--c-certainty);"></div>확신</div>
+                            <div class="legend-item"><div class="legend-dot" style="background:var(--c-avoidance);"></div>회피</div>
+                            <div class="legend-item"><div class="legend-dot" style="background:var(--c-anger);"></div>분노</div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-wrap">
+                            <canvas id="emotionChart"></canvas>
+                        </div>
+                        <div id="highlightInfo"></div>
+                    </div>
+                </div>
+
+                <!-- 문장 패널 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0d1a33" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                            문장별 감정 분포
+                        </div>
+                        <span style="font-size:11px; color:#9ca3af;" id="sentCount"></span>
+                    </div>
+                    <div class="sentence-panel" id="sentencePanel"></div>
+                </div>
+
+            </div>
+
+            <!-- 초기 빈 상태 -->
+            <div class="empty-state" id="emptyState">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                <div class="empty-title">조서를 선택하고 감정 분석을 실행하세요</div>
+                <div class="empty-sub">KoBERT 모델이 진술 문장의 불안·확신·회피·분노 감정을 분석합니다</div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<script>
+var _chart = null;
+var _sentences = [];
+var _highlights = [];
+
+// ── 초기화 ──────────────────────────────────────────────────────────────────
+(function init() {
+    fetch('/caseApi?action=caseList', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(cases) {
+            var sel = document.getElementById('caseSelect');
+            (Array.isArray(cases) ? cases : []).forEach(function(c) {
+                var opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = '[' + c.id + '] ' + c.name + (c.status ? ' (' + c.status + ')' : '');
+                sel.appendChild(opt);
+            });
+        }).catch(function() {});
+})();
+
+function loadTranscripts() {
+    var caseId = document.getElementById('caseSelect').value;
+    var tsel = document.getElementById('transcriptSelect');
+    var btn = document.getElementById('analyzeBtn');
+    tsel.innerHTML = '<option value="">불러오는 중...</option>';
+    tsel.disabled = true;
+    btn.disabled = true;
+    if (!caseId) {
+        tsel.innerHTML = '<option value="">사건을 먼저 선택하세요</option>';
+        return;
+    }
+    fetch('/caseApi?action=caseDetail&caseId=' + encodeURIComponent(caseId), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(detail) {
+            tsel.innerHTML = '<option value="">조서를 선택하세요</option>';
+            var docs = detail.docs || [];
+            if (!docs.length) {
+                tsel.innerHTML = '<option value="">등록된 조서가 없습니다</option>';
+                return;
+            }
+            docs.forEach(function(d) {
+                var opt = document.createElement('option');
+                opt.value = d.id;
+                opt.textContent = d.name + ' ' + d.type + ' 진술 조서';
+                tsel.appendChild(opt);
+            });
+            tsel.disabled = false;
+            tsel.onchange = function() { btn.disabled = !tsel.value; };
+        }).catch(function() {
+            tsel.innerHTML = '<option value="">불러오기 실패</option>';
+        });
+}
+
+// ── 분석 실행 ────────────────────────────────────────────────────────────────
+function runAnalysis() {
+    var tsel = document.getElementById('transcriptSelect');
+    var tid = tsel.value;
+    if (!tid) return;
+
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('resultGrid').style.display = 'none';
+    document.getElementById('statGrid').style.display = 'none';
+    document.getElementById('statusBar').classList.add('show');
+    document.getElementById('analyzeBtn').disabled = true;
+
+    var params = new URLSearchParams({ action: 'emotionAnalyze', transcriptId: tid });
+    fetch('/caseApi?' + params.toString(), {
+        method: 'POST',
+        credentials: 'same-origin',
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        document.getElementById('statusBar').classList.remove('show');
+        document.getElementById('analyzeBtn').disabled = false;
+        if (!data.success) {
+            alert('분석 실패: ' + (data.error || '알 수 없는 오류'));
+            document.getElementById('emptyState').style.display = 'block';
+            return;
+        }
+        _sentences = data.sentences || [];
+        _highlights = data.highlights || [];
+        renderAll(data);
+    })
+    .catch(function(e) {
+        document.getElementById('statusBar').classList.remove('show');
+        document.getElementById('analyzeBtn').disabled = false;
+        alert('서버 통신 오류가 발생했습니다.');
+        document.getElementById('emptyState').style.display = 'block';
+    });
+}
+
+// ── 전체 렌더링 ──────────────────────────────────────────────────────────────
+function renderAll(data) {
+    renderStats(data);
+    renderChart(data);
+    renderSentences(data);
+    renderHighlightInfo(data);
+    document.getElementById('statGrid').style.display = 'grid';
+    document.getElementById('resultGrid').style.display = 'grid';
+
+    var badge = document.getElementById('modelBadge');
+    badge.textContent = data.model === 'kobert+keyword' ? 'KoBERT + 키워드' : '키워드 분석';
+    badge.style.display = 'inline-flex';
+}
+
+function renderStats(data) {
+    var sents = data.sentences || [];
+    var highlights = data.highlights || [];
+    document.getElementById('statSentences').textContent = sents.length;
+    document.getElementById('statHighlights').textContent = highlights.length;
+
+    if (sents.length) {
+        var peaks = sents.map(function(s) {
+            var vals = { '불안': s['불안'], '확신': s['확신'], '회피': s['회피'], '분노': s['분노'] };
+            return Object.entries(vals).reduce(function(a, b) { return a[1] > b[1] ? a : b; });
+        });
+        var overall = peaks.reduce(function(acc, cur) {
+            acc[cur[0]] = (acc[cur[0]] || 0) + 1; return acc;
+        }, {});
+        var topEmotion = Object.entries(overall).reduce(function(a, b) { return a[1] > b[1] ? a : b; });
+        document.getElementById('statPeakEmotion').textContent = topEmotion[0];
+        var maxRate = Math.max.apply(null, sents.map(function(s) { return s.changeRate || 0; }));
+        document.getElementById('statMaxChange').textContent = maxRate.toFixed(1);
+    }
+}
+
+// ── 차트 ─────────────────────────────────────────────────────────────────────
+function renderChart(data) {
+    var sents = data.sentences || [];
+    var labels = sents.map(function(s) { return '문장 ' + (s.index + 1); });
+    var highlightZones = (data.highlights || []).map(function(h) {
+        return {
+            type: 'box',
+            xMin: h.start - 0.5,
+            xMax: h.end + 0.5,
+            yMin: 0,
+            yMax: 100,
+            backgroundColor: 'rgba(239,68,68,0.08)',
+            borderColor: 'rgba(239,68,68,0.35)',
+            borderWidth: 1,
+        };
+    });
+
+    var annotationsObj = {};
+    highlightZones.forEach(function(z, i) { annotationsObj['zone' + i] = z; });
+
+    if (_chart) { _chart.destroy(); _chart = null; }
+
+    var ctx = document.getElementById('emotionChart').getContext('2d');
+    _chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '불안',
+                    data: sents.map(function(s) { return s['불안']; }),
+                    borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.06)',
+                    borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
+                    tension: 0.4, fill: false,
+                },
+                {
+                    label: '확신',
+                    data: sents.map(function(s) { return s['확신']; }),
+                    borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.06)',
+                    borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
+                    tension: 0.4, fill: false,
+                },
+                {
+                    label: '회피',
+                    data: sents.map(function(s) { return s['회피']; }),
+                    borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.06)',
+                    borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
+                    tension: 0.4, fill: false,
+                },
+                {
+                    label: '분노',
+                    data: sents.map(function(s) { return s['분노']; }),
+                    borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.06)',
+                    borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
+                    tension: 0.4, fill: false,
+                },
+            ],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: function(items) {
+                            var idx = items[0].dataIndex;
+                            var sent = _sentences[idx];
+                            return sent ? sent.text.substring(0, 50) + (sent.text.length > 50 ? '...' : '') : '';
+                        },
+                        label: function(item) {
+                            return item.dataset.label + ': ' + item.raw.toFixed(1);
+                        }
+                    }
+                },
+                annotation: { annotations: annotationsObj },
+            },
+            scales: {
+                x: { grid: { color: '#f0f2f8' }, ticks: { font: { size: 10 }, maxRotation: 45 } },
+                y: {
+                    min: 0, max: 100,
+                    grid: { color: '#f0f2f8' },
+                    ticks: { font: { size: 10 }, callback: function(v) { return v; } },
+                },
+            },
+            onClick: function(event, elements) {
+                if (elements.length) {
+                    var idx = elements[0].index;
+                    scrollToSentence(idx);
+                }
+            },
+        },
+    });
+}
+
+// ── 문장 패널 ─────────────────────────────────────────────────────────────────
+function renderSentences(data) {
+    var panel = document.getElementById('sentencePanel');
+    panel.innerHTML = '';
+    var sents = data.sentences || [];
+    var hlSet = new Set();
+    (data.highlights || []).forEach(function(h) {
+        for (var i = h.start; i <= h.end; i++) hlSet.add(i);
+    });
+
+    document.getElementById('sentCount').textContent = sents.length + '개 문장';
+
+    sents.forEach(function(s) {
+        var isHL = hlSet.has(s.index);
+        var div = document.createElement('div');
+        div.className = 'sentence-item' + (isHL ? ' highlight-sent' : '');
+        div.id = 'sent-' + s.index;
+        div.onclick = function() { highlightSentence(s.index); };
+
+        var emotions = [
+            { key: '불안', color: '#ef4444' },
+            { key: '확신', color: '#22c55e' },
+            { key: '회피', color: '#f59e0b' },
+            { key: '분노', color: '#8b5cf6' },
+        ];
+
+        var barsHtml = emotions.map(function(e) {
+            var val = (s[e.key] || 0).toFixed(1);
+            return '<div class="sent-bar-item">' +
+                '<span class="sent-bar-label">' + e.key + '</span>' +
+                '<div class="sent-bar-track"><div class="sent-bar-fill" style="width:' + val + '%;background:' + e.color + ';"></div></div>' +
+                '<span class="sent-bar-val">' + val + '</span>' +
+                '</div>';
+        }).join('');
+
+        div.innerHTML =
+            '<div class="sent-idx">' +
+                '문장 ' + (s.index + 1) +
+                (isHL ? '<span class="sent-danger-badge">위험 구간</span>' : '') +
+                '<span style="margin-left:auto;font-size:9px;color:#9ca3af;">변화율 ' + (s.changeRate || 0).toFixed(1) + '</span>' +
+            '</div>' +
+            '<div class="sent-text">' + escapeHtml(s.text) + '</div>' +
+            '<div class="sent-bars">' + barsHtml + '</div>';
+
+        panel.appendChild(div);
+    });
+}
+
+function renderHighlightInfo(data) {
+    var box = document.getElementById('highlightInfo');
+    var hl = data.highlights || [];
+    if (!hl.length) {
+        box.innerHTML = '<div class="highlight-info-none">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+            '감정이 급변하는 구간이 탐지되지 않았습니다.</div>';
+        return;
+    }
+    var parts = hl.map(function(h) {
+        return (h.start + 1) + '~' + (h.end + 1) + '번 문장 (변화율 ' + h.maxChange + ')';
+    });
+    box.innerHTML = '<div class="highlight-info">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#991b1b" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+        '<div><strong>허위 진술 가능 구간 탐지:</strong> ' + parts.join(', ') +
+        '<br>위 구간에서 감정 변화가 기준치를 초과하였습니다. 추가 확인이 필요합니다.</div>' +
+        '</div>';
+}
+
+function scrollToSentence(idx) {
+    var el = document.getElementById('sent-' + idx);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        document.querySelectorAll('.sentence-item').forEach(function(e) { e.classList.remove('active-sent'); });
+        el.classList.add('active-sent');
+    }
+}
+
+function highlightSentence(idx) {
+    scrollToSentence(idx);
+    if (_chart) {
+        _chart.data.datasets.forEach(function(ds) {
+            ds.pointRadius = ds.data.map(function(_, i) { return i === idx ? 8 : 3; });
+            ds.pointBackgroundColor = ds.data.map(function(_, i) {
+                return i === idx ? ds.borderColor : 'transparent';
+            });
+        });
+        _chart.update();
+    }
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>
