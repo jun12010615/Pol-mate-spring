@@ -455,33 +455,45 @@ def _timeline_extract_prompt(case_id: str, stmt_name: str, stmt_type: str, text:
 {text}
 
 원문 보존(타임라인·모순 대조에 쓰이므로 생략·왜곡 금지):
-1. time_text, quote는 [조서]에 나온 시간·순서·행위 표현을 가능한 한 원문 그대로 적는다.
-2. 날짜·시각·장소·인물·행위를 추측으로 보완하지 말 것. 불명확하면 time_precision을 approximate 또는 relative로 두고 time_text에 원문 표현을 남긴다.
-3. 부정·전면 부정(전혀, 일절, 한 번도, 없다, 하지 않았다 등)과 부분·긍정 표현은 quote에서 빼거나 약화하지 말 것.
+1. time_text, quote는 [조서] 시간·순서·행위 표현을 원문 그대로 적는다.
+2. **label**은 [조서]에 실제로 쓰인 **단어·어구를 그대로** 이어 붙여 한 줄로 쓴다. 요약·의역·번역·대체어 금지.
+   - 조서에 「가죽 가방」이면 label에도 「가죽 가방」(leather bag 등 영어·다른 표현 금지).
+   - 조서에 「김철수」면 「피해자」「상대방」 등으로 바꾸지 말고 「김철수」.
+   - 조서에 「코인노래방」이면 그 표기 그대로(노래방·가라오케 등으로 바꾸지 말 것).
+   - label에 넣는 모든 명사·동사·부정어(전혀, 일절, 하지 않았다 등)는 quote·[조서]에서 **복사**할 것. 새로 짓지 말 것.
+3. 날짜·시각·장소·인물·행위를 추측으로 보완하지 말 것. 불명확하면 time_precision을 approximate 또는 relative로 두고 time_text에 원문 표현을 남긴다.
+4. **time_start·time_end는 time_text를 기준**으로 채운다(오후 3시 5분→15:05). time_text·label에 시각이 있으면 quote에 없어도 time_start를 넣는다. AI가 넣은 time_start가 time_text와 다르면 time_text가 맞다.
+5. 부정·전면 부정(전혀, 일절, 한 번도, 없다, 하지 않았다 등)과 부분·긍정 표현은 quote에서 빼거나 약화하지 말 것.
 
 반드시 아래 JSON 형식으로만 답하라. 키 이름은 그대로 쓴다.
 
 필드(events 배열 각 항목):
 stmt_name: 그 행위를 한 사람 이름(이 조서 화자가 한 행위면 {stmt_name}). 타임라인 레인은 이 이름으로 묶인다.
 stmt_type: 피의자, 피해자, 목격자, 참고인, 진술자 중 하나. 이 조서 화자의 행위면 조서 유형({stmt_type})에 맞출 것. event_type 값을 stmt_type에 넣지 말 것.
-event_type: alibi(행적·체류), action(행위·목격·범행), movement(이동), other
+event_type: alibi(행적·체류), action(본인·타인의 구체 행위), movement(이동·도착·출발), observation(목격·부재·확인·목격한 사실·없었음·봤음), other
 time_precision: exact, approximate, relative, unknown
 time_start, time_end: YYYY-MM-DDTHH:MM:SS 또는 null
 time_text: 본문의 시간·순서 표현(필수. 상대시간·모호 표현 포함)
 place: 장소 또는 null
-label: 시간 맥락이 드러나는 한 줄 요약(빈 문자열 금지)
+label: [조서] 원문 단어를 최대한 그대로 쓴 한 줄 요약(빈 문자열 금지. 번역·의역 금지)
 quote: 근거가 되는 본문 문장 일부(필수, 1문장 이상)
 confidence: high, medium, low
 sort_order: 10, 20, 30 … 시간순
 
 핵심 규칙:
+0. **label = 원문 단어 조합**: 한 줄이어도 [조서]에 없는 표현·영어·일반화된 호칭을 넣지 말 것. quote에 있는 표현을 우선해 label을 만든다.
 1. label, time_text, quote 중 하나라도 비거나 근거가 없으면 그 이벤트는 넣지 말 것.
 2. 시간·순서 단서가 전혀 없는 일반 서술은 넣지 말 것.
 3. stmt_name은 행위 주체 이름. 다른 인물의 행위면 그 인물 이름을 쓸 것.
 4. quote에 적힌 시각과 time_start, time_end, time_text가 일치해야 한다. 시작·끝 시각이 둘 다 있으면(예: 밤 10시 40분에 … 밤 11시 5분에) time_start·time_end·time_text에 각각 반영하고, 끝 시각을 임의로 5분 뒤로 대체하지 말 것.
 5. exact는 본문에 구체 시각(몇 시 몇 분·날짜)이 있을 때만 time_start를 채운다. approximate는 대략·경·쯤. N분 후·N시간 뒤만 있으면 time_start는 null로 두고 time_text·quote에 원문(예: 20분 후)을 그대로 남긴다(서버가 직전 이벤트 시각 기준으로 계산).
 6. events는 시간순, sort_order 오름차순.
-7. 해당 없으면 {{"events":[]}}
+7. **쪼개기(SPLIT)**: 같은 시각대라도 **타인에 대한 목격·부재·대신 관찰**(「대신」「그러나」+ 다른 사람 행적)은 이벤트를 나눈다. observation으로 분리.
+8. **묶기(MERGE)**: 진술자 **본인의 한 시각대 알리바이**—어디 있었는지·하지 않은 일·당시 하던 일(코인노래방 1시간 등)—가 **연속**이면 **이벤트 1개**로 묶는다. event_type은 alibi. time_start=시작 시각, time_end=「N시간 동안」이 있으면 시작+N시간(예: 오후 3시쯤+1시간→4시). label·quote에 부정(금은방 미접근)과 체류(노래방)를 함께 요약해도 된다.
+9. 「당시 저는 …」「…긴 했지만 … 하지 않았습니다」처럼 앞 문장 시각을 이어받는 **본인 행적 후속**은 새 이벤트로 쪼개지 말고 앞 알리바이에 합친다.
+10. 예(묶기): 「어제 오후 3시쯤 서면 지하상가 근처였지만 금은방에는 가지 않았고, 당시 코인노래방에서 1시간 노래」→ **1개** alibi, time_text에 3시~1시간, place=코인노래방.
+11. 예(쪼개기): 「3시 10분쯤 코인노래방 앞으로 갔는데 현우는 안에 없었고, 대신 비상구에서 봤다」→ movement+observation 분리(규칙 7).
+12. 해당 없으면 {{"events":[]}}
 
 JSON 형식:
 {{
@@ -495,7 +507,7 @@ JSON 형식:
       "time_end": null,
       "time_text": "2024년 5월 1일 오후 2시 30분경",
       "place": "역삼동 주택",
-      "label": "오후 2시 30분경 역삼동 주택 앞에서 피해자를 만남",
+      "label": "오후 2시 30분경 역삼동 집 앞에서 김철수를 만남",
       "quote": "그때 역삼동 집 앞에서 김철수를 만났다.",
       "confidence": "high",
       "sort_order": 10
@@ -515,11 +527,23 @@ _KR_CLOCK_PATTERNS = (
 
 
 def _korean_period_to_24h(hour12: int, minute: int, period: str) -> tuple[int, int]:
-    h = max(1, min(12, int(hour12)))
     m = max(0, min(59, int(minute)))
+    h = int(hour12)
+    if h < 0 or h > 23:
+        h = max(1, min(12, h))
     if period == "am":
-        return (0 if h == 12 else h, m)
-    return (12 if h == 12 else h + 12, m)
+        if h in (0, 12):
+            return (0, m)
+        if 1 <= h <= 11:
+            return (h, m)
+        return (h % 24, m)
+    if h == 12:
+        return (12, m)
+    if h == 0:
+        return (0, m)
+    if 1 <= h <= 11:
+        return (h + 12, m)
+    return (h, m)
 
 
 def _find_korean_clock_in_text(text: str):
@@ -572,25 +596,118 @@ def _merge_date_prefix_into_time_text(existing: str, start_phrase: str, end_phra
     return body if body else ex
 
 
+def _event_time_source_text(ev: dict) -> str:
+    return "\n".join(
+        x for x in (
+            (ev.get("quote") or "").strip(),
+            (ev.get("time_text") or "").strip(),
+            (ev.get("label") or "").strip(),
+        )
+        if x
+    )
+
+
+def _parse_date_from_event_text(text: str):
+    if not text:
+        return None
+    from datetime import date
+    m = re.search(r"(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일", text)
+    if not m:
+        return None
+    try:
+        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_datetime_from_text_field(text: str):
+    """time_text 등에 들어 있는 ISO 또는 한국어 시각 → datetime."""
+    if not text or not str(text).strip():
+        return None
+    src = str(text).strip()
+    dt = _parse_timeline_iso(src)
+    if dt:
+        return dt
+    m = re.search(
+        r"(\d{4})-(\d{2})-(\d{2})[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?",
+        src,
+    )
+    if m:
+        from datetime import datetime
+        try:
+            sec = int(m.group(6)) if m.group(6) else 0
+            return datetime(
+                int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                int(m.group(4)), int(m.group(5)), sec,
+            )
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def _pick_start_clock(time_text: str, label: str, quote: str):
+    for src in (time_text, label, quote):
+        if not src or not str(src).strip():
+            continue
+        clocks = _find_all_korean_clocks_in_text(str(src).strip())
+        if clocks:
+            return clocks[0]
+    return None
+
+
+def _pick_end_clock(time_text: str, label: str, quote: str, start_h: int, start_m: int):
+    for src in (time_text, label, quote):
+        if not src or not str(src).strip():
+            continue
+        clocks = _find_all_korean_clocks_in_text(str(src).strip())
+        if len(clocks) >= 2:
+            end_h, end_m, end_phrase = clocks[-1]
+            if (end_h, end_m) != (start_h, start_m):
+                return end_h, end_m, end_phrase
+    return None, None, None
+
+
 def _reconcile_timeline_event_times(ev: dict) -> dict:
-    """quote의 시각(복수 가능)을 우선해 time_start·time_end·time_text 보정."""
+    """time_text → label → quote 순으로 time_start/end 확정 (AI time_start보다 우선)."""
     if not isinstance(ev, dict):
         return ev
+    tt = (ev.get("time_text") or "").strip()
+    label = (ev.get("label") or "").strip()
     quote = (ev.get("quote") or "").strip()
-    if not quote:
-        return ev
-
-    clocks = _find_all_korean_clocks_in_text(quote)
-    if not clocks:
+    sources = _event_time_source_text(ev)
+    if not sources:
         return ev
 
     from datetime import datetime, timedelta
 
-    start_h, start_m, start_phrase = clocks[0]
-    end_h, end_m, end_phrase = (clocks[-1][0], clocks[-1][1], clocks[-1][2]) if len(clocks) >= 2 else (None, None, None)
+    iso_start = _parse_datetime_from_text_field(tt) or _parse_datetime_from_text_field(label)
+    if iso_start:
+        ev["time_start"] = iso_start.strftime("%Y-%m-%dT%H:%M:%S")
+        te = _parse_timeline_iso(ev.get("time_end"))
+        if not te or te <= iso_start:
+            ev["time_end"] = (iso_start + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+        prec_src = tt or sources
+        if any(x in prec_src for x in ("경", "쯤", "대략", "무렵")):
+            ev["time_precision"] = "approximate"
+        else:
+            ev["time_precision"] = ev.get("time_precision") or "exact"
+        return ev
 
+    picked = _pick_start_clock(tt, label, quote)
+    if not picked:
+        return ev
+    start_h, start_m, start_phrase = picked
+
+    base_date = _parse_date_from_event_text(tt)
+    if not base_date:
+        base_date = _parse_date_from_event_text(label)
+    if not base_date:
+        base_date = _parse_date_from_event_text(quote)
     ts = _parse_timeline_iso(ev.get("time_start"))
-    base_date = ts.date() if ts else datetime.now().date()
+    if not base_date and ts:
+        base_date = ts.date()
+    if not base_date:
+        base_date = datetime.now().date()
 
     def _combine(h: int, m: int):
         return datetime(base_date.year, base_date.month, base_date.day, h, m, 0)
@@ -598,25 +715,24 @@ def _reconcile_timeline_event_times(ev: dict) -> dict:
     start_dt = _combine(start_h, start_m)
     ev["time_start"] = start_dt.strftime("%Y-%m-%dT%H:%M:%S")
 
-    if end_h is not None and len(clocks) >= 2:
+    end_h, end_m, end_phrase = _pick_end_clock(tt, label, quote, start_h, start_m)
+    if end_h is not None:
         end_dt = _combine(end_h, end_m)
         if end_dt <= start_dt:
             end_dt += timedelta(days=1)
         ev["time_end"] = end_dt.strftime("%Y-%m-%dT%H:%M:%S")
-        if (end_h, end_m) != (start_h, start_m):
-            ev["time_precision"] = ev.get("time_precision") or "exact"
+        if not tt:
+            ev["time_text"] = _merge_date_prefix_into_time_text("", start_phrase, end_phrase)
     else:
         te = _parse_timeline_iso(ev.get("time_end"))
         if not te or te <= start_dt:
             ev["time_end"] = (start_dt + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+        if not tt:
+            ev["time_text"] = _merge_date_prefix_into_time_text("", start_phrase, None)
 
-    ev["time_text"] = _merge_date_prefix_into_time_text(
-        (ev.get("time_text") or "").strip(), start_phrase, end_phrase if len(clocks) >= 2 else None
-    )
     ev["time_precision"] = _infer_clock_precision_from_quote(
-        quote, start_phrase, end_phrase if len(clocks) >= 2 else None
+        sources, start_phrase, end_phrase if end_h is not None else None
     )
-
     return ev
 
 
@@ -661,13 +777,11 @@ _REL_HOURS_AFTER = re.compile(
 )
 
 
-def _parse_relative_offset_minutes(text: str):
-    """'20분 후', '1시간 뒤' 등 → 분 단위 오프셋. 절대 시각(몇 시 몇 분) 문장은 None."""
+def _try_parse_relative_offset_minutes(text: str):
+    """'20분 후' 등 상대 분·시간만 추출."""
     if not text or not str(text).strip():
         return None
     src = str(text).strip()
-    if _find_all_korean_clocks_in_text(src):
-        return None
     for pat in (_REL_MINUTES_AFTER, _REL_MINUTES_ELAPSED):
         m = pat.search(src)
         if m:
@@ -684,6 +798,19 @@ def _parse_relative_offset_minutes(text: str):
     return None
 
 
+def _parse_relative_offset_minutes(text: str):
+    """상대 표현 우선. 없고 절대 시각만 있으면 None."""
+    if not text or not str(text).strip():
+        return None
+    src = str(text).strip()
+    rel = _try_parse_relative_offset_minutes(src)
+    if rel is not None:
+        return rel
+    if _find_all_korean_clocks_in_text(src):
+        return None
+    return None
+
+
 def _event_datetime(ev: dict):
     return _parse_timeline_iso(ev.get("time_start"))
 
@@ -697,6 +824,269 @@ def _relative_chain_key(ev: dict):
     tid = ev.get("transcript_id") or ev.get("transcriptId") or 0
     name = re.sub(r"\s+", "", (ev.get("stmt_name") or ev.get("stmtName") or "").strip())
     return (tid, name)
+
+
+_SAME_TIME_CONNECTORS = (
+    "대신",
+    "그러나",
+    "그런데",
+    "하지만",
+    "이어",
+    "한편",
+    "그리고",
+    "그 후",
+    "이후",
+    "곧",
+)
+
+
+def _is_same_speaker_alibi_continuation(quote: str) -> bool:
+    """본인 알리바이 연속 서술(당시·부정·체류) — 별도 observation 이벤트로 쪼개지 않음."""
+    q = (quote or "").strip()
+    if not q:
+        return False
+    if re.search(r"당시\s*(저는|나는|제가)", q):
+        return True
+    if "긴 했지만" in q or "얼씬도" in q or "하지 않았" in q:
+        if "저는" in q or "제가" in q or "나는" in q or "혼자" in q:
+            return True
+    return False
+
+
+def _quote_needs_same_time_inherit(quote: str) -> bool:
+    q = (quote or "").strip()
+    if not q:
+        return False
+    if _is_same_speaker_alibi_continuation(q):
+        return False
+    if _find_all_korean_clocks_in_text(q):
+        return False
+    if "대신" in q and any(m in q for m in ("봤", "보았", "목격", "내려", "나타", "있었")):
+        return True
+    return any(c in q for c in _SAME_TIME_CONNECTORS if c != "대신") or any(
+        m in q for m in ("보이지", "목격", "봤", "보았")
+    )
+
+
+_DUR_HOURS_SPAN = re.compile(r"(\d{1,2})\s*시간\s*동안", re.I)
+_DUR_MINUTES_SPAN = re.compile(r"(\d{1,4})\s*분\s*동안", re.I)
+
+
+def _parse_activity_duration_minutes(text: str):
+    if not text:
+        return None
+    src = str(text)
+    m = _DUR_HOURS_SPAN.search(src)
+    if m:
+        try:
+            return int(m.group(1)) * 60
+        except (TypeError, ValueError):
+            pass
+    m = _DUR_MINUTES_SPAN.search(src)
+    if m:
+        try:
+            return int(m.group(1))
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def _apply_activity_duration_end(events: list) -> list:
+    """「1시간 동안」 등 → time_end = time_start + 기간."""
+    from datetime import timedelta
+
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        start = _event_datetime(ev)
+        if not start:
+            continue
+        src = f"{ev.get('quote') or ''} {ev.get('time_text') or ''}"
+        mins = _parse_activity_duration_minutes(src)
+        if mins is None or mins <= 0:
+            continue
+        end = start + timedelta(minutes=mins)
+        ev["time_end"] = end.strftime("%Y-%m-%dT%H:%M:%S")
+        tt = (ev.get("time_text") or "").strip()
+        if "동안" not in tt and mins >= 60 and mins % 60 == 0:
+            h = mins // 60
+            if tt:
+                ev["time_text"] = f"{tt} (~{h}시간)"
+    return events
+
+
+def _is_alibi_like_event(ev: dict) -> bool:
+    t = (ev.get("event_type") or "").lower()
+    if t in ("alibi", "movement"):
+        return True
+    q = f"{ev.get('quote') or ''} {ev.get('label') or ''}"
+    return any(m in q for m in ("알리바이", "있었", "하지 않", "얼씬", "당시", "혼자", "노래방", "들어가"))
+
+
+def _can_merge_alibi_cluster(a: dict, b: dict) -> bool:
+    if _relative_chain_key(a) != _relative_chain_key(b):
+        return False
+    if not _is_alibi_like_event(a) or not _is_alibi_like_event(b):
+        return False
+    bq = (b.get("quote") or "").strip()
+    if "대신" in bq and any(m in bq for m in ("봤", "보았", "목격")):
+        return False
+    et = (b.get("event_type") or "").lower()
+    if et == "observation" and not _is_same_speaker_alibi_continuation(bq):
+        sn = (b.get("stmt_name") or "").strip()
+        if sn and sn not in bq and ("봤" in bq or "없었" in bq):
+            return False
+    if _is_same_speaker_alibi_continuation(bq):
+        return True
+    if "당시" in bq and ("저는" in bq or "제가" in bq or "혼자" in bq):
+        return True
+    a_start = _event_datetime(a)
+    b_start = _event_datetime(b)
+    if a_start and b_start and abs((b_start - a_start).total_seconds()) <= 3600:
+        return True
+    return False
+
+
+def _excerpt_label_from_quote(quote: str, max_len: int = 100) -> str:
+    """병합·보조용: label 대신 quote 원문 일부를 잘라 쓴다."""
+    q = (quote or "").strip()
+    if not q:
+        return ""
+    for sep in ("습니다.", "했습니다.", "다.", "요.", "죠."):
+        idx = q.find(sep)
+        if 0 < idx <= max_len * 2:
+            return q[: idx + len(sep)].strip()
+    if len(q) <= max_len:
+        return q
+    return q[:max_len].rstrip() + "…"
+
+
+def _merge_cluster_label(quotes: list, labels: list) -> str:
+    """알리바이 묶기 시 label은 quote 원문 발췌를 우선한다."""
+    if len(quotes) == 1:
+        ex = _excerpt_label_from_quote(quotes[0], 150)
+        if ex:
+            return ex
+    if len(quotes) >= 2:
+        a = _excerpt_label_from_quote(quotes[0], 60)
+        b = _excerpt_label_from_quote(quotes[-1], 60)
+        if a and b:
+            return f"{a} … {b}"[:200]
+        if a:
+            return a
+    if len(labels) == 1:
+        return labels[0]
+    if len(labels) >= 2:
+        return labels[0][:80] + " … " + labels[-1][:80]
+    return ""
+
+
+def _combine_alibi_cluster(cluster: list) -> dict:
+    base = dict(cluster[0])
+    quotes = []
+    labels = []
+    places = []
+    for ev in cluster:
+        q = (ev.get("quote") or "").strip()
+        if q and q not in quotes:
+            quotes.append(q)
+        lb = (ev.get("label") or "").strip()
+        if lb:
+            labels.append(lb)
+        pl = (ev.get("place") or "").strip()
+        if pl:
+            places.append(pl)
+    base["event_type"] = "alibi"
+    base["quote"] = " / ".join(quotes)[:2000]
+    merged_label = _merge_cluster_label(quotes, labels)
+    if merged_label:
+        base["label"] = merged_label
+    if places:
+        base["place"] = places[-1]
+    base["sort_order"] = min(int(ev.get("sort_order") or 0) for ev in cluster)
+    # time_end: longest span
+    from datetime import timedelta
+    start = _event_datetime(base)
+    max_end = None
+    for ev in cluster:
+        src = f"{ev.get('quote') or ''} {ev.get('time_text') or ''}"
+        mins = _parse_activity_duration_minutes(src)
+        if start and mins:
+            cand = start + timedelta(minutes=mins)
+            if max_end is None or cand > max_end:
+                max_end = cand
+        te = _parse_timeline_iso(ev.get("time_end"))
+        if te and (max_end is None or te > max_end):
+            max_end = te
+    if max_end:
+        base["time_end"] = max_end.strftime("%Y-%m-%dT%H:%M:%S")
+    return base
+
+
+def _merge_same_period_alibi_blocks(events: list) -> list:
+    ordered = sorted(
+        [e for e in events if isinstance(e, dict)],
+        key=lambda e: int(e.get("sort_order") or 0),
+    )
+    out = []
+    i = 0
+    while i < len(ordered):
+        ev = ordered[i]
+        if not _is_alibi_like_event(ev):
+            out.append(ev)
+            i += 1
+            continue
+        cluster = [ev]
+        j = i + 1
+        while j < len(ordered) and _can_merge_alibi_cluster(cluster[-1], ordered[j]):
+            cluster.append(ordered[j])
+            j += 1
+        out.append(_combine_alibi_cluster(cluster) if len(cluster) > 1 else ev)
+        i = j
+    return out
+
+
+def _inherit_same_time_context(events: list) -> list:
+    """앞 이벤트 시각이 있는데 뒤 절만 후술·목격·부재인 경우 동일 시각대 상속."""
+    from datetime import timedelta
+
+    ordered = sorted(
+        [e for e in events if isinstance(e, dict)],
+        key=lambda e: int(e.get("sort_order") or 0),
+    )
+    last_by_key = {}
+    for ev in ordered:
+        key = _relative_chain_key(ev)
+        quote = (ev.get("quote") or "").strip()
+        clocks = _find_all_korean_clocks_in_text(quote)
+        if clocks:
+            dt = _event_datetime(ev)
+            if dt:
+                last_by_key[key] = ev
+            continue
+        prev = last_by_key.get(key)
+        if not prev or not _quote_needs_same_time_inherit(quote):
+            if _event_datetime(ev):
+                last_by_key[key] = ev
+            continue
+        anchor = _event_datetime(prev)
+        if not anchor:
+            continue
+        if _event_datetime(ev):
+            last_by_key[key] = ev
+            continue
+        ev["time_start"] = anchor.strftime("%Y-%m-%dT%H:%M:%S")
+        ev["time_end"] = (anchor + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+        prec = (ev.get("time_precision") or "").lower()
+        if prec not in ("exact", "approximate", "relative"):
+            prev_prec = (prev.get("time_precision") or "approximate").lower()
+            ev["time_precision"] = prev_prec if prev_prec in ("exact", "approximate") else "approximate"
+        tt = (ev.get("time_text") or "").strip()
+        prev_tt = (prev.get("time_text") or "").strip()
+        if not tt and prev_tt:
+            ev["time_text"] = f"{prev_tt} (동일 시각대)"
+        last_by_key[key] = ev
+    return events
 
 
 def _resolve_relative_durations_from_text(events: list) -> list:
@@ -721,6 +1111,8 @@ def _resolve_relative_durations_from_text(events: list) -> list:
 
         existing = _event_datetime(ev)
         off = _parse_relative_offset_minutes(src)
+        if off is None and quote and tt:
+            off = _parse_relative_offset_minutes(quote)
         if off is None:
             if existing:
                 anchors[key] = _update_chain_anchor(last_anchor, ev)
@@ -1817,6 +2209,9 @@ def timeline_extract():
     events = [_normalize_timeline_event_fields(e) for e in parsed["events"] if isinstance(e, dict)]
     events = _reconcile_timeline_events_from_quotes(events)
     events = _resolve_relative_durations_from_text(events)
+    events = _apply_activity_duration_end(events)
+    events = _merge_same_period_alibi_blocks(events)
+    events = _inherit_same_time_context(events)
     events = _filter_timeline_time_only(events)
     return jsonify({"success": True, "events": events, "model": MODEL})
 
@@ -1986,5 +2381,480 @@ def health():
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# [섹션 8] 감정 흐름 분석 (개선 v2)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# 변경 내역
+# ─────────────────────────────────────────────────────────────────────────
+# [문제 1] 긍/부정 2분류 모델을 4감정에 억지 매핑 → neg 하나로 불안/회피/분노가
+#          동시에 움직여 그래프 평탄화 발생
+#          → 다감정 분류 모델 우선 로드, 4감정 직접 매핑으로 교체
+#
+# [문제 2] 키워드 fallback에서 매칭 없으면 모든 감정이 base=20.0 고착
+#          → 문장 길이·부정어·어미·문맥을 반영한 가중 키워드 스코어로 교체
+#          → 확신 하드코딩(max 30.0) 제거, 진술 특성 기반 동적 베이스라인 적용
+#
+# [문제 3] 변화율이 낮을 때 하이라이트가 거의 안 잡힘
+#          → z-score 기반 + 절대값 하한선 병행, 최소 1구간 보장 옵션 추가
+# ─────────────────────────────────────────────────────────────────────────
+
+import math
+import re
+
+# ── 다감정 모델 로드 (우선순위 순) ──────────────────────────────────────────
+#
+# 우선순위 기준:
+#   1. snunlp/KR-ELECTRA-discriminator-finetuned  - 한국어 7감정 분류
+#   2. hun3359/klue-bert-base-sentiment            - 7감정 (기쁨/슬픔/놀람/분노/혐오/두려움/중립)
+#   3. monologg/koelectra-base-finetuned-sentiment - 긍/부정 (최후 수단)
+#
+# 로드 실패 시 키워드 방식으로 자동 fallback
+
+_EMOTION_PIPELINE   = None
+_PIPELINE_LABEL_MAP = None   # 모델별 레이블 → 4감정 매핑 테이블
+
+# ── 모델별 레이블 매핑 정의 ───────────────────────────────────────────────────
+#
+# 각 모델이 반환하는 레이블을 (불안, 확신, 회피, 분노) 가중치로 변환
+# 가중치 합이 1.0일 필요 없음 — 이후 정규화 없이 직접 점수로 사용
+_LABEL_MAPS = {
+    # hun3359/klue-bert-base-sentiment : 7감정
+    "hun3359/klue-bert-base-sentiment": {
+        "기쁨":  {"불안": 0.00, "확신": 0.70, "회피": 0.00, "분노": 0.00},
+        "슬픔":  {"불안": 0.55, "확신": 0.10, "회피": 0.35, "분노": 0.10},
+        "놀람":  {"불안": 0.40, "확신": 0.10, "회피": 0.20, "분노": 0.10},
+        "분노":  {"불안": 0.20, "확신": 0.20, "회피": 0.10, "분노": 0.70},
+        "혐오":  {"불안": 0.10, "확신": 0.15, "회피": 0.30, "분노": 0.50},
+        "두려움":{"불안": 0.70, "확신": 0.05, "회피": 0.40, "분노": 0.05},
+        "중립":  {"불안": 0.10, "확신": 0.40, "회피": 0.10, "분노": 0.05},
+    },
+    # snunlp/KR-ELECTRA — 레이블이 동일한 7감정 체계로 확인된 경우 동일 맵 사용
+    "snunlp/KR-ELECTRA-discriminator-finetuned": {
+        "기쁨":  {"불안": 0.00, "확신": 0.70, "회피": 0.00, "분노": 0.00},
+        "슬픔":  {"불안": 0.55, "확신": 0.10, "회피": 0.35, "분노": 0.10},
+        "놀람":  {"불안": 0.40, "확신": 0.10, "회피": 0.20, "분노": 0.10},
+        "분노":  {"불안": 0.20, "확신": 0.20, "회피": 0.10, "분노": 0.70},
+        "혐오":  {"불안": 0.10, "확신": 0.15, "회피": 0.30, "분노": 0.50},
+        "두려움":{"불안": 0.70, "확신": 0.05, "회피": 0.40, "분노": 0.05},
+        "중립":  {"불안": 0.10, "확신": 0.40, "회피": 0.10, "분노": 0.05},
+    },
+    # monologg/koelectra — 긍/부정 2분류 (최후 수단, 개선된 매핑 사용)
+    "__binary__": {
+        "positive": {"불안": 0.05, "확신": 0.65, "회피": 0.05, "분노": 0.05},
+        "negative": {"불안": 0.50, "확신": 0.10, "회피": 0.35, "분노": 0.40},
+        # 별칭
+        "pos":      {"불안": 0.05, "확신": 0.65, "회피": 0.05, "분노": 0.05},
+        "neg":      {"불안": 0.50, "확신": 0.10, "회피": 0.35, "분노": 0.40},
+        "1":        {"불안": 0.05, "확신": 0.65, "회피": 0.05, "분노": 0.05},
+        "0":        {"불안": 0.50, "확신": 0.10, "회피": 0.35, "분노": 0.40},
+    },
+}
+
+
+def _try_load_emotion_model():
+    """다감정 모델 우선 로드. 실패 시 2분류 모델 → 키워드 순으로 fallback."""
+    global _EMOTION_PIPELINE, _PIPELINE_LABEL_MAP
+    try:
+        from transformers import pipeline
+    except ImportError:
+        print("[감정분석] transformers 미설치 → 키워드 방식으로 실행")
+        return False
+
+    # 1순위: 7감정 모델
+    multi_emotion_candidates = [
+        ("hun3359/klue-bert-base-sentiment",               "hun3359/klue-bert-base-sentiment"),
+        ("snunlp/KR-ELECTRA-discriminator-finetuned",      "snunlp/KR-ELECTRA-discriminator-finetuned"),
+    ]
+    for model_name, map_key in multi_emotion_candidates:
+        try:
+            _EMOTION_PIPELINE = pipeline(
+                "text-classification",
+                model=model_name,
+                tokenizer=model_name,
+                device=-1,
+                top_k=None,
+            )
+            _PIPELINE_LABEL_MAP = _LABEL_MAPS.get(map_key, _LABEL_MAPS["__binary__"])
+            print(f"[감정분석] 다감정 모델 로드 성공: {model_name}")
+            return True
+        except Exception as e:
+            print(f"[감정분석] {model_name} 로드 실패: {e}")
+            continue
+
+    # 2순위: 2분류 모델 (개선된 매핑 적용)
+    binary_candidates = [
+        "monologg/koelectra-base-finetuned-sentiment",
+        "snunlp/KR-FinBert-SC",
+    ]
+    for model_name in binary_candidates:
+        try:
+            _EMOTION_PIPELINE = pipeline(
+                "text-classification",
+                model=model_name,
+                tokenizer=model_name,
+                device=-1,
+                top_k=None,
+            )
+            _PIPELINE_LABEL_MAP = _LABEL_MAPS["__binary__"]
+            print(f"[감정분석] 2분류 모델 로드 (fallback): {model_name}")
+            return True
+        except Exception as e:
+            print(f"[감정분석] {model_name} 로드 실패: {e}")
+            continue
+
+    print("[감정분석] 모든 모델 로드 실패 → 키워드 방식으로 실행")
+    return False
+
+
+import threading as _threading
+_emotion_model_thread = _threading.Thread(target=_try_load_emotion_model, daemon=True)
+_emotion_model_thread.start()
+
+
+# ── 개선된 키워드 사전 ──────────────────────────────────────────────────────
+# 각 항목: (키워드, 가중치)
+# 가중치 기준: 감정 강도가 높을수록 높게 설정 (1.0 = 기본, 2.0 = 강한 표현)
+
+_ANXIETY_KW = [
+    ("모르겠", 1.0), ("걱정", 1.2), ("두렵", 1.5), ("불안", 1.5),
+    ("무서", 1.5), ("긴장", 1.2), ("어려워", 0.8), ("힘들", 0.8),
+    ("혹시", 0.7), ("당황", 1.3), ("떨렸", 1.4), ("겁이", 1.4),
+    ("공포", 2.0), ("떨려", 1.3), ("망설", 1.0), ("주저", 1.0),
+    ("못할 것 같", 1.1), ("불편", 0.8), ("두근", 1.2), ("어쩌지", 1.1),
+    ("무서운지", 1.5), ("어떡해", 1.2), ("두려움", 1.5), ("겁났", 1.4),
+    ("조마조마", 1.6), ("초조", 1.4), ("안절부절", 1.6),
+]
+
+_CERTAINTY_KW = [
+    ("확실히", 1.8), ("분명히", 1.8), ("절대로", 1.6), ("틀림없이", 1.8),
+    ("반드시", 1.4), ("확신", 1.8), ("단연코", 2.0), ("맞습니다", 1.2),
+    ("그렇습니다", 1.0), ("확실합니다", 1.8), ("분명합니다", 1.8),
+    ("절대", 1.4), ("정확히", 1.4), ("명백히", 1.8), ("명확히", 1.8),
+    ("틀림없", 1.8), ("했습니다", 0.5), ("있습니다", 0.4), ("없습니다", 0.6),
+    ("이었습니다", 0.5), ("확실한", 1.6), ("분명한", 1.6), ("확실하게", 1.6),
+    ("분명하게", 1.6), ("제가 봤", 1.4), ("제가 들었", 1.4),
+    ("저는 알고", 1.3), ("알고 있습니다", 1.3),
+]
+
+_AVOIDANCE_KW = [
+    ("기억이 잘", 1.4), ("잘 모르", 1.2), ("그냥", 0.6), ("아마", 0.9),
+    ("것 같아", 0.8), ("생각이 안", 1.4), ("기억나지", 1.5),
+    ("확실하지 않", 1.4), ("정확히는", 1.0), ("어떻게 말", 1.0),
+    ("정확히 기억", 1.4), ("모르겠어요", 1.2), ("기억이 없", 1.5),
+    ("생각이 나지", 1.5), ("정확하지", 1.2), ("흐릿", 1.4),
+    ("기억이 나지 않", 1.8), ("말씀드리기", 0.8), ("뭐라 해야", 1.1),
+    ("기억이 희미", 1.6), ("잘 기억이", 1.4), ("가물가물", 1.8),
+    ("잘 모르겠", 1.3), ("확실히는 모르", 1.5), ("말하기 어렵", 1.2),
+    ("뭐라고 해야", 1.1), ("어디서부터", 0.9), ("뭐랄까", 1.0),
+]
+
+_ANGER_KW = [
+    ("화가", 1.6), ("짜증", 1.4), ("억울", 1.8), ("부당", 1.6),
+    ("말도 안", 1.4), ("화났", 1.6), ("어이없", 1.4), ("황당", 1.3),
+    ("터무니없", 1.6), ("이해가 안", 1.0), ("도저히", 1.2),
+    ("진짜로", 0.9), ("어떻게 그런", 1.3), ("용납할 수", 1.6),
+    ("분통", 1.8), ("열받", 1.6), ("분개", 1.8), ("격분", 2.0),
+    ("분노", 1.8), ("화가 많이", 1.8), ("너무 화", 1.6),
+    ("억울해", 1.8), ("부당해", 1.6), ("울분", 1.8), ("분하다", 1.7),
+    ("어처구니", 1.5), ("기가 막", 1.5), ("황당하다", 1.4),
+]
+
+
+def _kw_score_weighted(text: str, keywords: list) -> float:
+    """가중치 적용 키워드 스코어. 길이 보너스 포함."""
+    text_lower = text.lower()
+    score = 0.0
+    for kw, weight in keywords:
+        if kw in text_lower:
+            score += weight
+    return score
+
+
+def _sentence_baseline(text: str) -> dict:
+    """
+    문장 특성 기반 동적 베이스라인.
+    진술서 특성상 사실 서술이 많으면 확신 기본값이 높고,
+    짧은 문장은 정보가 적어 모든 감정이 낮게 시작.
+    """
+    length = len(text)
+
+    # 길이 기반 스케일 (짧은 문장은 감정 표현이 적음)
+    if length < 15:
+        length_factor = 0.6
+    elif length < 30:
+        length_factor = 0.8
+    else:
+        length_factor = 1.0
+
+    # 서술형 어미 → 확신 베이스라인 상향
+    declarative_endings = ["습니다", "했습니다", "였습니다", "입니다", "다고 합니다"]
+    is_declarative = any(text.endswith(e) or e in text[-10:] for e in declarative_endings)
+
+    # 의문형 어미 → 회피/불안 베이스라인 상향
+    interrogative = text.strip().endswith("?") or text.strip().endswith("요?")
+
+    base_anxiety   = 15.0 * length_factor
+    base_certainty = (28.0 if is_declarative else 18.0) * length_factor
+    base_avoidance = (18.0 if interrogative else 12.0) * length_factor
+    base_anger     = 10.0 * length_factor
+
+    return {
+        "불안": base_anxiety,
+        "확신": base_certainty,
+        "회피": base_avoidance,
+        "분노": base_anger,
+    }
+
+
+def _sentence_emotion_by_keyword(sentence: str) -> dict:
+    """개선된 키워드 기반 감정 점수 산출."""
+    baseline = _sentence_baseline(sentence)
+    scale = 18.0  # 키워드 1점당 점수 증가량 (기존 35.0 → 낮춰서 과도한 상승 방지)
+
+    raw = {
+        "불안": _kw_score_weighted(sentence, _ANXIETY_KW),
+        "확신": _kw_score_weighted(sentence, _CERTAINTY_KW),
+        "회피": _kw_score_weighted(sentence, _AVOIDANCE_KW),
+        "분노": _kw_score_weighted(sentence, _ANGER_KW),
+    }
+
+    result = {}
+    for k in ["불안", "확신", "회피", "분노"]:
+        score = baseline[k] + raw[k] * scale
+        result[k] = round(min(95.0, score), 1)
+
+    # 상호 억제: 확신이 높으면 회피/불안을 낮춤 (진술서 특성)
+    if result["확신"] > 60:
+        suppression = (result["확신"] - 60) * 0.3
+        result["불안"]  = max(baseline["불안"],  result["불안"]  - suppression)
+        result["회피"] = max(baseline["회피"], result["회피"] - suppression)
+
+    # 분노가 높으면 확신도 약간 상승 (강한 주장 특성)
+    if result["분노"] > 50:
+        result["확신"] = min(95.0, result["확신"] + (result["분노"] - 50) * 0.2)
+
+    return {k: round(v, 1) for k, v in result.items()}
+
+
+def _sentence_emotion_by_model(sentence: str) -> dict | None:
+    """
+    로드된 모델로 감정 점수 산출.
+    모델 출력 레이블 → 4감정 매핑 테이블 사용.
+    키워드 스코어를 보조 신호로 블렌딩.
+    """
+    if _EMOTION_PIPELINE is None or _PIPELINE_LABEL_MAP is None:
+        return None
+    try:
+        raw_out = _EMOTION_PIPELINE(sentence[:512], truncation=True)
+        if not raw_out:
+            return None
+
+        # pipeline 출력 정규화: [[{label, score}, ...]] 또는 [{label, score}, ...]
+        items = raw_out[0] if isinstance(raw_out[0], list) else raw_out
+
+        # 레이블별 점수 합산 → 4감정 기여값 계산
+        emotion_raw = {"불안": 0.0, "확신": 0.0, "회피": 0.0, "분노": 0.0}
+        total_mapped = 0.0
+        for item in items:
+            label = item["label"].lower().strip()
+            score = float(item["score"])
+
+            # 레이블 매핑 탐색 (정확 일치 → 부분 일치)
+            mapping = _PIPELINE_LABEL_MAP.get(label)
+            if mapping is None:
+                # 한글 레이블 직접 탐색
+                for map_label, map_val in _PIPELINE_LABEL_MAP.items():
+                    if map_label in label or label in map_label:
+                        mapping = map_val
+                        break
+            if mapping is None:
+                continue
+
+            for emo, weight in mapping.items():
+                emotion_raw[emo] += score * weight
+            total_mapped += score
+
+        if total_mapped < 0.01:
+            return None
+
+        # 감정별 최대값 기준으로 정규화 후 스케일링
+        max_val = max(emotion_raw.values()) if emotion_raw else 1.0
+        if max_val < 0.01:
+            return None
+
+        # 최대 감정을 70~90 범위로 끌어올리는 동적 스케일
+        dynamic_scale = 80.0 / max_val
+        model_scores = {k: round(min(95.0, v * dynamic_scale), 1) for k, v in emotion_raw.items()}
+
+        # 키워드 보정: 모델 점수 70% + 키워드 30% 블렌딩
+        kw_scores = _sentence_emotion_by_keyword(sentence)
+        blended = {}
+        for emo in ["불안", "확신", "회피", "분노"]:
+            blended[emo] = round(model_scores[emo] * 0.70 + kw_scores[emo] * 0.30, 1)
+
+        return blended
+
+    except Exception as e:
+        print(f"[감정분석] 모델 추론 오류: {e}")
+        return None
+
+
+# ── 문장 분리 ────────────────────────────────────────────────────────────────
+
+def _split_korean_sentences(text: str) -> list:
+    """
+    한국어 진술서 문장 분리.
+    마침표·물음표·느낌표 + 최소 길이 조건.
+    너무 짧은 조각은 다음 문장에 합침.
+    """
+    text = re.sub(r'\s+', ' ', text.strip())
+
+    # 분리 기준: 문장 종결 어미 패턴
+    split_pattern = re.compile(
+        r'(?<=[.!?])\s+'
+        r'|(?<=습니다\.)\s+'
+        r'|(?<=습니다\?)\s+'
+        r'|(?<=습니다!)\s+'
+        r'|(?<=했습니다\.)\s+'
+        r'|(?<=있습니다\.)\s+'
+        r'|(?<=없습니다\.)\s+'
+        r'|(?<=입니다\.)\s+'
+        r'|(?<=겠습니다\.)\s+'
+    )
+    raw = split_pattern.split(text)
+
+    sentences = []
+    buf = ""
+    for part in raw:
+        part = part.strip()
+        if not part:
+            continue
+        buf = (buf + " " + part).strip() if buf else part
+        # 최소 10자 이상이어야 독립 문장으로 처리
+        if len(buf) >= 10:
+            sentences.append(buf)
+            buf = ""
+    # 남은 버퍼 처리
+    if buf:
+        if sentences and len(buf) < 8:
+            sentences[-1] = sentences[-1] + " " + buf
+        else:
+            sentences.append(buf)
+
+    sentences = [s.strip() for s in sentences if s.strip()]
+    return sentences if sentences else [text]
+
+
+# ── 변화율 및 하이라이트 ─────────────────────────────────────────────────────
+
+def _compute_change_rate(emotions_list: list) -> list:
+    """연속 문장 간 4감정 평균 변화량."""
+    if len(emotions_list) < 2:
+        return [0.0] * len(emotions_list)
+    rates = [0.0]
+    for i in range(1, len(emotions_list)):
+        a, b = emotions_list[i - 1], emotions_list[i]
+        diff = sum(abs(b[k] - a[k]) for k in ["불안", "확신", "회피", "분노"]) / 4.0
+        rates.append(round(diff, 2))
+    return rates
+
+
+def _detect_highlights(rates: list, threshold_factor: float = 1.2, abs_min: float = 5.0) -> list:
+    """
+    변화율 기반 하이라이트 구간 탐지 (개선).
+
+    기존 문제: threshold_factor=1.4 + 전체 변화가 작으면 아무것도 안 잡힘
+    개선:
+    - threshold_factor를 1.2로 낮춤 (더 민감하게)
+    - 절대값 하한선 abs_min 추가: 변화율이 낮아도 상대적으로 높은 구간은 탐지
+    - 전체 변화량이 매우 작은 경우(평탄한 진술) 최대 변화 구간 1개 강제 반환
+    """
+    if len(rates) < 2:
+        return []
+
+    non_zero = [r for r in rates if r > 0]
+    if not non_zero:
+        return []
+
+    mu    = sum(rates) / len(rates)
+    sigma = math.sqrt(sum((r - mu) ** 2 for r in rates) / len(rates))
+
+    # 변화량이 전반적으로 작은 경우 (sigma < 2.0): 최대값 구간 1개 강제 반환
+    if sigma < 2.0:
+        max_idx = rates.index(max(rates))
+        if rates[max_idx] > 0:
+            return [{
+                "start":     max(0, max_idx - 1),
+                "end":       max_idx,
+                "maxChange": round(rates[max_idx], 2),
+            }]
+        return []
+
+    threshold = max(mu + threshold_factor * sigma, abs_min)
+    highlights = []
+    i = 0
+    while i < len(rates):
+        if rates[i] >= threshold:
+            start = max(0, i - 1)
+            end   = i
+            while end + 1 < len(rates) and rates[end + 1] >= threshold:
+                end += 1
+            highlights.append({
+                "start":     start,
+                "end":       end,
+                "maxChange": round(max(rates[start:end + 1]), 2),
+            })
+            i = end + 1
+        else:
+            i += 1
+    return highlights
+
+
+# ── Flask 엔드포인트 ─────────────────────────────────────────────────────────
+
+@app.route("/emotion/analyze", methods=["POST"])
+def emotion_analyze():
+    data = request.get_json(force=True, silent=True) or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"success": False, "error": "진술 내용이 없습니다."}), 400
+
+    sentences = _split_korean_sentences(text)
+
+    results = []
+    for sent in sentences:
+        emotions = _sentence_emotion_by_model(sent) or _sentence_emotion_by_keyword(sent)
+        results.append({"text": sent, "emotions": emotions})
+
+    emotions_list = [r["emotions"] for r in results]
+    rates         = _compute_change_rate(emotions_list)
+    highlights    = _detect_highlights(rates)
+
+    output = []
+    for i, r in enumerate(results):
+        output.append({
+            "index":      i,
+            "text":       r["text"],
+            "불안":        r["emotions"]["불안"],
+            "확신":        r["emotions"]["확신"],
+            "회피":        r["emotions"]["회피"],
+            "분노":        r["emotions"]["분노"],
+            "changeRate": rates[i],
+        })
+
+    # 사용 중인 추론 방식 기록
+    if _EMOTION_PIPELINE is not None:
+        model_label = "multi-emotion+keyword-blend"
+    else:
+        model_label = "keyword-weighted"
+
+    return jsonify({
+        "success":    True,
+        "sentences":  output,
+        "highlights": highlights,
+        "model":      model_label,
+        "total":      len(output),
+    })
+# ════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=False)
+    app.run(host="0.0.0.0", port=5001, debug=False, threaded=True)

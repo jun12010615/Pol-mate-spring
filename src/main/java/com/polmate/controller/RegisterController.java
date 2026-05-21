@@ -47,9 +47,14 @@ public class RegisterController {
             if (badgeNum == null || !badgeNum.trim().matches("^[0-9]{4}$")) {
                 response.getWriter().print(json(false, "수사관 번호는 숫자 4자리입니다.")); return null;
             }
-            response.getWriter().print(userService.isValidBadge(badgeNum.trim())
-                ? json(true,  "인증되었습니다.")
-                : json(false, "등록되지 않거나 이미 사용된 수사관 번호입니다."));
+            String trimmed = badgeNum.trim();
+            if (userService.isValidBadge(trimmed)) {
+                response.getWriter().print(json(true, "인증되었습니다."));
+            } else if (userService.isBadgeAlreadyUsed(trimmed)) {
+                response.getWriter().print(json(false, "이미 사용된 수사관 번호입니다. (중복)"));
+            } else {
+                response.getWriter().print(json(false, "등록되지 않은 수사관 번호입니다."));
+            }
             return null;
         }
 
