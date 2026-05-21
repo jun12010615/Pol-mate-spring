@@ -29,3 +29,6 @@ src/main/resources/application-local.properties
 # ── 기타 ────────────────────────────────────────────────────────
 *.log
 *.class
+emotion_model/
+emotion_train.csv
+emotion_val.csv

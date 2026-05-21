@@ -89,6 +89,9 @@ public class CaseController {
             case "scoreTranscript":
                 handleScoreTranscript(res, loginUser, transcriptId);
                 break;
+            case "emotionAnalyze":
+                handleEmotionAnalyze(res, loginUser, transcriptId);
+                break;
             default: res.getWriter().write("{\"error\":\"알 수 없는 action\"}");
         }
     }
@@ -319,6 +322,37 @@ public class CaseController {
             writeMap(res, result);
         } catch (Exception e) {
             e.printStackTrace(); res.getWriter().write("{\"error\":\"신뢰도 분석 중 오류가 발생했습니다.\"}");
+        }
+    }
+
+    private void handleEmotionAnalyze(HttpServletResponse res, String loginUser, String idStr) throws IOException {
+        if (isEmpty(idStr)) { res.getWriter().write("{\"error\":\"transcriptId가 필요합니다.\"}"); return; }
+        try {
+            int tid = Integer.parseInt(idStr);
+            Optional<Map<String, Object>> opt = transcriptService.getText(tid, loginUser);
+            if (opt.isEmpty()) { res.getWriter().write("{\"error\":\"조서를 찾을 수 없거나 접근 권한이 없습니다.\"}"); return; }
+            Map<String, Object> row = opt.get();
+            String text     = nvl((String) row.get("original_text"), "");
+            String stmtName = nvl((String) row.get("stmt_name"), "");
+            String stmtType = nvl((String) row.get("stmt_type"), "");
+            if (text.isEmpty()) { res.getWriter().write("{\"error\":\"진술 내용이 비어 있습니다.\"}"); return; }
+
+            JSONObject body = new JSONObject();
+            body.put("text", text);
+            body.put("stmtName", stmtName);
+            body.put("stmtType", stmtType);
+
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create(transcriptService.getFlaskBaseUrl() + "/emotion/analyze"))
+                .header("Content-Type", "application/json")
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body.toString()))
+                .timeout(java.time.Duration.ofSeconds(120))
+                .build();
+            java.net.http.HttpResponse<String> resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            res.getWriter().write(resp.body());
+        } catch (Exception e) {
+            e.printStackTrace(); res.getWriter().write("{\"error\":\"감정 분석 중 오류가 발생했습니다.\"}");
         }
     }
 
