@@ -2452,58 +2452,35 @@ _LABEL_MAPS = {
 
 
 def _try_load_emotion_model():
-    """다감정 모델 우선 로드. 실패 시 2분류 모델 → 키워드 순으로 fallback."""
     global _EMOTION_PIPELINE, _PIPELINE_LABEL_MAP
+
+    # 1순위: fine-tuned 모델 로드 시도
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from emotion_model_loader import load_finetuned_emotion_model, predict_finetuned
+        if load_finetuned_emotion_model("./emotion_model"):
+            print("[감정분석] fine-tuned 모델 로드 성공!")
+            return True
+    except Exception as e:
+        print(f"[감정분석] fine-tuned 모델 로드 실패: {e}")
+
+    # 2순위: hun3359 다감정 모델
     try:
         from transformers import pipeline
-    except ImportError:
-        print("[감정분석] transformers 미설치 → 키워드 방식으로 실행")
+        _EMOTION_PIPELINE = pipeline(
+            "text-classification",
+            model="hun3359/klue-bert-base-sentiment",
+            tokenizer="hun3359/klue-bert-base-sentiment",
+            device=-1,
+            top_k=None,
+        )
+        _PIPELINE_LABEL_MAP = _LABEL_MAPS.get("hun3359/klue-bert-base-sentiment")
+        print("[감정분석] hun3359 모델 로드 (fallback)")
+        return True
+    except Exception as e:
+        print(f"[감정분석] 모든 모델 로드 실패 → 키워드 방식으로 실행: {e}")
         return False
-
-    # 1순위: 7감정 모델
-    multi_emotion_candidates = [
-        ("hun3359/klue-bert-base-sentiment",               "hun3359/klue-bert-base-sentiment"),
-        ("snunlp/KR-ELECTRA-discriminator-finetuned",      "snunlp/KR-ELECTRA-discriminator-finetuned"),
-    ]
-    for model_name, map_key in multi_emotion_candidates:
-        try:
-            _EMOTION_PIPELINE = pipeline(
-                "text-classification",
-                model=model_name,
-                tokenizer=model_name,
-                device=-1,
-                top_k=None,
-            )
-            _PIPELINE_LABEL_MAP = _LABEL_MAPS.get(map_key, _LABEL_MAPS["__binary__"])
-            print(f"[감정분석] 다감정 모델 로드 성공: {model_name}")
-            return True
-        except Exception as e:
-            print(f"[감정분석] {model_name} 로드 실패: {e}")
-            continue
-
-    # 2순위: 2분류 모델 (개선된 매핑 적용)
-    binary_candidates = [
-        "monologg/koelectra-base-finetuned-sentiment",
-        "snunlp/KR-FinBert-SC",
-    ]
-    for model_name in binary_candidates:
-        try:
-            _EMOTION_PIPELINE = pipeline(
-                "text-classification",
-                model=model_name,
-                tokenizer=model_name,
-                device=-1,
-                top_k=None,
-            )
-            _PIPELINE_LABEL_MAP = _LABEL_MAPS["__binary__"]
-            print(f"[감정분석] 2분류 모델 로드 (fallback): {model_name}")
-            return True
-        except Exception as e:
-            print(f"[감정분석] {model_name} 로드 실패: {e}")
-            continue
-
-    print("[감정분석] 모든 모델 로드 실패 → 키워드 방식으로 실행")
-    return False
 
 
 import threading as _threading
@@ -2642,6 +2619,16 @@ def _sentence_emotion_by_model(sentence: str) -> dict | None:
     모델 출력 레이블 → 4감정 매핑 테이블 사용.
     키워드 스코어를 보조 신호로 블렌딩.
     """
+    # fine-tuned 모델 우선 시도
+    try:
+        from emotion_model_loader import predict_finetuned
+        result = predict_finetuned(sentence)
+        if result:
+            return result
+    except Exception:
+        pass
+
+    # 기존 방식 (hun3359 fallback)
     if _EMOTION_PIPELINE is None or _PIPELINE_LABEL_MAP is None:
         return None
     try:
@@ -2686,11 +2673,11 @@ def _sentence_emotion_by_model(sentence: str) -> dict | None:
         dynamic_scale = 80.0 / max_val
         model_scores = {k: round(min(95.0, v * dynamic_scale), 1) for k, v in emotion_raw.items()}
 
-        # 키워드 보정: 모델 점수 70% + 키워드 30% 블렌딩
+        # 키워드 보정: 모델 점수 40% + 키워드 60% 블렌딩
         kw_scores = _sentence_emotion_by_keyword(sentence)
         blended = {}
         for emo in ["불안", "확신", "회피", "분노"]:
-            blended[emo] = round(model_scores[emo] * 0.70 + kw_scores[emo] * 0.30, 1)
+            blended[emo] = round(model_scores[emo] * 0.40 + kw_scores[emo] * 0.60, 1)
 
         return blended
 
