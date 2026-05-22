@@ -42,12 +42,12 @@ public class CaseService {
     // ── 목록 (동적 필터) ───────────────────────────────────────────
     public List<Map<String, Object>> list(String userId, String status, String keyword) {
         StringBuilder sql = new StringBuilder(
-            "SELECT c.case_id, c.case_name, c.suspect, c.charge, c.status, " +
-            "c.created_at, c.user_id, u.user_name, u.user_rank, " +
-            "(SELECT COUNT(*) FROM transcripts t WHERE t.case_id=c.case_id) AS doc_count, " +
-            "(SELECT COUNT(*) FROM transcripts t WHERE t.case_id=c.case_id AND t.has_contradiction=1) AS contradiction_count " +
-            "FROM cases c LEFT JOIN users u ON c.user_id=u.user_id " +
-            "WHERE c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?) ");
+                "SELECT c.case_id, c.case_name, c.suspect, c.charge, c.status, " +
+                        "c.created_at, c.user_id, u.user_name, u.user_rank, " +
+                        "(SELECT COUNT(*) FROM transcripts t WHERE t.case_id=c.case_id) AS doc_count, " +
+                        "(SELECT COUNT(*) FROM transcripts t WHERE t.case_id=c.case_id AND t.has_contradiction=1) AS contradiction_count " +
+                        "FROM cases c LEFT JOIN users u ON c.user_id=u.user_id " +
+                        "WHERE c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?) ");
         List<Object> params = new ArrayList<>();
         params.add(userId);
         if (!"all".equals(status)) { sql.append("AND c.status=? "); params.add(status); }
@@ -62,36 +62,36 @@ public class CaseService {
     // ── 사건 상세 ─────────────────────────────────────────────────
     public Optional<Map<String, Object>> detail(String caseId, String userId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT c.case_id, c.case_name, c.suspect, c.charge, c.status, " +
-            "c.created_at, c.user_id, d.dept_name, d.org_name, u.user_name, u.user_rank " +
-            "FROM cases c LEFT JOIN users u ON c.user_id=u.user_id " +
-            "LEFT JOIN departments d ON c.dept_id=d.dept_id " +
-            "WHERE c.case_id=? AND c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?)",
-            caseId, userId);
+                "SELECT c.case_id, c.case_name, c.suspect, c.charge, c.status, " +
+                        "c.created_at, c.user_id, d.dept_name, d.org_name, u.user_name, u.user_rank " +
+                        "FROM cases c LEFT JOIN users u ON c.user_id=u.user_id " +
+                        "LEFT JOIN departments d ON c.dept_id=d.dept_id " +
+                        "WHERE c.case_id=? AND c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?)",
+                caseId, userId);
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
 
     // ── 사건의 조서 목록 (점수 포함) ─────────────────────────────
     public List<Map<String, Object>> transcriptList(String caseId) {
         return jdbc.queryForList(
-            "SELECT t.transcript_id, t.stmt_type, t.stmt_name, t.has_contradiction, " +
-            "t.created_at, t.user_id, u.user_name, u.user_rank, " +
-            "CHAR_LENGTH(IFNULL(t.original_text,'')) AS text_len, " +
-            "ts.total_score, ts.consistency_score, ts.specificity_score, " +
-            "ts.emotion_score, ts.temporal_score, " +
-            "ts.consistency_reason, ts.specificity_reason, ts.emotion_reason, ts.temporal_reason " +
-            "FROM transcripts t LEFT JOIN users u ON t.user_id=u.user_id " +
-            "LEFT JOIN transcript_scores ts ON t.transcript_id=ts.transcript_id " +
-            "WHERE t.case_id=? ORDER BY t.created_at DESC", caseId);
+                "SELECT t.transcript_id, t.stmt_type, t.stmt_name, t.has_contradiction, " +
+                        "t.created_at, t.user_id, u.user_name, u.user_rank, " +
+                        "CHAR_LENGTH(IFNULL(t.original_text,'')) AS text_len, " +
+                        "ts.total_score, ts.consistency_score, ts.specificity_score, " +
+                        "ts.emotion_score, ts.temporal_score, " +
+                        "ts.consistency_reason, ts.specificity_reason, ts.emotion_reason, ts.temporal_reason " +
+                        "FROM transcripts t LEFT JOIN users u ON t.user_id=u.user_id " +
+                        "LEFT JOIN transcript_scores ts ON t.transcript_id=ts.transcript_id " +
+                        "WHERE t.case_id=? ORDER BY t.created_at DESC", caseId);
     }
 
     // ── 내 조서 목록 ──────────────────────────────────────────────
     public List<Map<String, Object>> docList(String userId, String keyword) {
         StringBuilder sql = new StringBuilder(
-            "SELECT t.transcript_id, t.case_id, t.stmt_type, t.stmt_name, " +
-            "t.has_contradiction, t.created_at, " +
-            "CHAR_LENGTH(IFNULL(t.original_text,'')) AS text_len, c.case_name " +
-            "FROM transcripts t JOIN cases c ON t.case_id=c.case_id WHERE t.user_id=? ");
+                "SELECT t.transcript_id, t.case_id, t.stmt_type, t.stmt_name, " +
+                        "t.has_contradiction, t.created_at, " +
+                        "CHAR_LENGTH(IFNULL(t.original_text,'')) AS text_len, c.case_name " +
+                        "FROM transcripts t JOIN cases c ON t.case_id=c.case_id WHERE t.user_id=? ");
         List<Object> params = new ArrayList<>(); params.add(userId);
         if (keyword != null && !keyword.isEmpty()) {
             sql.append("AND (c.case_id LIKE ? OR c.case_name LIKE ? OR t.stmt_name LIKE ?) ");
@@ -104,16 +104,22 @@ public class CaseService {
     // ── 내 부서 ───────────────────────────────────────────────────
     public Map<String, Object> myDept(String userId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT d.dept_id, d.dept_name, d.org_name FROM users u " +
-            "LEFT JOIN departments d ON u.dept_id=d.dept_id WHERE u.user_id=?", userId);
+                "SELECT d.dept_id, d.dept_name, d.org_name FROM users u " +
+                        "LEFT JOIN departments d ON u.dept_id=d.dept_id WHERE u.user_id=?", userId);
         return rows.isEmpty() ? Map.of() : rows.get(0);
+    }
+
+    // ── 로그인 사용자 정보 (전문부 수사관/기관명 자동입력용) ──────
+    public List<Map<String, Object>> getLoginUserInfo(String userId) {
+        return jdbc.queryForList(
+                "SELECT user_name, user_org FROM users WHERE user_id=?", userId);
     }
 
     // ── 조서 통계 ─────────────────────────────────────────────────
     public Map<String, Object> docStats(String userId) {
         return jdbc.queryForMap(
-            "SELECT COUNT(*) AS total, SUM(CASE WHEN has_contradiction=1 THEN 1 ELSE 0 END) AS contradiction " +
-            "FROM transcripts WHERE user_id=?", userId);
+                "SELECT COUNT(*) AS total, SUM(CASE WHEN has_contradiction=1 THEN 1 ELSE 0 END) AS contradiction " +
+                        "FROM transcripts WHERE user_id=?", userId);
     }
 
     // ── 사건 생성 ─────────────────────────────────────────────────
@@ -128,7 +134,7 @@ public class CaseService {
             result.put("success", false); result.put("message", "이미 존재하는 사건번호입니다."); return result;
         }
         List<Map<String, Object>> deptRows = jdbc.queryForList(
-            "SELECT u.dept_id, d.dept_name, d.org_name FROM users u LEFT JOIN departments d ON u.dept_id=d.dept_id WHERE u.user_id=?", userId);
+                "SELECT u.dept_id, d.dept_name, d.org_name FROM users u LEFT JOIN departments d ON u.dept_id=d.dept_id WHERE u.user_id=?", userId);
         Integer deptId = null; String deptLabel = "부서 미배정";
         if (!deptRows.isEmpty() && deptRows.get(0).get("dept_id") != null) {
             deptId = ((Number) deptRows.get(0).get("dept_id")).intValue();
@@ -139,23 +145,23 @@ public class CaseService {
         }
 
         Case c = Case.builder()
-            .caseId(caseId).caseName(caseName).suspect(suspect.isEmpty() ? null : suspect)
-            .charge(charge.isEmpty() ? null : charge).status("진행중")
-            .userId(userId).deptId(deptId).build();
+                .caseId(caseId).caseName(caseName).suspect(suspect.isEmpty() ? null : suspect)
+                .charge(charge.isEmpty() ? null : charge).status("진행중")
+                .userId(userId).deptId(deptId).build();
         caseRepo.save(c);
 
         if (deptId != null) {
             final int finalDeptId = deptId;
             List<String> teammates = jdbc.queryForList(
-                "SELECT user_id FROM users WHERE dept_id=? AND user_id!=? AND notif_relation=1",
-                String.class, finalDeptId, userId);
+                    "SELECT user_id FROM users WHERE dept_id=? AND user_id!=? AND notif_relation=1",
+                    String.class, finalDeptId, userId);
             String title = "팀 새 사건 등록: " + caseName;
             String desc  = "사건 " + caseId + "(" + caseName + ")이(가) 팀에 등록됐습니다.";
             for (String tm : teammates) {
                 notifRepo.save(Notification.builder()
-                    .userId(tm).type("case").tag("새 사건").title(title).description(desc)
-                    .link("myCase.jsp?caseId=" + caseId).isUnread(true).isCritical(false)
-                    .createdAt(LocalDateTime.now()).build());
+                        .userId(tm).type("case").tag("새 사건").title(title).description(desc)
+                        .link("myCase.jsp?caseId=" + caseId).isUnread(true).isCritical(false)
+                        .createdAt(LocalDateTime.now()).build());
             }
         }
         result.put("success", true); result.put("caseId", caseId); result.put("deptLabel", deptLabel);
@@ -183,8 +189,8 @@ public class CaseService {
     public Map<String, Object> updateStatus(String userId, String caseId, String status) {
         Map<String, Object> result = new HashMap<>();
         int check = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM cases WHERE case_id=? AND dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?)",
-            Integer.class, caseId, userId);
+                "SELECT COUNT(*) FROM cases WHERE case_id=? AND dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?)",
+                Integer.class, caseId, userId);
         if (check == 0) { result.put("success", false); result.put("message", "수정 권한이 없습니다."); return result; }
 
         jdbc.update("UPDATE cases SET updated_at=NOW(), status=? WHERE case_id=?", status, caseId);
@@ -192,17 +198,17 @@ public class CaseService {
         boolean isCritical = "모순탐지".equals(status);
         String notifCol = isCritical ? "notif_contradiction" : "notif_relation";
         List<String> teammates = jdbc.queryForList(
-            "SELECT u2.user_id FROM users u2 JOIN cases c ON c.case_id=? WHERE u2.dept_id=c.dept_id " +
-            "AND c.dept_id IS NOT NULL AND u2.user_id!=? AND u2." + notifCol + "=1",
-            String.class, caseId, userId);
+                "SELECT u2.user_id FROM users u2 JOIN cases c ON c.case_id=? WHERE u2.dept_id=c.dept_id " +
+                        "AND c.dept_id IS NOT NULL AND u2.user_id!=? AND u2." + notifCol + "=1",
+                String.class, caseId, userId);
         String title = "사건 상태 변경: " + caseId;
         String desc  = "사건 " + caseId + "의 상태가 [" + status + "](으)로 변경됐습니다.";
         for (String tm : teammates) {
             notifRepo.save(Notification.builder()
-                .userId(tm).type("case").tag(isCritical ? "경고" : "새 사건")
-                .title(title).description(desc)
-                .link("myCase.jsp?caseId=" + caseId)
-                .isUnread(true).isCritical(isCritical).createdAt(LocalDateTime.now()).build());
+                    .userId(tm).type("case").tag(isCritical ? "경고" : "새 사건")
+                    .title(title).description(desc)
+                    .link("myCase.jsp?caseId=" + caseId)
+                    .isUnread(true).isCritical(isCritical).createdAt(LocalDateTime.now()).build());
         }
         result.put("success", true); result.put("message", "수정됐습니다.");
         return result;
@@ -234,23 +240,23 @@ public class CaseService {
 
         String summary = "";
         List<Map<String, Object>> trRows = jdbc.queryForList(
-            "SELECT ai_result, original_text FROM transcripts WHERE case_id=? ORDER BY created_at DESC LIMIT 1", caseId);
+                "SELECT ai_result, original_text FROM transcripts WHERE case_id=? ORDER BY created_at DESC LIMIT 1", caseId);
         if (!trRows.isEmpty()) {
             Object ai = trRows.get(0).get("ai_result");
             Object orig = trRows.get(0).get("original_text");
             String aiStr = ai != null ? ai.toString().trim() : "";
             String origStr = orig != null ? orig.toString().trim() : "";
             summary = !aiStr.isEmpty() ? aiStr.substring(0, Math.min(aiStr.length(), 300))
-                                       : origStr.substring(0, Math.min(origStr.length(), 300));
+                    : origStr.substring(0, Math.min(origStr.length(), 300));
         }
 
         List<Map<String, Object>> candRows = jdbc.queryForList(
-            "SELECT c.case_id, c.case_name, c.charge, " +
-            "(SELECT t2.ai_result FROM transcripts t2 WHERE t2.case_id=c.case_id ORDER BY t2.created_at DESC LIMIT 1) AS ai_result, " +
-            "(SELECT t3.original_text FROM transcripts t3 WHERE t3.case_id=c.case_id ORDER BY t3.created_at DESC LIMIT 1) AS orig_text " +
-            "FROM cases c WHERE c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?) " +
-            "AND c.case_id != ? ORDER BY c.created_at DESC LIMIT 20",
-            userId, caseId);
+                "SELECT c.case_id, c.case_name, c.charge, " +
+                        "(SELECT t2.ai_result FROM transcripts t2 WHERE t2.case_id=c.case_id ORDER BY t2.created_at DESC LIMIT 1) AS ai_result, " +
+                        "(SELECT t3.original_text FROM transcripts t3 WHERE t3.case_id=c.case_id ORDER BY t3.created_at DESC LIMIT 1) AS orig_text " +
+                        "FROM cases c WHERE c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?) " +
+                        "AND c.case_id != ? ORDER BY c.created_at DESC LIMIT 20",
+                userId, caseId);
 
         JSONObject current = new JSONObject();
         current.put("caseId",   nvl(cur.get("case_id")));
@@ -263,7 +269,7 @@ public class CaseService {
             String ai2   = r.get("ai_result") != null ? r.get("ai_result").toString().trim() : "";
             String orig2 = r.get("orig_text")  != null ? r.get("orig_text").toString().trim()  : "";
             String sum2  = !ai2.isEmpty() ? ai2.substring(0, Math.min(ai2.length(), 200))
-                                          : orig2.substring(0, Math.min(orig2.length(), 200));
+                    : orig2.substring(0, Math.min(orig2.length(), 200));
             JSONObject c = new JSONObject();
             c.put("caseId",   nvl(r.get("case_id")));
             c.put("caseName", nvl(r.get("case_name")));
@@ -275,7 +281,7 @@ public class CaseService {
         if (candidates.isEmpty()) {
             LocalDateTime now = LocalDateTime.now();
             simCacheRepo.save(CaseSimilarCache.builder()
-                .caseId(caseId).resultJson("[]").analyzedAt(now).build());
+                    .caseId(caseId).resultJson("[]").analyzedAt(now).build());
             result.put("success",    true);
             result.put("similar",    Collections.emptyList());
             result.put("cached",     false);
@@ -312,7 +318,7 @@ public class CaseService {
             LocalDateTime now = LocalDateTime.now();
             String jsonToStore = sim != null ? sim.toString() : "[]";
             simCacheRepo.save(CaseSimilarCache.builder()
-                .caseId(caseId).resultJson(jsonToStore).analyzedAt(now).build());
+                    .caseId(caseId).resultJson(jsonToStore).analyzedAt(now).build());
 
             result.put("success",    true);
             result.put("similar",    simList);
