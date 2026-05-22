@@ -186,12 +186,14 @@
         /* 진술조서 양식 */
         .jinsul-form { background: #fff; border: 1px solid #c8cdd8; border-top: none; border-radius: 0 0 14px 14px; padding: 36px 44px; font-family: 'Noto Serif KR', 'Malgun Gothic', serif; font-size: 14px; color: #1a1a2e; line-height: 1.9; display: flex; flex-direction: column; width: 100%; }
         .jf-title { text-align: center; font-size: 18px; font-weight: 700; letter-spacing: 8px; margin-bottom: 22px; flex-shrink: 0; }
-        .jf-inline-num { display: inline-block; min-width: 24px; text-align: center; border-bottom: 1px solid #1a1a2e; outline: none; padding: 0 4px; letter-spacing: 0; }
+        .jf-inline-num { display: inline-block; min-width: 24px; text-align: center; outline: none; padding: 0 4px; letter-spacing: 0; vertical-align: baseline; position: relative; }
+        .jf-inline-num::after { content: ''; position: absolute; left: 0; right: 0; bottom: 3px; border-bottom: 1px solid #1a1a2e; }
         .jf-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; flex-shrink: 0; }
         .jf-th { width: 130px; padding: 9px 16px; font-weight: 600; border: 1px solid #1a1a2e; letter-spacing: 4px; background: #f7f8fb; white-space: nowrap; vertical-align: middle; }
         .jf-td { padding: 9px 16px; border: 1px solid #1a1a2e; min-height: 36px; color: #1a1a2e; }
         .jf-preamble { font-size: 14px; line-height: 2.6; margin-bottom: 20px; word-break: keep-all; flex-shrink: 0; }
-        .jf-blank { display: inline-block; min-width: 70px; border-bottom: 1px solid #1a1a2e; outline: none; padding: 0 6px; vertical-align: bottom; line-height: 1.4; }
+        .jf-blank { display: inline-block; min-width: 70px; outline: none; padding: 0 6px; vertical-align: baseline; line-height: inherit; position: relative; }
+        .jf-blank::after { content: ''; position: absolute; left: 0; right: 0; bottom: 3px; border-bottom: 1px solid #1a1a2e; pointer-events: none; }
         .jf-blank-sm { min-width: 30px; }
         .jf-blank-lg { min-width: 120px; }
         .jf-blank:focus { background: #fffdf0; }
@@ -220,6 +222,77 @@
         .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1a2744; color: #fff; padding: 10px 22px; border-radius: 10px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif; opacity: 0; transition: all 0.25s; z-index: 500; }
         .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+        /* 임시저장 목록 팝오버 */
+        .draft-count-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-width: 17px; height: 17px; padding: 0 5px;
+            background: #0d1a33; color: #fff;
+            border-radius: 9px; font-size: 10px; font-weight: 700;
+            font-family: 'Space Grotesk', sans-serif;
+            margin-left: 2px;
+        }
+        .draft-popover {
+            position: absolute; top: calc(100% + 6px); right: 0;
+            width: 340px; max-height: 420px;
+            background: #fff; border: 1px solid #e2e5ee; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.10);
+            z-index: 700;
+            display: none; flex-direction: column;
+            overflow: hidden;
+        }
+        .draft-popover.open { display: flex; }
+        .draft-popover-header {
+            padding: 12px 14px; border-bottom: 1px solid #e2e5ee;
+            display: flex; align-items: center; justify-content: space-between;
+            font-size: 12px; font-weight: 600; color: #1a1a2e;
+            background: #f9fafc;
+        }
+        .draft-popover-close {
+            width: 22px; height: 22px; border: none; background: transparent;
+            border-radius: 5px; cursor: pointer; color: #9ca3af;
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.12s, color 0.12s;
+        }
+        .draft-popover-close:hover { background: #f0f2f8; color: #1a1a2e; }
+        .draft-popover-body {
+            flex: 1; overflow-y: auto; padding: 6px;
+        }
+        .draft-empty {
+            padding: 30px 16px; text-align: center; color: #9ca3af;
+            font-size: 12px; font-family: 'Noto Sans KR', sans-serif;
+        }
+        .draft-item {
+            display: flex; gap: 10px; padding: 10px 12px; border-radius: 8px;
+            cursor: pointer; transition: background 0.12s;
+            align-items: flex-start;
+        }
+        .draft-item:hover { background: #f4f6fb; }
+        .draft-item-content {
+            flex: 1; min-width: 0;
+        }
+        .draft-item-title {
+            font-size: 12px; font-weight: 500; color: #1a1a2e;
+            margin-bottom: 3px; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis;
+        }
+        .draft-item-preview {
+            font-size: 11px; color: #6b7280; line-height: 1.45;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .draft-item-meta {
+            font-size: 10px; color: #9ca3af; margin-top: 4px;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .draft-item-delete {
+            width: 24px; height: 24px; border: none; background: transparent;
+            border-radius: 5px; cursor: pointer; color: #9ca3af;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; opacity: 0; transition: all 0.12s;
+        }
+        .draft-item:hover .draft-item-delete { opacity: 1; }
+        .draft-item-delete:hover { background: #fef2f2; color: #dc2626; }
+
         @media (max-width: 1100px) { .main-grid { grid-template-columns: 1fr; } }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -244,6 +317,22 @@
                         PDF 저장
                     </button>
                     <button class="btn-secondary" onclick="saveDraft()">임시 저장</button>
+                    <div style="position:relative;">
+                        <button class="btn-secondary" id="btnDraftList" onclick="toggleDraftList(event)" style="display:inline-flex;align-items:center;gap:5px;">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                            임시저장 목록
+                            <span class="draft-count-badge" id="draftCountBadge" style="display:none;">0</span>
+                        </button>
+                        <div class="draft-popover" id="draftPopover">
+                            <div class="draft-popover-header">
+                                <span>임시 저장된 조서</span>
+                                <button class="draft-popover-close" onclick="closeDraftList()" aria-label="닫기">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                </button>
+                            </div>
+                            <div class="draft-popover-body" id="draftPopoverBody"></div>
+                        </div>
+                    </div>
                     <button class="btn-primary" id="btnConfirm" onclick="confirmSave()">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                         조서 확정
@@ -891,17 +980,243 @@
         document.getElementById('charCountLabel').style.color = len > 5000 ? '#dc2626' : '#9ca3af';
     }
 
+    /* ── 임시저장 다중 드래프트 시스템 ─────────────────────────────
+     * localStorage key: 'draft_transcripts_v2' = JSON array
+     *   [{ id, title, text, html, caseId, stmtType, stmtName, savedAt }, ...]
+     * 기존 'draft_transcript' (단일 텍스트) 는 첫 진입 시 마이그레이션
+     * ──────────────────────────────────────────────────────────── */
+    var DRAFTS_KEY = 'draft_transcripts_v2';
+
+    function getDrafts() {
+        try {
+            var raw = localStorage.getItem(DRAFTS_KEY);
+            if (!raw) return [];
+            var arr = JSON.parse(raw);
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    }
+    function setDrafts(arr) {
+        try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(arr)); } catch (e) {}
+    }
+
+    // 기존 단일 draft_transcript 가 있으면 새 구조로 이주
+    (function migrateLegacyDraft() {
+        var legacy = localStorage.getItem('draft_transcript');
+        if (!legacy) return;
+        var legacyHtml = localStorage.getItem('draft_transcript_html') || '';
+        var drafts = getDrafts();
+        // 이미 같은 본문이 있으면 중복 추가하지 않음
+        var exists = drafts.some(function(d) { return d.text === legacy; });
+        if (!exists) {
+            drafts.unshift({
+                id: 'draft-' + Date.now(),
+                title: makeDraftTitle(legacy),
+                text: legacy,
+                html: legacyHtml,
+                caseId: '',
+                stmtType: '',
+                stmtName: '',
+                savedAt: Date.now()
+            });
+            setDrafts(drafts);
+        }
+        localStorage.removeItem('draft_transcript');
+        localStorage.removeItem('draft_transcript_html');
+        localStorage.removeItem('draft_dismissed');
+    })();
+
+    function makeDraftTitle(text) {
+        var t = (text || '').replace(/\s+/g, ' ').trim();
+        if (!t) return '(빈 조서)';
+        return t.length > 28 ? t.substring(0, 28) + '…' : t;
+    }
+
+    function formatDraftTime(ts) {
+        if (!ts) return '';
+        var d = new Date(ts);
+        var now = new Date();
+        var sameDay = d.toDateString() === now.toDateString();
+        var hh = String(d.getHours()).padStart(2, '0');
+        var mm = String(d.getMinutes()).padStart(2, '0');
+        if (sameDay) return '오늘 ' + hh + ':' + mm;
+        var mo = String(d.getMonth() + 1).padStart(2, '0');
+        var da = String(d.getDate()).padStart(2, '0');
+        return (d.getFullYear() === now.getFullYear() ? '' : d.getFullYear() + '.')
+            + mo + '.' + da + ' ' + hh + ':' + mm;
+    }
+
     function saveDraft() {
         var editor = document.getElementById('editor');
         var text = sanitizeEditorText(editor.innerText).trim();
         if (!text) { showToast('조서 내용을 입력해 주세요.'); return; }
-        localStorage.setItem('draft_transcript', text);
-        // 형광펜/메모 포함 HTML도 함께 저장
-        localStorage.setItem('draft_transcript_html', getEditorHtml());
-        // 새로 임시저장했으므로 다음 진입 시 다시 알림
-        localStorage.removeItem('draft_dismissed');
+
+        var stmtName = (document.getElementById('inputStmtName') || {}).value || '';
+        var stmtType = (document.getElementById('selStmtType')   || {}).value || '';
+        var selCase  = document.getElementById('selCase');
+        var caseId   = selCase ? selCase.value : '';
+        // select 옵션 텍스트 ("2026-0520 · test사건") 그대로 저장 → 제목 표시용
+        var caseLabel = '';
+        if (selCase && selCase.selectedIndex >= 0) {
+            var opt = selCase.options[selCase.selectedIndex];
+            if (opt && opt.value) caseLabel = (opt.textContent || '').trim();
+        }
+
+        // 제목 조합: 진술인 · 진술종류 (사건번호 · 사건명)
+        var baseTitle = stmtName
+            ? (stmtName + (stmtType ? ' · ' + stmtType : ''))
+            : makeDraftTitle(text);
+        var title = baseTitle + (caseLabel ? ' (' + caseLabel + ')' : '');
+
+        var drafts = getDrafts();
+        var newDraft = {
+            id: 'draft-' + Date.now(),
+            title: title,
+            text: text,
+            html: getEditorHtml(),
+            caseId: caseId,
+            caseLabel: caseLabel,
+            stmtType: stmtType,
+            stmtName: stmtName,
+            savedAt: Date.now()
+        };
+        drafts.unshift(newDraft);
+        // 최대 20개 까지만 보관
+        if (drafts.length > 20) drafts = drafts.slice(0, 20);
+        setDrafts(drafts);
+        updateDraftBadge();
         showToast('임시 저장되었습니다.');
     }
+
+    function updateDraftBadge() {
+        var badge = document.getElementById('draftCountBadge');
+        if (!badge) return;
+        var n = getDrafts().length;
+        if (n > 0) {
+            badge.textContent = String(n);
+            badge.style.display = 'inline-flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+
+    function renderDraftList() {
+        var body = document.getElementById('draftPopoverBody');
+        var drafts = getDrafts();
+        if (drafts.length === 0) {
+            body.innerHTML = '<div class="draft-empty">임시 저장된 조서가 없습니다.</div>';
+            return;
+        }
+        body.innerHTML = drafts.map(function(d) {
+            var esc = function(s) {
+                return (s || '').replace(/[&<>"]/g, function(c){
+                    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];
+                });
+            };
+            // 기존(마이그레이션된) 드래프트에는 title에 사건정보가 없을 수 있으니 보완
+            var rawTitle = d.title || '(제목 없음)';
+            if (d.caseLabel && rawTitle.indexOf('(') === -1) {
+                rawTitle = rawTitle + ' (' + d.caseLabel + ')';
+            }
+            var titleEsc = esc(rawTitle);
+            var prevEsc  = esc(d.text || '');
+
+            return '<div class="draft-item" data-id="' + d.id + '">'
+                + '<div class="draft-item-content">'
+                + '<div class="draft-item-title">' + titleEsc + '</div>'
+                + '<div class="draft-item-preview">' + prevEsc + '</div>'
+                + '<div class="draft-item-meta">' + formatDraftTime(d.savedAt) + '</div>'
+                + '</div>'
+                + '<button class="draft-item-delete" data-del="' + d.id + '" title="삭제" aria-label="삭제">'
+                + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
+                + '</button>'
+                + '</div>';
+        }).join('');
+
+        // 아이템 클릭 → 불러오기
+        Array.prototype.forEach.call(body.querySelectorAll('.draft-item'), function(el) {
+            el.addEventListener('click', function(e) {
+                if (e.target.closest('[data-del]')) return; // 삭제 버튼 클릭은 제외
+                loadDraft(el.getAttribute('data-id'));
+            });
+        });
+        // 삭제 버튼
+        Array.prototype.forEach.call(body.querySelectorAll('[data-del]'), function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                deleteDraft(btn.getAttribute('data-del'));
+            });
+        });
+    }
+
+    function toggleDraftList(e) {
+        if (e) e.stopPropagation();
+        var po = document.getElementById('draftPopover');
+        if (po.classList.contains('open')) {
+            closeDraftList();
+        } else {
+            renderDraftList();
+            po.classList.add('open');
+        }
+    }
+    function closeDraftList() {
+        document.getElementById('draftPopover').classList.remove('open');
+    }
+
+    function loadDraft(id) {
+        var drafts = getDrafts();
+        var d = drafts.find(function(x) { return x.id === id; });
+        if (!d) return;
+
+        var editor = document.getElementById('editor');
+        var hasContent = (sanitizeEditorText(editor.innerText) || '').trim().length > 0;
+        if (hasContent && !confirm('현재 작성 중인 내용은 사라집니다. 불러올까요?')) return;
+
+        // 메타 복원
+        if (d.stmtName) {
+            var nameEl = document.getElementById('inputStmtName');
+            if (nameEl) { nameEl.value = d.stmtName; fillFormName(d.stmtName); }
+        }
+        if (d.stmtType) {
+            var typeEl = document.getElementById('selStmtType');
+            if (typeEl) typeEl.value = d.stmtType;
+        }
+        if (d.caseId) {
+            setDesiredCaseId(d.caseId);
+        }
+        // 본문 복원 (서식 우선)
+        if (d.html) {
+            setEditorHtml(d.html);
+        } else {
+            editor.innerText = d.text || '';
+        }
+        updateCharCount();
+        closeDraftList();
+        showToast('임시 저장본을 불러왔습니다.');
+    }
+
+    function deleteDraft(id) {
+        var drafts = getDrafts().filter(function(d) { return d.id !== id; });
+        setDrafts(drafts);
+        updateDraftBadge();
+        renderDraftList();
+        showToast('삭제되었습니다.');
+    }
+
+    // 팝오버 바깥 클릭 시 닫기
+    document.addEventListener('click', function(e) {
+        var po = document.getElementById('draftPopover');
+        if (!po || !po.classList.contains('open')) return;
+        if (po.contains(e.target)) return;
+        if (e.target.closest && e.target.closest('#btnDraftList')) return;
+        closeDraftList();
+    });
+    // Esc 로 닫기
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeDraftList();
+    });
+
+    // 초기 배지 갱신
+    updateDraftBadge();
 
     function confirmSave() {
         var caseId = document.getElementById('selCase').value;
@@ -999,6 +1314,20 @@
                     if (f) { f.style.height='auto'; f.style.overflow='visible'; f.style.maxHeight='none'; f.style.boxShadow='none'; f.style.borderRadius='0'; f.style.border='none'; }
                     if (e) { e.style.height='auto'; e.style.overflow='visible'; e.style.maxHeight='none'; e.style.whiteSpace='pre-wrap'; }
                     doc.querySelectorAll('.jf-blank').forEach(function(el){ el.style.color='#1a1a2e'; el.style.borderBottomColor='#1a1a2e'; });
+
+                    // PDF에는 형광펜/메모 서식 제거 — 일반 텍스트만 보이도록
+                    if (e) {
+                        e.querySelectorAll('.hl-mark, .memo-mark').forEach(function(el) {
+                            el.style.background = 'transparent';
+                            el.style.backgroundColor = 'transparent';
+                            el.style.borderBottom = 'none';
+                            el.style.border = 'none';
+                            el.style.color = '#1a1a2e';
+                            el.style.boxShadow = 'none';
+                            el.style.padding = '0';
+                            el.style.borderRadius = '0';
+                        });
+                    }
                 }
             }).then(function(canvas) {
                 restoreStyles();
@@ -1036,18 +1365,7 @@
         setTimeout(function() { t.classList.remove('show'); }, 2500);
     }
 
-    // 임시저장 복원: 취소를 누른 적 있으면 다시 묻지 않음
-    var _draft = localStorage.getItem('draft_transcript');
-    var _draftDismissed = localStorage.getItem('draft_dismissed') === '1';
-    if (_draft && !_initTranscriptId && !_draftDismissed) {
-        if (confirm('임시 저장된 조서가 있습니다. 불러오시겠습니까?')) {
-            document.getElementById('editor').innerText = _draft;
-            updateCharCount();
-        } else {
-            // 취소 선택 기억 → 이후 페이지 진입 시 알림 안 뜸
-            localStorage.setItem('draft_dismissed', '1');
-        }
-    }
+    // 임시저장은 헤더의 '임시저장 목록' 버튼에서 수동으로 불러옴 (자동 confirm 제거)
 
     /* ──────────────────────────────────────────────────────────────
      * 서식 툴바: 굵게/기울기/밑줄/형광펜
