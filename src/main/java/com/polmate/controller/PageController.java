@@ -51,4 +51,5 @@ public class PageController {
     @GetMapping("/desktop/cctvAnalysis")       public String desktopCctvAnalysis()       { return "desktop/cctvAnalysis"; }
     @GetMapping("/desktop/contradictionList")  public String desktopContradictionList()  { return "desktop/contradictionList"; }
     @GetMapping("/desktop/emotionAnalysis")    public String desktopEmotionAnalysis()    { return "desktop/emotionAnalysis"; }
+    @GetMapping("/desktop/accessLog")          public String desktopAccessLog()          { return "desktop/accessLog"; }
 }

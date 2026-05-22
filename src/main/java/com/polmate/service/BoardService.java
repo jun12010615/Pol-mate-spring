@@ -1,5 +1,6 @@
 package com.polmate.service;
 
+import com.polmate.annotation.LogAccess;
 import com.polmate.entity.*;
 import com.polmate.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +45,7 @@ public class BoardService {
     }
 
     // ── 상세 조회 ────────────────────────────────────────────────
+    @LogAccess(type = "BOARD_VIEW", nameKey = "title")
     @Transactional
     public Optional<Map<String, Object>> detail(Integer postId, String userId) {
         postRepo.incrementViewCount(postId);
