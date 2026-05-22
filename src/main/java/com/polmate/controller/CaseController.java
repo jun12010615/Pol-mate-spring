@@ -40,7 +40,7 @@ public class CaseController {
 
         switch (action) {
             case "caseList":       handleCaseList(res, loginUser, nvl(status,"all"), nvl(keyword,"")); break;
-            case "caseDetail":     handleCaseDetail(res, loginUser, caseId);     break;
+            case "caseDetail":     handleCaseDetail(res, loginUser, caseId, session); break;
             case "docList":        handleDocList(res, loginUser, nvl(keyword,"")); break;
             case "docStats":       handleDocStats(res, loginUser);               break;
             case "myDept":         handleMyDept(res, loginUser);                 break;
@@ -62,6 +62,10 @@ public class CaseController {
                        @RequestParam(required = false) String stmtType,
                        @RequestParam(required = false) String stmtName,
                        @RequestParam(required = false) String originalText,
+                       @RequestParam(required = false) String originalHtml,
+                       @RequestParam(required = false) String preambleYear,
+                       @RequestParam(required = false) String preambleMonth,
+                       @RequestParam(required = false) String preambleDay,
                        HttpServletResponse res, HttpSession session) throws IOException {
         res.setContentType("application/json;charset=UTF-8");
         String loginUser = getLoginUser(session, res);
@@ -78,10 +82,11 @@ public class CaseController {
                 writeMap(res, caseService.updateStatus(loginUser, caseId, status));
                 break;
             case "transcriptSave":
-                writeMap(res, transcriptService.save(loginUser, caseId, nvl(stmtType,""), nvl(stmtName,""), nvl(originalText,"")));
+                writeMap(res, transcriptService.save(loginUser, caseId, nvl(stmtType,""), nvl(stmtName,""), nvl(originalText,""), nvl(originalHtml,""),
+                        parseIntOrNull(preambleYear), parseIntOrNull(preambleMonth), parseIntOrNull(preambleDay)));
                 break;
             case "transcriptUpdate":
-                handleTranscriptUpdate(res, loginUser, transcriptId, caseId, stmtType, stmtName, originalText);
+                handleTranscriptUpdate(res, loginUser, transcriptId, caseId, stmtType, stmtName, originalText, originalHtml);
                 break;
             case "transcriptSummarize":
                 handleTranscriptSummarize(res, loginUser, transcriptId);
@@ -124,7 +129,7 @@ public class CaseController {
         }
     }
 
-    private void handleCaseDetail(HttpServletResponse res, String loginUser, String caseId) throws IOException {
+    private void handleCaseDetail(HttpServletResponse res, String loginUser, String caseId, HttpSession session) throws IOException {
         if (isEmpty(caseId)) { res.getWriter().write("{\"error\":\"caseId가 필요합니다.\"}"); return; }
         try {
             Optional<Map<String, Object>> optCase = caseService.detail(caseId, loginUser);
@@ -141,7 +146,24 @@ public class CaseController {
             detail.put("rank",      nvl((String) row.get("user_rank"), ""));
             String dn = (String) row.get("dept_name"), on = (String) row.get("org_name");
             detail.put("deptName",  dn != null && !dn.isEmpty()
-                ? (on != null && !on.isEmpty() ? dn + " (" + on + ")" : dn) : "미배정");
+                    ? (on != null && !on.isEmpty() ? dn + " (" + on + ")" : dn) : "미배정");
+            // 전문부 자동입력용 개별 필드
+            detail.put("caseName",  nvl((String) row.get("case_name"), ""));
+            detail.put("orgName",   on != null && !on.isEmpty() ? on : "");
+            // 수사관 이름 = 현재 로그인한 사용자 (세션 기준)
+            String loginUserName = "";
+            String loginUserOrg  = "";
+            try {
+                List<Map<String, Object>> uRows = caseService.getLoginUserInfo(loginUser);
+                if (!uRows.isEmpty()) {
+                    loginUserName = nvl((String) uRows.get(0).get("user_name"), "");
+                    loginUserOrg  = nvl((String) uRows.get(0).get("user_org"),  "");
+                }
+            } catch (Exception ignored) {}
+            detail.put("userName", loginUserName);
+            if (loginUserOrg != null && !loginUserOrg.isEmpty()) {
+                detail.put("orgName", loginUserOrg);
+            }
             Object ts = row.get("created_at");
             detail.put("date", ts instanceof Timestamp ? DATE_FMT.format((Timestamp) ts) : "");
 
@@ -152,7 +174,7 @@ public class CaseController {
                 obj.put("type",         nvl((String) d.get("stmt_type"), "미분류"));
                 obj.put("name",         nvl((String) d.get("stmt_name"), "미입력"));
                 obj.put("contradiction", Boolean.TRUE.equals(d.get("has_contradiction"))
-                    || Integer.valueOf(1).equals(d.get("has_contradiction")));
+                        || Integer.valueOf(1).equals(d.get("has_contradiction")));
                 obj.put("textLen",      num(d.get("text_len")));
                 obj.put("writerId",     nvl((String) d.get("user_id"),   ""));
                 obj.put("writerName",   nvl((String) d.get("user_name"), "알 수 없음"));
@@ -195,7 +217,7 @@ public class CaseController {
                 obj.put("title",        sn + " " + st + " 진술 조서");
                 obj.put("type",         st);
                 boolean hasCont = Boolean.TRUE.equals(d.get("has_contradiction"))
-                    || Integer.valueOf(1).equals(d.get("has_contradiction"));
+                        || Integer.valueOf(1).equals(d.get("has_contradiction"));
                 obj.put("status",       hasCont ? "모순탐지" : "완료");
                 obj.put("words",        num(d.get("text_len")));
                 obj.put("contradiction", hasCont);
@@ -248,11 +270,21 @@ public class CaseController {
             if (opt.isEmpty()) { res.getWriter().write("{\"error\":\"조서를 찾을 수 없거나 접근 권한이 없습니다.\"}"); return; }
             Map<String, Object> row = opt.get();
             JSONObject result = new JSONObject();
-            result.put("id",      num(row.get("transcript_id")));
-            result.put("caseId",  nvl((String) row.get("case_id"),       ""));
-            result.put("text",    nvl((String) row.get("original_text"), ""));
-            result.put("type",    nvl((String) row.get("stmt_type"),     ""));
-            result.put("name",    nvl((String) row.get("stmt_name"),     ""));
+            result.put("id",         num(row.get("transcript_id")));
+            result.put("caseId",     nvl((String) row.get("case_id"),       ""));
+            result.put("text",       nvl((String) row.get("original_text"), ""));
+            result.put("html",       nvl((String) row.get("original_html"), ""));
+            result.put("type",       nvl((String) row.get("stmt_type"),     ""));
+            result.put("name",       nvl((String) row.get("stmt_name"),     ""));
+            result.put("writerName", nvl((String) row.get("writer_name"),   ""));
+            result.put("writerOrg",  nvl((String) row.get("writer_org"),    ""));
+            // 전문부 날짜: 작성 당시 고정값 (최우선 사용)
+            result.put("preambleYear",  row.get("preamble_year")  != null ? ((Number) row.get("preamble_year")).intValue()  : JSONObject.NULL);
+            result.put("preambleMonth", row.get("preamble_month") != null ? ((Number) row.get("preamble_month")).intValue() : JSONObject.NULL);
+            result.put("preambleDay",   row.get("preamble_day")   != null ? ((Number) row.get("preamble_day")).intValue()   : JSONObject.NULL);
+            // 조서 작성일: 전문부 날짜 폴백용
+            Object tsCre = row.get("created_at");
+            result.put("createdAt", tsCre != null ? tsCre.toString() : "");
             String ar = (String) row.get("ai_result");
             result.put("summary", ar != null && !ar.isEmpty() ? ar : "");
             res.getWriter().write(result.toString());
@@ -265,12 +297,12 @@ public class CaseController {
 
     private void handleTranscriptUpdate(HttpServletResponse res, String loginUser, String idStr,
                                         String caseId, String stmtType, String stmtName,
-                                        String originalText) throws IOException {
+                                        String originalText, String originalHtml) throws IOException {
         if (isEmpty(idStr)) { res.getWriter().write("{\"error\":\"transcriptId가 필요합니다.\"}"); return; }
         if (isEmpty(caseId)) { res.getWriter().write("{\"success\":false,\"message\":\"caseId가 필요합니다.\"}"); return; }
         try {
             writeMap(res, transcriptService.update(loginUser, Integer.parseInt(idStr), caseId,
-                nvl(stmtType, ""), nvl(stmtName, ""), nvl(originalText, "")));
+                    nvl(stmtType, ""), nvl(stmtName, ""), nvl(originalText, ""), nvl(originalHtml, "")));
         } catch (NumberFormatException e) {
             res.getWriter().write("{\"success\":false,\"message\":\"잘못된 transcriptId\"}");
         } catch (Exception e) {
@@ -370,6 +402,12 @@ public class CaseController {
     private String nvl(String s)             { return nvl(s, ""); }
     private boolean isEmpty(String s)        { return s == null || s.trim().isEmpty(); }
     private int num(Object o)               { return o == null ? 0 : ((Number) o).intValue(); }
+
+    private Integer parseIntOrNull(String s) {
+        if (s == null || s.trim().isEmpty()) return null;
+        try { return Integer.parseInt(s.trim()); }
+        catch (NumberFormatException e) { return null; }
+    }
 
     private String getLoginUser(HttpSession session, HttpServletResponse res) throws IOException {
         String u = session != null ? (String) session.getAttribute("loginUser") : null;

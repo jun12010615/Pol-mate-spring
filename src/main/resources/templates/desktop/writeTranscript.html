@@ -1,636 +1,1827 @@
 <!DOCTYPE html>
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>POL-MATE | 진술 조서 작성</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" th:href="@{/css/polmate.css}">
-<script th:inline="javascript">
-var _ctx = '';
-</script>
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f4f6fb; color: #1a1a2e; -webkit-font-smoothing: antialiased; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POL-MATE | 진술 조서 작성</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Noto+Serif+KR:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/polmate.css}">
+    <script th:inline="javascript">
+        var _ctx = '';
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f4f6fb; color: #1a1a2e; -webkit-font-smoothing: antialiased; }
+        .pm-page { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; width: 100%; min-width: 0;}
+        .page-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 24px; }
+        .page-eyebrow { font-size: 11px; color: #9ca3af; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 4px; }
+        .page-title { font-size: 22px; font-weight: 500; }
+        .header-actions { display: flex; gap: 8px; }
+        .btn-secondary { padding: 9px 16px; background: #fff; color: #1a1a2e; border: 1.5px solid #e2e5ee; border-radius: 10px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; transition: border-color 0.13s, background 0.13s; }
+        .btn-secondary:hover { border-color: #0d1a33; background: #f4f6fb; }
+        .btn-primary { display: flex; align-items: center; gap: 6px; padding: 9px 18px; background: #0d1a33; color: #fff; border: none; border-radius: 10px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif; font-weight: 500; cursor: pointer; transition: background 0.13s; }
+        .btn-primary:hover { background: #1a2744; }
+        .btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
 
-.pm-page { padding: 28px 32px 48px; max-width: 1440px; margin: 0 auto; }
+        /* 그리드: 음성 1 : 조서 2 */
+        .main-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; align-items: start; width: 100%;}
 
-.page-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 24px; }
-.page-eyebrow { font-size: 11px; color: #9ca3af; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 4px; }
-.page-title { font-size: 22px; font-weight: 500; }
-.header-actions { display: flex; gap: 8px; }
-.btn-secondary {
-    padding: 9px 16px; background: #fff; color: #1a1a2e;
-    border: 1.5px solid #e2e5ee; border-radius: 10px;
-    font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
-    cursor: pointer; transition: border-color 0.13s, background 0.13s;
-}
-.btn-secondary:hover { border-color: #0d1a33; background: #f4f6fb; }
-.btn-primary {
-    display: flex; align-items: center; gap: 6px;
-    padding: 9px 18px; background: #0d1a33; color: #fff;
-    border: none; border-radius: 10px;
-    font-size: 13px; font-family: 'Noto Sans KR', sans-serif; font-weight: 500;
-    cursor: pointer; transition: background 0.13s;
-}
-.btn-primary:hover { background: #1a2744; }
-.btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+        .main-grid > div {
+            min-width: 0;
+        }
 
-.main-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; }
+        .sec-label { font-size: 11px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.8px; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; min-height: 20px; }
+        .sec-label::after { content: ''; flex: 1; height: 1px; background: #e2e5ee; }
+        .sec-label-action { font-size: 11px; color: #9ca3af; font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: auto; }
 
-.sec-label {
-    font-size: 11px; font-weight: 500; color: #6b7280;
-    text-transform: uppercase; letter-spacing: 0.8px;
-    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
-}
-.sec-label::after { content: ''; flex: 1; height: 1px; background: #e2e5ee; }
-.sec-label-action { font-size: 11px; color: #9ca3af; font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: auto; }
+        .meta-bar { background: #fff; border: 1px solid #e2e5ee; border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+        .meta-field label { display: block; font-size: 10px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 5px; }
+        .meta-select, .meta-input { width: 100%; padding: 8px 10px; border: 1.5px solid #e2e5ee; border-radius: 8px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif; color: #1a1a2e; background: #f4f6fb; outline: none; transition: border-color 0.15s, background 0.15s; }
+        .meta-select:focus, .meta-input:focus { border-color: #0d1a33; background: #fff; box-shadow: 0 0 0 3px rgba(13,26,51,0.07); }
 
-/* meta bar */
-.meta-bar {
-    background: #fff; border: 1px solid #e2e5ee; border-radius: 12px;
-    padding: 14px 16px; margin-bottom: 16px;
-    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;
-}
-.meta-field label { display: block; font-size: 10px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 5px; }
-.meta-select, .meta-input {
-    width: 100%; padding: 8px 10px;
-    border: 1.5px solid #e2e5ee; border-radius: 8px;
-    font-size: 13px; font-family: 'Noto Sans KR', sans-serif; color: #1a1a2e;
-    background: #f4f6fb; outline: none;
-    transition: border-color 0.15s, background 0.15s;
-}
-.meta-select:focus, .meta-input:focus { border-color: #0d1a33; background: #fff; box-shadow: 0 0 0 3px rgba(13,26,51,0.07); }
+        /* 음성 입력 (축소) */
+        .recorder-card { background: #0d1a33; color: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; position: relative; overflow: hidden; }
+        .recorder-card::before { content: ''; position: absolute; inset: 0; opacity: 0.05; background: radial-gradient(circle at 20% 100%, #f0c040 0%, transparent 55%); }
+        .recorder-inner { position: relative; display: flex; gap: 12px; align-items: center; }
+        .rec-btn { width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .rec-btn.idle { background: #f0c040; color: #0d1a33; box-shadow: 0 0 0 3px rgba(240,192,64,0.2); }
+        .rec-btn.recording { background: #dc2626; color: #fff; box-shadow: 0 0 0 6px rgba(220,38,38,0.15); animation: recPulse 1.2s infinite; }
+        @keyframes recPulse { 0%,100%{box-shadow:0 0 0 6px rgba(220,38,38,0.15)} 50%{box-shadow:0 0 0 12px rgba(220,38,38,0.05)} }
+        .rec-info { flex: 1; min-width: 0; }
+        .rec-title { font-size: 13px; font-weight: 500; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rec-sub { font-size: 11px; color: rgba(255,255,255,0.5); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .waveform { display: flex; gap: 2px; height: 14px; align-items: center; }
+        .wave-bar { width: 2px; border-radius: 1px; background: rgba(255,255,255,0.2); transition: height 0.1s; }
+        .wave-bar.active { background: #f0c040; }
+        .rec-timer { font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 700; color: #f0c040; white-space: nowrap; }
+        .upload-btn { padding: 5px 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); border-radius: 7px; color: rgba(255,255,255,0.7); font-size: 11px; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; transition: background 0.13s; }
+        .upload-btn:hover { background: rgba(255,255,255,0.18); }
 
-/* recorder card */
-.recorder-card {
-    background: #0d1a33; color: #fff;
-    border-radius: 14px; padding: 20px 22px;
-    margin-bottom: 14px; position: relative; overflow: hidden;
-}
-.recorder-card::before {
-    content: ''; position: absolute; inset: 0; opacity: 0.05;
-    background: radial-gradient(circle at 20% 100%, #f0c040 0%, transparent 55%);
-}
-.recorder-inner { position: relative; display: flex; gap: 16px; align-items: center; }
-.rec-btn {
-    width: 60px; height: 60px; border-radius: 50%; flex-shrink: 0;
-    border: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.2s;
-}
-.rec-btn.idle { background: #f0c040; color: #0d1a33; box-shadow: 0 0 0 4px rgba(240,192,64,0.2); }
-.rec-btn.recording { background: #dc2626; color: #fff; box-shadow: 0 0 0 8px rgba(220,38,38,0.15); animation: recPulse 1.2s infinite; }
-@keyframes recPulse { 0%,100%{box-shadow:0 0 0 8px rgba(220,38,38,0.15)} 50%{box-shadow:0 0 0 14px rgba(220,38,38,0.05)} }
-.rec-info { flex: 1; }
-.rec-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
-.rec-sub { font-size: 11px; color: rgba(255,255,255,0.5); margin-bottom: 10px; }
-.waveform { display: flex; gap: 2px; height: 18px; align-items: center; }
-.wave-bar { width: 2px; border-radius: 1px; background: rgba(255,255,255,0.2); transition: height 0.1s; }
-.wave-bar.active { background: #f0c040; }
-.rec-timer { font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; color: #f0c040; }
-.upload-btn {
-    padding: 7px 14px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 8px; color: rgba(255,255,255,0.7); font-size: 12px;
-    font-family: 'Noto Sans KR', sans-serif; cursor: pointer; display: flex; align-items: center; gap: 6px;
-    transition: background 0.13s;
-}
-.upload-btn:hover { background: rgba(255,255,255,0.18); }
+        .stt-progress-card { background: #fff; border: 1px solid #e2e5ee; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+        .stt-icon { width: 28px; height: 28px; border-radius: 7px; background: #eff6ff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .stt-bar-wrap { flex: 1; min-width: 0; }
+        .stt-bar-label { font-size: 11px; font-weight: 500; color: #1a1a2e; margin-bottom: 5px; }
+        .stt-bar-track { height: 5px; background: #f0f2f8; border-radius: 3px; overflow: hidden; }
+        .stt-bar-fill { height: 100%; background: #0d1a33; border-radius: 3px; transition: width 0.4s; }
+        .stt-pct { font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 700; color: #0d1a33; flex-shrink: 0; }
 
-/* stt progress */
-.stt-progress-card {
-    background: #fff; border: 1px solid #e2e5ee; border-radius: 12px;
-    padding: 14px 16px; margin-bottom: 14px;
-    display: flex; align-items: center; gap: 14px;
-}
-.stt-icon { width: 32px; height: 32px; border-radius: 8px; background: #eff6ff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.stt-bar-wrap { flex: 1; }
-.stt-bar-label { font-size: 12px; font-weight: 500; color: #1a1a2e; margin-bottom: 6px; }
-.stt-bar-track { height: 6px; background: #f0f2f8; border-radius: 3px; overflow: hidden; }
-.stt-bar-fill { height: 100%; background: #0d1a33; border-radius: 3px; transition: width 0.4s; }
-.stt-pct { font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; color: #0d1a33; flex-shrink: 0; }
+        .segment-list { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+        .segment-card { background: #fff; border: 1px solid #e2e5ee; border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 38px 68px 1fr; gap: 8px; align-items: flex-start; cursor: pointer; transition: border-color 0.13s; }
+        .segment-card:hover { border-color: #0d1a33; }
+        .segment-card.flagged { border-left: 3px solid #f59e0b; padding-left: 7px; }
+        .seg-time { font-size: 10px; font-family: 'Space Grotesk', sans-serif; color: #9ca3af; padding-top: 2px; }
+        .seg-spk { display: inline-flex; align-items: center; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 20px; align-self: flex-start; }
+        .seg-spk.investigator { background: #eff6ff; color: #1e40af; }
+        .seg-spk.suspect { background: #f4f6fb; color: #6b7280; }
+        .seg-text { font-size: 12px; color: #1a1a2e; line-height: 1.6; }
+        .flag-note { font-size: 10px; color: #92400e; font-weight: 500; margin-left: 6px; }
 
-/* stt segments */
-.segment-list { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
-.segment-card {
-    background: #fff; border: 1px solid #e2e5ee; border-radius: 10px;
-    padding: 12px 14px;
-    display: grid; grid-template-columns: 44px 80px 1fr; gap: 10px; align-items: flex-start;
-    cursor: pointer; transition: border-color 0.13s;
-}
-.segment-card:hover { border-color: #0d1a33; }
-.segment-card.flagged { border-left: 3px solid #f59e0b; padding-left: 11px; }
-.seg-time { font-size: 10px; font-family: 'Space Grotesk', sans-serif; color: #9ca3af; padding-top: 2px; }
-.seg-spk {
-    display: inline-flex; align-items: center; font-size: 10px; font-weight: 500;
-    padding: 3px 8px; border-radius: 20px; align-self: flex-start;
-}
-.seg-spk.investigator { background: #eff6ff; color: #1e40af; }
-.seg-spk.suspect { background: #f4f6fb; color: #6b7280; }
-.seg-text { font-size: 13px; color: #1a1a2e; line-height: 1.7; }
-.flag-note { font-size: 10px; color: #92400e; font-weight: 500; margin-left: 6px; }
+        /* 조서 편집 툴바 */
+        .editor-card { background: #fff; border: 1px solid #e2e5ee; border-radius: 12px 12px 0 0; overflow: hidden; }
+        .editor-toolbar { padding: 10px 14px; border-bottom: 1px solid #e2e5ee; display: flex; gap: 4px; align-items: center; }
+        .tb-btn { width: 28px; height: 28px; border-radius: 6px; border: none; cursor: pointer; background: transparent; font-size: 12px; font-weight: 600; color: #6b7280; transition: background 0.13s, color 0.13s; display: inline-flex; align-items: center; justify-content: center; }
+        .tb-btn:hover { background: #f0f2f8; color: #1a1a2e; }
+        .tb-btn.active { background: #e3e8f3; color: #1a1a2e; box-shadow: inset 0 0 0 1px #c8d0e0; }
+        .tb-btn.active:hover { background: #d8def0; }
+        /* 형광펜 버튼: 활성 시 노란 톤 */
+        .tb-btn.hl-btn .hl-bar { display: block; width: 14px; height: 3px; background: #ffcc80; margin-top: 1px; border-radius: 1px; transition: background 0.13s; }
+        .tb-btn.hl-btn.active { background: #fff8d4; color: #8a6d00; box-shadow: inset 0 0 0 1px #e6c33a; }
+        .tb-btn.hl-btn.active:hover { background: #ffeea3; }
+        /* 본문에 적용되는 형광펜 (기본색 폴백 — 실제 색은 인라인 style로 지정) */
+        .jf-body .hl-mark { background-color: #ffcc80; }
+        .jf-body .hl-mark[style*="background-color"] { /* 인라인 색 우선 */ }
 
-/* editor */
-.editor-card { background: #fff; border: 1px solid #e2e5ee; border-radius: 14px; overflow: hidden; }
-.editor-toolbar {
-    padding: 10px 14px; border-bottom: 1px solid #e2e5ee;
-    display: flex; gap: 4px; align-items: center;
-}
-.tb-btn {
-    width: 28px; height: 28px; border-radius: 6px; border: none;
-    cursor: pointer; background: transparent; font-size: 12px; font-weight: 600;
-    color: #6b7280; transition: background 0.13s, color 0.13s;
-}
-.tb-btn:hover { background: #f0f2f8; color: #1a1a2e; }
-.tb-divider { width: 1px; height: 18px; background: #e2e5ee; margin: 0 4px; }
-.tb-text-btn {
-    padding: 0 10px; height: 28px; border-radius: 6px; border: none;
-    cursor: pointer; background: transparent; font-size: 11px; color: #6b7280;
-    font-family: 'Noto Sans KR', sans-serif; transition: background 0.13s;
-}
-.tb-text-btn:hover { background: #f0f2f8; }
-.char-count { font-size: 11px; color: #9ca3af; margin-left: auto; }
-.editor-body {
-    padding: 20px; font-size: 13px; line-height: 1.85; color: #1a1a2e;
-    min-height: 520px; outline: none;
-}
-.editor-body:empty::before { content: attr(data-placeholder); color: #9ca3af; }
-.editor-section-title { font-weight: 500; margin-bottom: 6px; margin-top: 16px; }
-.editor-section-title:first-child { margin-top: 0; }
-.highlight { background: rgba(240,192,64,0.25); padding: 0 3px; border-radius: 2px; }
+        /* 형광펜 색 선택 드롭다운 */
+        .hl-group { position: relative; display: inline-flex; align-items: center; }
+        .hl-caret { width: 14px; height: 28px; padding: 0; border: none; background: transparent; cursor: pointer; color: #6b7280; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; margin-left: -2px; }
+        .hl-caret:hover { background: #f0f2f8; color: #1a1a2e; }
+        .hl-caret svg { display: block; }
+        .hl-popover {
+            position: fixed; z-index: 9999;
+            background: #fff; border: 1px solid #e2e5ee; border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            padding: 8px; display: none;
+        }
+        .hl-popover.open { display: block; }
+        .hl-popover-title { font-size: 10px; color: #9ca3af; font-family: 'Noto Sans KR', sans-serif; margin-bottom: 6px; letter-spacing: 0.5px; }
+        .hl-swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+        .hl-swatch {
+            width: 22px; height: 22px; border-radius: 4px; cursor: pointer;
+            border: 1px solid rgba(0,0,0,0.08); padding: 0;
+            transition: transform 0.1s, box-shadow 0.13s;
+        }
+        .hl-swatch:hover { transform: scale(1.1); }
+        .hl-swatch.selected { box-shadow: 0 0 0 2px #1a1a2e; }
+        .tb-divider { width: 1px; height: 18px; background: #e2e5ee; margin: 0 4px; }
+        .tb-text-btn { padding: 0 10px; height: 28px; border-radius: 6px; border: none; cursor: pointer; background: transparent; font-size: 11px; color: #6b7280; font-family: 'Noto Sans KR', sans-serif; transition: background 0.13s; }
+        .tb-text-btn:hover { background: #f0f2f8; }
+        .char-count { font-size: 11px; color: #9ca3af; margin-left: auto; }
+        .highlight { background: rgba(240,192,64,0.25); padding: 0 3px; border-radius: 2px; }
 
-.toast {
-    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px);
-    background: #1a2744; color: #fff; padding: 10px 22px; border-radius: 10px;
-    font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
-    opacity: 0; transition: all 0.25s; z-index: 500;
-}
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        /* 메모 버튼 */
+        .tb-btn.memo-btn.active { background: #fff59d; color: #6b5400; box-shadow: inset 0 0 0 1px #fbc02d; }
+        .tb-btn.memo-btn.active:hover { background: #fff176; }
 
-@media (max-width: 1100px) { .main-grid { grid-template-columns: 1fr; } }
-</style>
+        /* 메모 마크 */
+        .jf-body .memo-mark {
+            background-color: rgba(255,235,59,0.35);
+            border-bottom: 2px solid #fbc02d;
+            border-radius: 2px;
+            cursor: pointer;
+            position: relative;
+        }
+        .jf-body .memo-mark:hover { background-color: rgba(255,235,59,0.55); }
+
+        /* 메모 모달 */
+        .memo-modal-backdrop {
+            position: fixed; inset: 0; z-index: 8000;
+            background: rgba(0,0,0,0.18);
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.18s;
+        }
+        .memo-modal-backdrop.open { opacity: 1; pointer-events: auto; }
+        .memo-modal {
+            background: #fff; border-radius: 14px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+            width: 420px; max-width: 92vw;
+            padding: 22px 24px 18px;
+            transform: translateY(10px); transition: transform 0.18s;
+        }
+        .memo-modal-backdrop.open .memo-modal { transform: translateY(0); }
+        .memo-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .memo-modal-title { font-size: 13px; font-weight: 600; color: #1a1a2e; display: flex; align-items: center; gap: 7px; }
+        .memo-modal-title svg { color: #fbc02d; }
+        .memo-modal-close { width: 26px; height: 26px; border: none; background: transparent; cursor: pointer; border-radius: 6px; color: #9ca3af; display: flex; align-items: center; justify-content: center; transition: background 0.12s; }
+        .memo-modal-close:hover { background: #f0f2f8; color: #1a1a2e; }
+        .memo-selected-text { font-size: 12px; color: #6b7280; background: #f4f6fb; border-radius: 7px; padding: 8px 10px; margin-bottom: 12px; line-height: 1.7; max-height: 70px; overflow-y: auto; border-left: 3px solid #ffd600; word-break: keep-all; }
+        .memo-textarea {
+            width: 100%; min-height: 100px; max-height: 200px;
+            border: 1.5px solid #e2e5ee; border-radius: 9px;
+            padding: 10px 12px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
+            color: #1a1a2e; resize: vertical; outline: none; line-height: 1.7;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .memo-textarea:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+        .memo-modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+        .memo-btn-cancel { padding: 7px 14px; background: #fff; color: #6b7280; border: 1.5px solid #e2e5ee; border-radius: 8px; font-size: 12px; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; transition: all 0.12s; }
+        .memo-btn-cancel:hover { border-color: #9ca3af; color: #1a1a2e; }
+        .memo-btn-delete { padding: 7px 14px; background: #fff; color: #dc2626; border: 1.5px solid #fecaca; border-radius: 8px; font-size: 12px; font-family: 'Noto Sans KR', sans-serif; cursor: pointer; display: none; transition: all 0.12s; }
+        .memo-btn-delete:hover { background: #fef2f2; }
+        .memo-btn-save { padding: 7px 16px; background: #ffd600; color: #1a1a2e; border: none; border-radius: 8px; font-size: 12px; font-family: 'Noto Sans KR', sans-serif; font-weight: 500; cursor: pointer; transition: background 0.12s; }
+        .memo-btn-save:hover { background: #ffc400; }
+
+        /* 메모 툴팁 */
+        .memo-tooltip {
+            position: fixed; z-index: 9000;
+            background: #fff9c4; color: #5a4200;
+            border: 1px solid #e6c33a;
+            border-radius: 8px; padding: 8px 12px;
+            font-size: 12px; font-family: 'Noto Sans KR', sans-serif;
+            max-width: 260px; line-height: 1.6; pointer-events: none;
+            opacity: 0; transition: opacity 0.15s; word-break: keep-all;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        .memo-tooltip.show { opacity: 1; }
+
+        /* 진술조서 양식 */
+        .jinsul-form { background: #fff; border: 1px solid #c8cdd8; border-top: none; border-radius: 0 0 14px 14px; padding: 36px 44px; font-family: 'Noto Serif KR', 'Malgun Gothic', serif; font-size: 14px; color: #1a1a2e; line-height: 1.9; display: flex; flex-direction: column; width: 100%; }
+        .jf-title { text-align: center; font-size: 18px; font-weight: 700; letter-spacing: 8px; margin-bottom: 22px; flex-shrink: 0; }
+        .jf-inline-num { display: inline-block; min-width: 24px; text-align: center; border-bottom: 1px solid #1a1a2e; outline: none; padding: 0 4px; letter-spacing: 0; }
+        .jf-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; flex-shrink: 0; }
+        .jf-th { width: 130px; padding: 9px 16px; font-weight: 600; border: 1px solid #1a1a2e; letter-spacing: 4px; background: #f7f8fb; white-space: nowrap; vertical-align: middle; }
+        .jf-td { padding: 9px 16px; border: 1px solid #1a1a2e; min-height: 36px; color: #1a1a2e; }
+        .jf-preamble { font-size: 14px; line-height: 2.6; margin-bottom: 20px; word-break: keep-all; flex-shrink: 0; }
+        .jf-blank { display: inline-block; min-width: 70px; border-bottom: 1px solid #1a1a2e; outline: none; padding: 0 6px; vertical-align: bottom; line-height: 1.4; }
+        .jf-blank-sm { min-width: 30px; }
+        .jf-blank-lg { min-width: 120px; }
+        .jf-blank:focus { background: #fffdf0; }
+        .jf-divider { border-top: 1px solid #1a1a2e; margin: 6px 0 16px; flex-shrink: 0; }
+
+        /* 조서 본문: 고정 높이 + 내부 스크롤 */
+        .jf-body {
+            height: 480px;
+            min-height: 480px;
+            max-height: 480px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            outline: none;
+            font-size: 14px;
+            line-height: 2.4;
+            color: #1a1a2e;
+            word-break: keep-all;
+            overflow-wrap: break-word;
+            white-space: pre-wrap;
+            padding: 4px 0;
+            resize: none;
+            flex-shrink: 0;
+        }
+        .jf-body:empty::before { content: attr(data-placeholder); color: #9ca3af; white-space: normal; }
+
+        .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1a2744; color: #fff; padding: 10px 22px; border-radius: 10px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif; opacity: 0; transition: all 0.25s; z-index: 500; }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        @media (max-width: 1100px) { .main-grid { grid-template-columns: 1fr; } }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div class="pm-layout">
 
-<th:block th:replace="~{desktop/fragments/sidebar :: sidebar('transcript')}"></th:block>
-<div class="pm-content">
-<th:block th:replace="~{desktop/fragments/appbar :: appbar('POL-MATE,수사 도구,진술 조서 작성')}"></th:block>
+    <th:block th:replace="~{desktop/fragments/sidebar :: sidebar('transcript')}"></th:block>
+    <div class="pm-content">
+        <th:block th:replace="~{desktop/fragments/appbar :: appbar('POL-MATE,수사 도구,진술 조서 작성')}"></th:block>
 
-<main class="pm-page">
-    <div class="page-header">
-        <div>
-            <div class="page-eyebrow">수사 도구 &middot; 진술 조서 작성</div>
-            <div class="page-title" id="pageTitle">새 조서</div>
-        </div>
-        <div class="header-actions">
-            <button class="btn-secondary" onclick="saveDraft()">임시 저장</button>
-            <button class="btn-primary" id="btnConfirm" onclick="confirmSave()">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                조서 확정
-            </button>
-        </div>
-    </div>
-
-    <div class="meta-bar">
-        <div class="meta-field">
-            <label>사건 선택 <span style="color:#dc2626">*</span></label>
-            <select class="meta-select" id="selCase">
-                <option value="">-- 불러오는 중... --</option>
-            </select>
-        </div>
-        <div class="meta-field">
-            <label>진술 종류</label>
-            <select class="meta-select" id="selStmtType">
-                <option value="">-- 선택 --</option>
-                <option>1차 진술</option>
-                <option>2차 진술</option>
-                <option>3차 진술</option>
-                <option>보충 진술</option>
-                <option>현장 진술</option>
-            </select>
-        </div>
-        <div class="meta-field">
-            <label>진술인 성명</label>
-            <input type="text" class="meta-input" id="inputStmtName" placeholder="성명 입력">
-        </div>
-    </div>
-
-    <div class="main-grid">
-
-        <div>
-            <div class="sec-label">음성 입력 (STT)</div>
-
-            <div class="recorder-card">
-                <div class="recorder-inner">
-                    <button class="rec-btn idle" id="recBtn" onclick="toggleRecord()">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                            <line x1="12" y1="19" x2="12" y2="23"/>
-                        </svg>
+        <main class="pm-page">
+            <div class="page-header">
+                <div>
+                    <div class="page-eyebrow">수사 도구 &middot; 진술 조서 작성</div>
+                    <div class="page-title" id="pageTitle">새 조서</div>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-secondary" id="btnPdf" onclick="exportPdf()" style="display:inline-flex;align-items:center;gap:5px;">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                        PDF 저장
                     </button>
-                    <div class="rec-info">
-                        <div class="rec-title" id="recTitle">녹음 시작</div>
-                        <div class="rec-sub" id="recSub">마이크 버튼을 눌러 진술을 녹음하세요</div>
-                        <div class="waveform" id="waveform"></div>
+                    <button class="btn-secondary" onclick="saveDraft()">임시 저장</button>
+                    <button class="btn-primary" id="btnConfirm" onclick="confirmSave()">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        조서 확정
+                    </button>
+                </div>
+            </div>
+
+            <div class="meta-bar">
+                <div class="meta-field">
+                    <label>사건 선택 <span style="color:#dc2626">*</span></label>
+                    <select class="meta-select" id="selCase">
+                        <option value="">-- 불러오는 중... --</option>
+                    </select>
+                </div>
+                <div class="meta-field">
+                    <label>진술 종류</label>
+                    <select class="meta-select" id="selStmtType">
+                        <option value="">-- 선택 --</option>
+                        <option>1차 진술</option>
+                        <option>2차 진술</option>
+                        <option>3차 진술</option>
+                        <option>보충 진술</option>
+                        <option>현장 진술</option>
+                    </select>
+                </div>
+                <div class="meta-field">
+                    <label>진술인 성명</label>
+                    <input type="text" class="meta-input" id="inputStmtName" placeholder="성명 입력" oninput="fillFormName(this.value)">
+                </div>
+            </div>
+
+            <div class="main-grid">
+
+                <div>
+                    <div class="sec-label">음성 입력 (STT)</div>
+
+                    <div class="recorder-card">
+                        <div class="recorder-inner">
+                            <button class="rec-btn idle" id="recBtn" onclick="toggleRecord()">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                    <line x1="12" y1="19" x2="12" y2="23"/>
+                                </svg>
+                            </button>
+                            <div class="rec-info">
+                                <div class="rec-title" id="recTitle">녹음 시작</div>
+                                <div class="rec-sub" id="recSub">마이크 버튼을 눌러 진술을 녹음하세요</div>
+                                <div class="waveform" id="waveform"></div>
+                            </div>
+                            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+                                <div class="rec-timer" id="recTimer">00:00</div>
+                                <label class="upload-btn">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                    파일 업로드
+                                    <input type="file" id="audioFile" accept=".mp3,.wav,.m4a,.ogg,.flac" style="display:none" onchange="uploadAudio(this)">
+                                </label>
+                            </div>
+                        </div>
                     </div>
-                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
-                        <div class="rec-timer" id="recTimer">00:00</div>
-                        <label class="upload-btn">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                            파일 업로드
-                            <input type="file" id="audioFile" accept=".mp3,.wav,.m4a,.ogg,.flac" style="display:none" onchange="uploadAudio(this)">
-                        </label>
+
+                    <div class="stt-progress-card" id="sttProgressCard" style="display:none;">
+                        <div class="stt-icon">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        </div>
+                        <div class="stt-bar-wrap">
+                            <div class="stt-bar-label" id="sttLabel">음성 텍스트 변환 중</div>
+                            <div class="stt-bar-track"><div class="stt-bar-fill" id="sttFill" style="width:0%"></div></div>
+                        </div>
+                        <div class="stt-pct" id="sttPct">0%</div>
+                    </div>
+
+                    <div class="sec-label">STT 세그먼트<span class="sec-label-action" id="segCount"></span></div>
+                    <div class="segment-list" id="segmentList">
+                        <div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">
+                            녹음 또는 파일 업로드 후 세그먼트가 표시됩니다
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="stt-progress-card" id="sttProgressCard" style="display:none;">
-                <div class="stt-icon">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                </div>
-                <div class="stt-bar-wrap">
-                    <div class="stt-bar-label" id="sttLabel">음성 텍스트 변환 중</div>
-                    <div class="stt-bar-track"><div class="stt-bar-fill" id="sttFill" style="width:0%"></div></div>
-                </div>
-                <div class="stt-pct" id="sttPct">0%</div>
-            </div>
+                <div>
+                    <div class="sec-label">
+                        조서 본문 편집
+                        <span class="sec-label-action" id="charCountLabel">0 / 5,000자</span>
+                    </div>
 
-            <div class="sec-label">STT 세그먼트<span class="sec-label-action" id="segCount"></span></div>
-            <div class="segment-list" id="segmentList">
-                <div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">
-                    녹음 또는 파일 업로드 후 세그먼트가 표시됩니다
-                </div>
-            </div>
-        </div>
+                    <!-- 툴바 -->
+                    <div class="editor-card">
+                        <div class="editor-toolbar">
+                            <button type="button" class="tb-btn" data-cmd="bold"      onmousedown="event.preventDefault()" onclick="fmt('bold')"      title="굵게"><b>B</b></button>
+                            <button type="button" class="tb-btn" data-cmd="italic"    onmousedown="event.preventDefault()" onclick="fmt('italic')"    title="기울기"><i>I</i></button>
+                            <button type="button" class="tb-btn" data-cmd="underline" onmousedown="event.preventDefault()" onclick="fmt('underline')" title="밑줄"><u>U</u></button>
+                            <div class="tb-divider"></div>
+                            <span class="hl-group">
+                                <button type="button" class="tb-btn hl-btn" data-cmd="hilite" onmousedown="event.preventDefault()" onclick="toggleHighlight()" title="형광펜 (현재 색 적용)">
+                                    <span style="display:flex;flex-direction:column;align-items:center;line-height:1;">
+                                        <span style="font-size:11px;font-weight:700;color:#6b7280;">H</span>
+                                        <span class="hl-bar" id="hlBar"></span>
+                                    </span>
+                                </button>
+                                <button type="button" class="hl-caret" onmousedown="event.preventDefault()" onclick="toggleHlPopover(event)" title="형광펜 색 선택" aria-label="형광펜 색 선택">
+                                    <svg width="8" height="8" viewBox="0 0 12 12" fill="currentColor"><path d="M2 4 L6 8 L10 4 Z"/></svg>
+                                </button>
+                                <div class="hl-popover" id="hlPopover" role="menu" aria-label="형광펜 색">
+                                    <div class="hl-popover-title">형광펜 색</div>
+                                    <div class="hl-swatches" id="hlSwatches"></div>
+                                </div>
+                            </span>
+                            <button type="button" class="tb-btn memo-btn" id="memoBtn" onmousedown="event.preventDefault()" onclick="toggleMemoMode()" title="메모 (텍스트 선택 후 클릭)">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10l6-6V5a2 2 0 0 0-2-2z" fill="currentColor" fill-opacity="0.15"/>
+                                    <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10l6-6V5a2 2 0 0 0-2-2z"/>
+                                    <path d="M15 19v-5h5"/>
+                                </svg>
+                            </button>
+                            <div class="tb-divider"></div>
+                            <button class="tb-text-btn" onclick="insertSttText()">STT 문본 삽입</button>
+                        </div>
+                    </div>
 
-        <div>
-            <div class="sec-label">
-                조서 본문 편집
-                <span class="sec-label-action" id="charCountLabel">0 / 5,000자</span>
-            </div>
-            <div class="editor-card">
-                <div class="editor-toolbar">
-                    <button class="tb-btn" onclick="document.execCommand('bold')" title="굵게"><b>B</b></button>
-                    <button class="tb-btn" onclick="document.execCommand('italic')" title="기울기"><i>I</i></button>
-                    <button class="tb-btn" onclick="document.execCommand('underline')" title="밑줄"><u>U</u></button>
-                    <div class="tb-divider"></div>
-                    <button class="tb-text-btn" onclick="applyTemplate()">서식 자동 적용</button>
-                    <button class="tb-text-btn" onclick="insertSttText()">STT 문본 삽입</button>
+                    <!-- 진술조서 양식 -->
+                    <div class="jinsul-form">
+                        <div class="jf-title">진&nbsp;술&nbsp;조&nbsp;서（제&nbsp;<span id="sessionNum" class="jf-inline-num" contenteditable="true">1</span>&nbsp;회）</div>
+                        <table class="jf-table">
+                            <tr>
+                                <td class="jf-th">성&emsp;&emsp;명</td>
+                                <td class="jf-td" id="fieldName"></td>
+                            </tr>
+                            <tr>
+                                <td class="jf-th">사&thinsp;건&thinsp;번&thinsp;호</td>
+                                <td class="jf-td" id="fieldCaseId"></td>
+                            </tr>
+                        </table>
+                        <div class="jf-preamble">
+                            위의 사람은 피의자&ensp;<span id="pSuspect" class="jf-blank" contenteditable="true"></span>&ensp;에 대한&ensp;<span id="pCaseName" class="jf-blank" contenteditable="true"></span>&ensp;에 관하여<br>
+                            <span id="pYear" class="jf-blank jf-blank-sm" contenteditable="true"></span>년&ensp;<span id="pMonth" class="jf-blank jf-blank-sm" contenteditable="true"></span>월&ensp;<span id="pDay" class="jf-blank jf-blank-sm" contenteditable="true"></span>일&ensp;<span id="pOrgName" class="jf-blank jf-blank-lg" contenteditable="true"></span>에 임의 출석하였는바,<br>
+                            수사관&ensp;<span id="pUserName" class="jf-blank" contenteditable="true"></span>&ensp;은 진술인&ensp;<span id="pStmtName" class="jf-blank" contenteditable="true"></span>&ensp;를(을) 상대로 다음과 같이 지난 번 조사에 이어 계속 문답을 하다.
+                        </div>
+                        <div class="jf-divider"></div>
+                        <div class="jf-body" id="editor"
+                             contenteditable="true"
+                             data-placeholder="조서 내용을 입력하세요."
+                             oninput="updateCharCount()"
+                             onkeydown="handleEditorKey(event)"></div>
+                    </div>
                 </div>
-                <div class="editor-body" id="editor"
-                     contenteditable="true"
-                     data-placeholder="조서 내용을 입력하세요. STT 변환 후 [STT 문본 삽입] 버튼을 누르면 진술 내용이 자동 삽입됩니다."
-                     oninput="updateCharCount()"></div>
+
             </div>
-        </div>
+        </main>
 
     </div>
-</main>
-
-</div>
 </div>
 
 <div class="toast" id="toast"></div>
 
+<!-- 메모 모달 -->
+<div class="memo-modal-backdrop" id="memoModalBackdrop">
+    <div class="memo-modal" role="dialog" aria-modal="true" aria-label="메모 작성">
+        <div class="memo-modal-header">
+            <div class="memo-modal-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10l6-6V5a2 2 0 0 0-2-2z" fill="#fff9c4"/>
+                    <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10l6-6V5a2 2 0 0 0-2-2z"/>
+                    <path d="M15 19v-5h5"/>
+                </svg>
+                메모
+            </div>
+            <button class="memo-modal-close" onclick="closeMemoModal()" aria-label="닫기">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="memo-selected-text" id="memoSelectedText"></div>
+        <textarea class="memo-textarea" id="memoTextarea" placeholder="이 텍스트에 대한 메모를 입력하세요..." rows="4"></textarea>
+        <div class="memo-modal-footer">
+            <button class="memo-btn-delete" id="memoBtnDelete" onclick="deleteMemo()">메모 삭제</button>
+            <button class="memo-btn-cancel" onclick="closeMemoModal()">취소</button>
+            <button class="memo-btn-save" onclick="saveMemo()">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 메모 툴팁 -->
+<div class="memo-tooltip" id="memoTooltip"></div>
+
 <script>
-var _urlParams = new URLSearchParams(window.location.search);
-var _initCaseId = _urlParams.get('caseId') || '';
-var _initTranscriptId = _urlParams.get('transcriptId') || '';
-var _editingTranscriptId = _initTranscriptId || '';
-var _desiredCaseId = _initCaseId;
-var _caseListReady = false;
+    var _urlParams = new URLSearchParams(window.location.search);
+    var _initCaseId = _urlParams.get('caseId') || '';
+    var _initTranscriptId = _urlParams.get('transcriptId') || '';
+    var _editingTranscriptId = _initTranscriptId || '';
+    var _desiredCaseId = _initCaseId;
+    var _caseListReady = false;
 
-var _confirmBtnIcon = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ';
+    var _confirmBtnIcon = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ';
 
-var _isRecording = false;
-var _recTimer = null;
-var _recSeconds = 0;
-var _sttText = '';
-var _mediaRecorder = null;
-var _audioChunks = [];
+    var _preambleLocked = false; // 수정 모드: 전문부 덮어쓰기 방지
+    var _isRecording = false;
+    var _recTimer = null;
+    var _recSeconds = 0;
+    var _sttText = '';
+    var _mediaRecorder = null;
+    var _audioChunks = [];
 
-function setDesiredCaseId(caseId) {
-    if (!caseId) return;
-    _desiredCaseId = String(caseId);
-    tryApplyCaseSelection();
-}
+    function setDesiredCaseId(caseId) {
+        if (!caseId) return;
+        _desiredCaseId = String(caseId);
+        tryApplyCaseSelection();
+    }
 
-function setSelectValueIfPresent(sel, val) {
-    if (!sel || !val) return;
-    var v = String(val).trim();
-    if (!v) return;
-    for (var i = 0; i < sel.options.length; i++) {
-        if (sel.options[i].value === v || sel.options[i].text === v) {
-            sel.value = sel.options[i].value;
-            return;
+    function setSelectValueIfPresent(sel, val) {
+        if (!sel || !val) return;
+        var v = String(val).trim();
+        if (!v) return;
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === v || sel.options[i].text === v) {
+                sel.value = sel.options[i].value;
+                return;
+            }
+        }
+        var opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        sel.appendChild(opt);
+        sel.value = v;
+    }
+
+    function tryApplyCaseSelection() {
+        if (!_desiredCaseId || !_caseListReady) return;
+        var sel = document.getElementById('selCase');
+        var pre = _desiredCaseId;
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === pre) {
+                sel.value = pre;
+                onCaseSelected(pre);
+                return;
+            }
+        }
+        fetch('/caseApi?action=caseDetail&caseId=' + encodeURIComponent(pre), {credentials: 'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(c) {
+                if (c.error || !c.id) return;
+                var opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = c.id + ' · ' + (c.name || '');
+                sel.appendChild(opt);
+                sel.value = c.id;
+                onCaseSelected(c.id);
+            }).catch(function() {});
+    }
+
+
+
+    function enterEditMode(transcriptId) {
+        _editingTranscriptId = String(transcriptId);
+        document.getElementById('pageTitle').textContent = '조서 확인';
+        document.getElementById('btnConfirm').innerHTML = _confirmBtnIcon + '수정 저장';
+        _preambleLocked = true;
+    }
+
+    function resetConfirmBtn() {
+        var btn = document.getElementById('btnConfirm');
+        btn.innerHTML = _confirmBtnIcon + (_editingTranscriptId ? '수정 저장' : '조서 확정');
+    }
+
+    function fillFormName(v) { var el = document.getElementById('fieldName'); if(el) el.textContent = v||''; }
+    function fillFormCaseId(v) { var el = document.getElementById('fieldCaseId'); if(el) el.textContent = v||''; }
+
+    // 전문부 자동입력 헬퍼
+    function setPreambleField(id, val) {
+        var el = document.getElementById(id);
+        if (el && val) el.textContent = val;
+    }
+
+    // 오늘 날짜 자동입력
+    function fillTodayDate() {
+        var now = new Date();
+        setPreambleField('pYear', String(now.getFullYear()));
+        setPreambleField('pMonth', String(now.getMonth() + 1));
+        setPreambleField('pDay', String(now.getDate()));
+    }
+
+    // 진술인 성명 입력 연동
+    function fillFormName(v) {
+        var el = document.getElementById('fieldName'); if(el) el.textContent = v||'';
+        setPreambleField('pStmtName', v);
+    }
+
+    // 사건 선택 시 caseDetail API 호출 → 전문부 전체 자동 채우기
+    // 수정 모드(_preambleLocked)에서는 전문부를 절대 덮어쓰지 않음
+    function onCaseSelected(caseId) {
+        fillFormCaseId(caseId);
+        if (!caseId || _preambleLocked) return;
+        fetch('/caseApi?action=caseDetail&caseId=' + encodeURIComponent(caseId), {credentials: 'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(c) {
+                if (c.error) return;
+                fillFormCaseId(c.id || caseId);
+                setPreambleField('pSuspect', c.suspect || '');
+                setPreambleField('pCaseName', c.caseName || c.name || '');
+                setPreambleField('pOrgName', c.orgName || '');
+                setPreambleField('pUserName', c.userName || '');
+                var yearEl = document.getElementById('pYear');
+                if (yearEl && !yearEl.textContent.trim()) fillTodayDate();
+            }).catch(function() {});
+    }
+
+    function applyTranscriptMeta(d) {
+        // 1) 수정 모드 진입 → _preambleLocked = true (onCaseSelected가 전문부 덮어쓰기 차단)
+        if (d.id) enterEditMode(d.id);
+
+        // 2) 사건 선택 드롭다운 동기화 (전문부는 안 건드림)
+        if (d.caseId) setDesiredCaseId(d.caseId);
+        setSelectValueIfPresent(document.getElementById('selStmtType'), d.type);
+
+        // 3) 진술인 성명
+        if (d.name) {
+            document.getElementById('inputStmtName').value = d.name;
+            var fieldName = document.getElementById('fieldName');
+            if (fieldName) fieldName.textContent = d.name;
+            setPreambleField('pStmtName', d.name);
+        }
+        if (d.caseId) fillFormCaseId(d.caseId);
+
+        // 4) 전문부: caseDetail(사건 데이터) + transcript에 저장된 작성자 스냅샷으로 채움
+        fetch('/caseApi?action=caseDetail&caseId=' + encodeURIComponent(d.caseId), {credentials: 'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(c) {
+                if (c.error) return;
+                fillFormCaseId(c.id || d.caseId);
+                setPreambleField('pSuspect',  c.suspect  || '');
+                setPreambleField('pCaseName', c.caseName || c.name || '');
+
+                // 수사관/기관명: transcript에 저장된 최초 작성자 스냅샷 우선
+                // (DB에 writer_name/writer_org 추가 후 API가 반환하는 값)
+                setPreambleField('pUserName', d.writerName || '');
+                setPreambleField('pOrgName',  d.writerOrg  || '');
+
+                // 날짜: 작성 당시 저장된 전문부 날짜를 최우선 사용
+                // (서버가 preambleYear/Month/Day 또는 writtenYear/Month/Day로 내려주는 경우)
+                // 그 다음 우선순위: created_at → (그래도 없으면) 오늘 날짜
+                var savedY = d.preambleYear  || d.writtenYear  || null;
+                var savedM = d.preambleMonth || d.writtenMonth || null;
+                var savedD = d.preambleDay   || d.writtenDay   || null;
+
+                if (savedY && savedM && savedD) {
+                    setPreambleField('pYear',  String(savedY));
+                    setPreambleField('pMonth', String(savedM));
+                    setPreambleField('pDay',   String(savedD));
+                } else if (d.createdAt) {
+                    var dt = new Date(d.createdAt);
+                    if (!isNaN(dt)) {
+                        setPreambleField('pYear',  String(dt.getFullYear()));
+                        setPreambleField('pMonth', String(dt.getMonth() + 1));
+                        setPreambleField('pDay',   String(dt.getDate()));
+                    }
+                    // createdAt 파싱 실패 시에도 오늘로 덮어쓰지 않음 (작성일 보존)
+                }
+                // 위 모두 없을 때만 오늘 날짜 (최초 신규 케이스)
+                else {
+                    var yEl = document.getElementById('pYear');
+                    if (yEl && !yEl.textContent.trim()) fillTodayDate();
+                }
+
+                // 5) 전문부 잠금 (모든 값이 채워진 후 실행)
+                lockPreambleEditing();
+            }).catch(function() {
+            lockPreambleEditing(); // 오류 시에도 잠금
+        });
+
+        // 6) 본문 (수정 가능) — html이 있으면 서식 포함 복원, 없으면 텍스트만
+        if (d.html) {
+            setEditorHtml(d.html);
+            updateCharCount();
+        } else if (d.text) {
+            document.getElementById('editor').innerText = d.text;
+            updateCharCount();
         }
     }
-    var opt = document.createElement('option');
-    opt.value = v;
-    opt.textContent = v;
-    sel.appendChild(opt);
-    sel.value = v;
-}
 
-function tryApplyCaseSelection() {
-    if (!_desiredCaseId || !_caseListReady) return;
-    var sel = document.getElementById('selCase');
-    var pre = _desiredCaseId;
-    for (var i = 0; i < sel.options.length; i++) {
-        if (sel.options[i].value === pre) {
-            sel.value = pre;
-            return;
+    // 전문부 편집 잠금 (배지 없이 조용히)
+    function lockPreambleEditing() {
+        var ids = ['pSuspect','pCaseName','pYear','pMonth','pDay','pOrgName','pUserName','pStmtName','sessionNum'];
+        ids.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.setAttribute('contenteditable', 'false');
+                el.style.pointerEvents = 'none';
+                el.style.cursor = 'default';
+                el.style.color = '#555';
+                el.style.borderBottomColor = '#ccc';
+            }
+        });
+        var fieldName = document.getElementById('fieldName');
+        if (fieldName) { fieldName.setAttribute('contenteditable', 'false'); fieldName.style.pointerEvents = 'none'; }
+    }
+
+    // 사건 목록 로딩
+    (function() {
+        var wf = document.getElementById('waveform');
+        for (var wi = 0; wi < 48; wi++) {
+            var bar = document.createElement('div');
+            bar.className = 'wave-bar';
+            bar.style.height = (Math.random() > 0.5 ? 20 : 10) + '%';
+            wf.appendChild(bar);
         }
-    }
-    fetch('/caseApi?action=caseDetail&caseId=' + encodeURIComponent(pre), {credentials: 'same-origin'})
-        .then(function(r) { return r.json(); })
-        .then(function(c) {
-            if (c.error || !c.id) return;
-            var opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = c.id + ' · ' + (c.name || '');
-            sel.appendChild(opt);
-            sel.value = c.id;
-        }).catch(function() {});
-}
-
-function enterEditMode(transcriptId) {
-    _editingTranscriptId = String(transcriptId);
-    document.getElementById('pageTitle').textContent = '조서 확인';
-    document.getElementById('btnConfirm').innerHTML = _confirmBtnIcon + '수정 저장';
-}
-
-function resetConfirmBtn() {
-    var btn = document.getElementById('btnConfirm');
-    btn.innerHTML = _confirmBtnIcon + (_editingTranscriptId ? '수정 저장' : '조서 확정');
-}
-
-function applyTranscriptMeta(d) {
-    if (d.id) enterEditMode(d.id);
-    if (d.caseId) setDesiredCaseId(d.caseId);
-    setSelectValueIfPresent(document.getElementById('selStmtType'), d.type);
-    if (d.name) document.getElementById('inputStmtName').value = d.name;
-    if (d.text) {
-        document.getElementById('editor').innerText = d.text;
-        updateCharCount();
-    }
-}
-
-// 사건 목록 로딩
-(function() {
-    var wf = document.getElementById('waveform');
-    for (var wi = 0; wi < 48; wi++) {
-        var bar = document.createElement('div');
-        bar.className = 'wave-bar';
-        bar.style.height = (Math.random() > 0.5 ? 20 : 10) + '%';
-        wf.appendChild(bar);
-    }
-    fetch('/caseApi?action=caseList', {credentials: 'same-origin'})
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var cases = Array.isArray(data) ? data : [];
-            var sel = document.getElementById('selCase');
-            sel.innerHTML = '<option value="">-- 사건 선택 --</option>' +
-                cases.map(function(c) {
-                    var id = String(c.id || '');
-                    return '<option value="' + id + '">' + id + ' · ' + (c.name||'') + '</option>';
-                }).join('');
-            _caseListReady = true;
-            tryApplyCaseSelection();
-        }).catch(function() {
+        fetch('/caseApi?action=caseList', {credentials: 'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var cases = Array.isArray(data) ? data : [];
+                var sel = document.getElementById('selCase');
+                sel.innerHTML = '<option value="">-- 사건 선택 --</option>' +
+                    cases.map(function(c) {
+                        var id = String(c.id || '');
+                        return '<option value="' + id + '">' + id + ' · ' + (c.name||'') + '</option>';
+                    }).join('');
+                _caseListReady = true;
+                tryApplyCaseSelection();
+                sel.addEventListener('change', function() {
+                    var opt = sel.options[sel.selectedIndex];
+                    onCaseSelected(opt && opt.value ? opt.value : '');
+                });
+            }).catch(function() {
             document.getElementById('selCase').innerHTML = '<option value="">사건 목록 로드 실패</option>';
             _caseListReady = true;
         });
-})();
 
-if (_initTranscriptId) {
-    enterEditMode(_initTranscriptId);
-    fetch('/caseApi?action=transcriptText&transcriptId=' + encodeURIComponent(_initTranscriptId), {credentials: 'same-origin'})
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            if (d.error) return;
-            applyTranscriptMeta(d);
-        }).catch(function() {});
-}
+        // 페이지 진입 시 날짜 즉시 자동입력
+        fillTodayDate();
+    })();
 
-function toggleRecord() {
-    if (!_isRecording) startRecord(); else stopRecord();
-}
-
-function startRecord() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showToast('마이크 접근 권한이 필요합니다.');
-        return;
+    if (_initTranscriptId) {
+        // enterEditMode는 applyTranscriptMeta 내부에서 호출됨 (d.id 기준)
+        // 미리 locked 상태로 만들어 사건목록 로딩 중 onCaseSelected가 전문부를 건드리지 못하게 함
+        _preambleLocked = true;
+        fetch('/caseApi?action=transcriptText&transcriptId=' + encodeURIComponent(_initTranscriptId), {credentials: 'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.error) return;
+                applyTranscriptMeta(d);
+            }).catch(function() {});
     }
-    navigator.mediaDevices.getUserMedia({audio: true}).then(function(stream) {
-        _audioChunks = [];
-        _mediaRecorder = new MediaRecorder(stream);
-        _mediaRecorder.ondataavailable = function(e) { _audioChunks.push(e.data); };
-        _mediaRecorder.onstop = function() {
-            var blob = new Blob(_audioChunks, {type: 'audio/webm'});
-            sendAudioBlob(blob);
-        };
-        _mediaRecorder.start();
-        _isRecording = true;
-        document.getElementById('recBtn').className = 'rec-btn recording';
-        document.getElementById('recTitle').textContent = '녹음 중...';
-        document.getElementById('recSub').textContent = '버튼을 눌러 녹음을 종료하세요';
-        animateWave(true);
-        _recSeconds = 0;
-        _recTimer = setInterval(function() {
-            _recSeconds++;
-            var m = String(Math.floor(_recSeconds/60)).padStart(2,'0');
-            var s = String(_recSeconds%60).padStart(2,'0');
-            document.getElementById('recTimer').textContent = m + ':' + s;
-        }, 1000);
-    }).catch(function() { showToast('마이크를 활성할 수 없습니다.'); });
-}
 
-function stopRecord() {
-    if (_mediaRecorder) _mediaRecorder.stop();
-    _isRecording = false;
-    clearInterval(_recTimer);
-    document.getElementById('recBtn').className = 'rec-btn idle';
-    document.getElementById('recTitle').textContent = '녹음 완료';
-    document.getElementById('recSub').textContent = 'STT 변환 중...';
-    animateWave(false);
-}
-
-function animateWave(active) {
-    var bars = document.querySelectorAll('.wave-bar');
-    if (active) {
-        bars.forEach(function(b, i) {
-            b.classList.toggle('active', i < 35);
-            if (active) b.style.height = (Math.random() * 80 + 20) + '%';
-        });
-    } else {
-        bars.forEach(function(b) { b.classList.remove('active'); b.style.height = '20%'; });
+    function toggleRecord() {
+        if (!_isRecording) startRecord(); else stopRecord();
     }
-}
 
-function uploadAudio(input) {
-    if (!input.files || !input.files[0]) return;
-    sendAudioBlob(input.files[0]);
-}
+    function startRecord() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showToast('마이크 접근 권한이 필요합니다.');
+            return;
+        }
+        navigator.mediaDevices.getUserMedia({audio: true}).then(function(stream) {
+            _audioChunks = [];
+            _mediaRecorder = new MediaRecorder(stream);
+            _mediaRecorder.ondataavailable = function(e) { _audioChunks.push(e.data); };
+            _mediaRecorder.onstop = function() {
+                var blob = new Blob(_audioChunks, {type: 'audio/webm'});
+                sendAudioBlob(blob);
+            };
+            _mediaRecorder.start();
+            _isRecording = true;
+            document.getElementById('recBtn').className = 'rec-btn recording';
+            document.getElementById('recTitle').textContent = '녹음 중...';
+            document.getElementById('recSub').textContent = '버튼을 눌러 녹음을 종료하세요';
+            animateWave(true);
+            _recSeconds = 0;
+            _recTimer = setInterval(function() {
+                _recSeconds++;
+                var m = String(Math.floor(_recSeconds/60)).padStart(2,'0');
+                var s = String(_recSeconds%60).padStart(2,'0');
+                document.getElementById('recTimer').textContent = m + ':' + s;
+            }, 1000);
+        }).catch(function() { showToast('마이크를 활성할 수 없습니다.'); });
+    }
 
-function sendAudioBlob(blob) {
-    var fd = new FormData();
-    fd.append('audioFile', blob, 'recording.webm');
-    document.getElementById('sttProgressCard').style.display = 'flex';
-    animateSttBar(0);
+    function stopRecord() {
+        if (_mediaRecorder) _mediaRecorder.stop();
+        _isRecording = false;
+        clearInterval(_recTimer);
+        document.getElementById('recBtn').className = 'rec-btn idle';
+        document.getElementById('recTitle').textContent = '녹음 완료';
+        document.getElementById('recSub').textContent = 'STT 변환 중...';
+        animateWave(false);
+    }
 
-    var progress = 0;
-    var interval = setInterval(function() {
-        progress = Math.min(progress + 5, 85);
-        animateSttBar(progress);
-    }, 300);
+    function animateWave(active) {
+        var bars = document.querySelectorAll('.wave-bar');
+        if (active) {
+            bars.forEach(function(b, i) {
+                b.classList.toggle('active', i < 35);
+                if (active) b.style.height = (Math.random() * 80 + 20) + '%';
+            });
+        } else {
+            bars.forEach(function(b) { b.classList.remove('active'); b.style.height = '20%'; });
+        }
+    }
 
-    fetch('/stt', {method: 'POST', body: fd, credentials: 'same-origin'})
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            clearInterval(interval);
-            animateSttBar(100);
-            setTimeout(function() {
-                document.getElementById('sttProgressCard').style.display = 'none';
-            }, 800);
-            if (d.text) {
-                _sttText = d.text;
-                renderSegments(d.text);
-                document.getElementById('recTitle').textContent = '녹음 완료';
-                document.getElementById('recSub').textContent = '변환 완료 · 아래 세그먼트를 조서에 삽입하세요';
-            } else {
-                showToast(d.error || 'STT 변환 실패했습니다.');
-            }
-        }).catch(function() {
+    function uploadAudio(input) {
+        if (!input.files || !input.files[0]) return;
+        sendAudioBlob(input.files[0]);
+    }
+
+    function sendAudioBlob(blob) {
+        var fd = new FormData();
+        fd.append('audioFile', blob, 'recording.webm');
+        document.getElementById('sttProgressCard').style.display = 'flex';
+        animateSttBar(0);
+
+        var progress = 0;
+        var interval = setInterval(function() {
+            progress = Math.min(progress + 5, 85);
+            animateSttBar(progress);
+        }, 300);
+
+        fetch('/stt', {method: 'POST', body: fd, credentials: 'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                clearInterval(interval);
+                animateSttBar(100);
+                setTimeout(function() {
+                    document.getElementById('sttProgressCard').style.display = 'none';
+                }, 800);
+                if (d.text) {
+                    _sttText = d.text;
+                    renderSegments(d.text);
+                    document.getElementById('recTitle').textContent = '녹음 완료';
+                    document.getElementById('recSub').textContent = '변환 완료 · 아래 세그먼트를 조서에 삽입하세요';
+                } else {
+                    showToast(d.error || 'STT 변환 실패했습니다.');
+                }
+            }).catch(function() {
             clearInterval(interval);
             document.getElementById('sttProgressCard').style.display = 'none';
             showToast('STT 요청 중 오류가 발생했습니다.');
         });
-}
+    }
 
-function animateSttBar(pct) {
-    document.getElementById('sttFill').style.width = pct + '%';
-    document.getElementById('sttPct').textContent = pct + '%';
-    if (pct >= 100) document.getElementById('sttLabel').textContent = '변환 완료';
-}
+    function animateSttBar(pct) {
+        document.getElementById('sttFill').style.width = pct + '%';
+        document.getElementById('sttPct').textContent = pct + '%';
+        if (pct >= 100) document.getElementById('sttLabel').textContent = '변환 완료';
+    }
 
-function renderSegments(text) {
-    var sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
-    var html = sentences.map(function(s, i) {
-        var spk = i % 3 === 0 ? 'investigator' : 'suspect';
-        var spkLabel = spk === 'investigator' ? '수사관' : '피의자';
-        var min = String(Math.floor(i * 12 / 60)).padStart(2,'0');
-        var sec = String((i * 12) % 60).padStart(2,'0');
-        return '<div class="segment-card" onclick="appendToEditor(this.dataset.text)" data-text="' + s.trim().replace(/"/g,'&quot;') + '">'
-            + '<div class="seg-time">' + min + ':' + sec + '</div>'
-            + '<div class="seg-spk ' + spk + '">' + spkLabel + '</div>'
-            + '<div class="seg-text">' + s.trim() + '</div>'
-            + '</div>';
-    }).join('');
-    document.getElementById('segmentList').innerHTML = html;
-    document.getElementById('segCount').textContent = sentences.length + '개 세그먼트';
-}
+    function renderSegments(text) {
+        var sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
+        var html = sentences.map(function(s, i) {
+            var spk = i % 3 === 0 ? 'investigator' : 'suspect';
+            var spkLabel = spk === 'investigator' ? '수사관' : '피의자';
+            var min = String(Math.floor(i * 12 / 60)).padStart(2,'0');
+            var sec = String((i * 12) % 60).padStart(2,'0');
+            return '<div class="segment-card" onclick="appendToEditor(this.dataset.text)" data-text="' + s.trim().replace(/"/g,'&quot;') + '">'
+                + '<div class="seg-time">' + min + ':' + sec + '</div>'
+                + '<div class="seg-spk ' + spk + '">' + spkLabel + '</div>'
+                + '<div class="seg-text">' + s.trim() + '</div>'
+                + '</div>';
+        }).join('');
+        document.getElementById('segmentList').innerHTML = html;
+        document.getElementById('segCount').textContent = sentences.length + '개 세그먼트';
+    }
 
-function appendToEditor(text) {
-    var editor = document.getElementById('editor');
-    editor.focus();
-    document.execCommand('insertText', false, text + ' ');
-    updateCharCount();
-}
+    function handleEditorKey(e) {
+        // Enter 키: div 블록 생성 대신 줄바꿈 문자 삽입 (높이 팽창 방지)
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.execCommand('insertLineBreak');
+        }
+    }
 
-function insertSttText() {
-    if (!_sttText) { showToast('STT 변환 결과가 없습니다.'); return; }
-    document.getElementById('editor').focus();
-    document.execCommand('insertText', false, '\n' + _sttText);
-    updateCharCount();
-}
+    function appendToEditor(text) {
+        var editor = document.getElementById('editor');
+        editor.focus();
+        var sel = window.getSelection();
+        if (sel.rangeCount) {
+            var range = sel.getRangeAt(0);
+            range.deleteContents();
+            range.insertNode(document.createTextNode(text + ' '));
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } else {
+            editor.innerText += text + ' ';
+        }
+        updateCharCount();
+    }
 
-function applyTemplate() {
-    var caseId = document.getElementById('selCase').value;
-    var stmtName = document.getElementById('inputStmtName').value || '(성명)';
-    var stmtType = document.getElementById('selStmtType').value || '1차 진술';
-    var today = new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'2-digit',day:'2-digit'});
-    var template = '1. 인적사항\n'
-        + '성명: ' + stmtName + '\n'
-        + '사건번호: ' + (caseId || '(선택 필요)') + '\n'
-        + '진술 일시: ' + today + '\n\n'
-        + '2. 진술 내용\n';
-    document.getElementById('editor').focus();
-    document.execCommand('selectAll');
-    document.execCommand('insertText', false, template);
-    updateCharCount();
-}
+    function insertSttText() {
+        if (!_sttText) { showToast('STT 변환 결과가 없습니다.'); return; }
+        document.getElementById('editor').focus();
+        document.execCommand('insertText', false, '\n' + _sttText);
+        updateCharCount();
+    }
 
-function updateCharCount() {
-    var text = document.getElementById('editor').innerText || '';
-    var len = text.length;
-    document.getElementById('charCountLabel').textContent = len.toLocaleString() + ' / 5,000자';
-    document.getElementById('charCountLabel').style.color = len > 5000 ? '#dc2626' : '#9ca3af';
-}
+    function applyTemplate() {
+        var caseId = document.getElementById('selCase').value;
+        var stmtName = document.getElementById('inputStmtName').value || '(성명)';
+        var stmtType = document.getElementById('selStmtType').value || '1차 진술';
+        var today = new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'2-digit',day:'2-digit'});
+        var template = '1. 인적사항\n'
+            + '성명: ' + stmtName + '\n'
+            + '사건번호: ' + (caseId || '(선택 필요)') + '\n'
+            + '진술 일시: ' + today + '\n\n'
+            + '2. 진술 내용\n';
+        document.getElementById('editor').focus();
+        document.execCommand('selectAll');
+        document.execCommand('insertText', false, template);
+        updateCharCount();
+    }
 
-function saveDraft() {
-    var editor = document.getElementById('editor');
-    var text = editor.innerText.trim();
-    if (!text) { showToast('조서 내용을 입력해 주세요.'); return; }
-    localStorage.setItem('draft_transcript', text);
-    showToast('임시 저장되었습니다.');
-}
+    // 본문 텍스트를 외부로 내보낼 때 호출 (ZWS 등 보이지 않는 마커 제거)
+    function sanitizeEditorText(s) {
+        if (s == null) return '';
+        return String(s).replace(/\u200B/g, '');
+    }
 
-function confirmSave() {
-    var caseId = document.getElementById('selCase').value;
-    var text = document.getElementById('editor').innerText.trim();
-    if (!caseId) { showToast('사건을 선택해 주세요.'); return; }
-    if (!text) { showToast('조서 내용을 입력해 주세요.'); return; }
+    // 형광펜/메모 등 서식이 포함된 HTML을 그대로 가져옴 (저장용)
+    function getEditorHtml() {
+        var ed = document.getElementById('editor');
+        return (ed.innerHTML || '').replace(/\u200B/g, '');
+    }
 
-    var btn = document.getElementById('btnConfirm');
-    btn.disabled = true;
-    btn.textContent = '저장 중...';
-
-    var isUpdate = !!_editingTranscriptId;
-    var fd = new FormData();
-    fd.append('action', isUpdate ? 'transcriptUpdate' : 'transcriptSave');
-    if (isUpdate) fd.append('transcriptId', _editingTranscriptId);
-    fd.append('caseId', caseId);
-    fd.append('stmtType', document.getElementById('selStmtType').value);
-    fd.append('stmtName', document.getElementById('inputStmtName').value);
-    fd.append('originalText', text);
-
-    fetch('/caseApi', {method: 'POST', body: fd, credentials: 'same-origin'})
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            btn.disabled = false;
-            resetConfirmBtn();
-            if (d.success || d.transcriptId) {
-                showToast(isUpdate ? '조서가 수정되었습니다.' : '조서가 저장되었습니다.');
-                setTimeout(function() {
-                    location.href = '/desktop/myCase?caseId=' + encodeURIComponent(caseId);
-                }, 1200);
-            } else {
-                showToast(d.message || d.error || '저장 중 오류가 발생했습니다.');
+    // 저장된 HTML을 에디터에 다시 주입하고 메모 이벤트를 재연결
+    function setEditorHtml(html) {
+        var ed = document.getElementById('editor');
+        ed.innerHTML = html || '';
+        // 메모 이벤트 재연결 + 잠금 텍스트 재설정
+        Array.prototype.forEach.call(ed.querySelectorAll('.memo-mark'), function(m) {
+            if (typeof window._reattachMemoEvents === 'function') {
+                window._reattachMemoEvents(m);
             }
-        }).catch(function() {
+            if (!m.hasAttribute('data-memo-locked-text')) {
+                m.setAttribute('data-memo-locked-text', m.textContent || '');
+            }
+        });
+        // 형광펜도 잠금 텍스트 재설정
+        Array.prototype.forEach.call(ed.querySelectorAll('.hl-mark'), function(m) {
+            if (!m.hasAttribute('data-hl-locked-text')) {
+                m.setAttribute('data-hl-locked-text', m.textContent || '');
+            }
+        });
+    }
+
+    function updateCharCount() {
+        var text = sanitizeEditorText(document.getElementById('editor').innerText || '');
+        var len = text.length;
+        document.getElementById('charCountLabel').textContent = len.toLocaleString() + ' / 5,000자';
+        document.getElementById('charCountLabel').style.color = len > 5000 ? '#dc2626' : '#9ca3af';
+    }
+
+    function saveDraft() {
+        var editor = document.getElementById('editor');
+        var text = sanitizeEditorText(editor.innerText).trim();
+        if (!text) { showToast('조서 내용을 입력해 주세요.'); return; }
+        localStorage.setItem('draft_transcript', text);
+        // 형광펜/메모 포함 HTML도 함께 저장
+        localStorage.setItem('draft_transcript_html', getEditorHtml());
+        // 새로 임시저장했으므로 다음 진입 시 다시 알림
+        localStorage.removeItem('draft_dismissed');
+        showToast('임시 저장되었습니다.');
+    }
+
+    function confirmSave() {
+        var caseId = document.getElementById('selCase').value;
+        var text = sanitizeEditorText(document.getElementById('editor').innerText).trim();
+        if (!caseId) { showToast('사건을 선택해 주세요.'); return; }
+        if (!text) { showToast('조서 내용을 입력해 주세요.'); return; }
+
+        var btn = document.getElementById('btnConfirm');
+        btn.disabled = true;
+        btn.textContent = '저장 중...';
+
+        var isUpdate = !!_editingTranscriptId;
+        var fd = new FormData();
+        fd.append('action', isUpdate ? 'transcriptUpdate' : 'transcriptSave');
+        if (isUpdate) fd.append('transcriptId', _editingTranscriptId);
+        fd.append('caseId', caseId);
+        fd.append('stmtType', document.getElementById('selStmtType').value);
+        fd.append('stmtName', document.getElementById('inputStmtName').value);
+        fd.append('originalText', text);
+        // 형광펜/메모 서식이 포함된 HTML도 함께 전송
+        fd.append('originalHtml', getEditorHtml());
+
+        // 전문부 날짜를 작성 시점 값 그대로 서버에 전송 → DB에 박아 고정
+        // (수정 시에도 같이 보내지만, 잠금 상태라 값은 작성 당시 그대로임)
+        var pY = (document.getElementById('pYear')  || {}).textContent || '';
+        var pM = (document.getElementById('pMonth') || {}).textContent || '';
+        var pD = (document.getElementById('pDay')   || {}).textContent || '';
+        fd.append('preambleYear',  pY.trim());
+        fd.append('preambleMonth', pM.trim());
+        fd.append('preambleDay',   pD.trim());
+
+        fetch('/caseApi', {method: 'POST', body: fd, credentials: 'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                btn.disabled = false;
+                resetConfirmBtn();
+                if (d.success || d.transcriptId) {
+                    showToast(isUpdate ? '조서가 수정되었습니다.' : '조서가 저장되었습니다.');
+                    setTimeout(function() {
+                        location.href = '/desktop/myCase?caseId=' + encodeURIComponent(caseId);
+                    }, 1200);
+                } else {
+                    showToast(d.message || d.error || '저장 중 오류가 발생했습니다.');
+                }
+            }).catch(function() {
             btn.disabled = false;
             resetConfirmBtn();
             showToast('저장 중 오류가 발생했습니다.');
         });
-}
-
-function showToast(msg) {
-    var t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(function() { t.classList.remove('show'); }, 2500);
-}
-
-var _draft = localStorage.getItem('draft_transcript');
-if (_draft && !_initTranscriptId) {
-    if (confirm('임시 저장된 조서가 있습니다. 불러오시겠습니까?')) {
-        document.getElementById('editor').innerText = _draft;
-        updateCharCount();
     }
-}
+
+    function exportPdf() {
+        var btn = document.getElementById('btnPdf');
+        btn.disabled = true;
+        btn.textContent = 'PDF 생성 중...';
+
+        var form = document.querySelector('.jinsul-form');
+        var editor = document.getElementById('editor');
+
+        // 높이 제한 해제 (전체 내용 캡처)
+        var prevFormH = form.style.height, prevFormOv = form.style.overflow, prevFormMx = form.style.maxHeight;
+        var prevEdH = editor.style.height, prevEdOv = editor.style.overflow, prevEdMx = editor.style.maxHeight;
+        form.style.setProperty('height', 'auto', 'important');
+        form.style.setProperty('overflow', 'visible', 'important');
+        form.style.setProperty('max-height', 'none', 'important');
+        editor.style.setProperty('height', 'auto', 'important');
+        editor.style.setProperty('overflow', 'visible', 'important');
+        editor.style.setProperty('max-height', 'none', 'important');
+
+        var caseId   = (document.getElementById('fieldCaseId').textContent || '').trim() || '조서';
+        var stmtName = (document.getElementById('fieldName').textContent   || '').trim();
+        var fileName = caseId + (stmtName ? '_' + stmtName : '') + '_진술조서.pdf';
+
+        var A4_W = 210, A4_H = 297;
+
+        function restoreStyles() {
+            form.style.height = prevFormH; form.style.overflow = prevFormOv; form.style.maxHeight = prevFormMx;
+            editor.style.height = prevEdH; editor.style.overflow = prevEdOv; editor.style.maxHeight = prevEdMx;
+        }
+
+        function resetBtn() {
+            btn.disabled = false;
+            btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg> PDF 저장';
+        }
+
+        setTimeout(function() {
+            html2canvas(form, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                onclone: function(doc) {
+                    var f = doc.querySelector('.jinsul-form');
+                    var e = doc.getElementById('editor');
+                    if (f) { f.style.height='auto'; f.style.overflow='visible'; f.style.maxHeight='none'; f.style.boxShadow='none'; f.style.borderRadius='0'; f.style.border='none'; }
+                    if (e) { e.style.height='auto'; e.style.overflow='visible'; e.style.maxHeight='none'; e.style.whiteSpace='pre-wrap'; }
+                    doc.querySelectorAll('.jf-blank').forEach(function(el){ el.style.color='#1a1a2e'; el.style.borderBottomColor='#1a1a2e'; });
+                }
+            }).then(function(canvas) {
+                restoreStyles();
+                var jsPDF = window.jspdf.jsPDF;
+                var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                var cW = canvas.width, cH = canvas.height;
+                var pageH_px = Math.floor(cW * A4_H / A4_W);
+                var totalPages = Math.ceil(cH / pageH_px);
+                for (var i = 0; i < totalPages; i++) {
+                    if (i > 0) pdf.addPage();
+                    var srcY = i * pageH_px;
+                    var srcH = Math.min(pageH_px, cH - srcY);
+                    var pc = document.createElement('canvas');
+                    pc.width = cW; pc.height = pageH_px;
+                    var ctx = pc.getContext('2d');
+                    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cW, pageH_px);
+                    ctx.drawImage(canvas, 0, srcY, cW, srcH, 0, 0, cW, srcH);
+                    pdf.addImage(pc.toDataURL('image/jpeg', 0.97), 'JPEG', 0, 0, A4_W, A4_H);
+                }
+                pdf.save(fileName);
+                resetBtn();
+                showToast('저장 완료: ' + fileName);
+            }).catch(function(err) {
+                restoreStyles(); resetBtn();
+                showToast('PDF 생성 오류가 발생했습니다.');
+                console.error(err);
+            });
+        }, 120);
+    }
+
+    function showToast(msg) {
+        var t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(function() { t.classList.remove('show'); }, 2500);
+    }
+
+    // 임시저장 복원: 취소를 누른 적 있으면 다시 묻지 않음
+    var _draft = localStorage.getItem('draft_transcript');
+    var _draftDismissed = localStorage.getItem('draft_dismissed') === '1';
+    if (_draft && !_initTranscriptId && !_draftDismissed) {
+        if (confirm('임시 저장된 조서가 있습니다. 불러오시겠습니까?')) {
+            document.getElementById('editor').innerText = _draft;
+            updateCharCount();
+        } else {
+            // 취소 선택 기억 → 이후 페이지 진입 시 알림 안 뜸
+            localStorage.setItem('draft_dismissed', '1');
+        }
+    }
+
+    /* ──────────────────────────────────────────────────────────────
+     * 서식 툴바: 굵게/기울기/밑줄/형광펜
+     *  - 버튼 활성 상태(눌린 표시)는 selection 변경 시마다 갱신
+     *  - 형광펜은 토글: 이미 형광펜이 칠해진 영역을 선택해 다시 누르면 해제
+     *  - 모든 버튼은 onmousedown="event.preventDefault()"로 selection 보존
+     * ────────────────────────────────────────────────────────────── */
+    (function toolbarState() {
+        // 형광펜 사용 가능 색 (이름:색)
+        var HL_COLORS = [
+            { name: '주황',   color: '#ffcc80' },
+            { name: '분홍',   color: '#f8bbd0' },
+            { name: '초록',   color: '#c5e1a5' },
+            { name: '하늘',   color: '#b3e5fc' },
+            { name: '보라',   color: '#d1c4e9' }
+        ];
+        var _savedHl = localStorage.getItem('hl_color_pref');
+        var _validColors = HL_COLORS.map(function(c) { return c.color; });
+        var _currentHlColor = (_savedHl && _validColors.indexOf(_savedHl) !== -1) ? _savedHl : HL_COLORS[0].color;
+        var editor = document.getElementById('editor');
+
+        // 본문 내의 마지막 selection range를 기억해두고 버튼 클릭 시 복원
+        // (버튼 클릭 시점에는 onmousedown=preventDefault로 selection이 유지되지만,
+        //  본문 바깥(전문부 빈칸 등)에 selection이 있을 때 서식 명령이 그쪽에 적용되는 걸 막기 위해
+        //  본문 selection만 다루도록 강제)
+        var _lastEditorRange = null;
+        function rememberEditorSelection() {
+            var s = window.getSelection();
+            if (!s || s.rangeCount === 0) return;
+            var r = s.getRangeAt(0);
+            if (editor.contains(r.commonAncestorContainer)) {
+                _lastEditorRange = r.cloneRange();
+            }
+        }
+        editor.addEventListener('mouseup',  rememberEditorSelection);
+        editor.addEventListener('keyup',    rememberEditorSelection);
+        editor.addEventListener('focus',    rememberEditorSelection);
+
+        // selection이 본문 안인지 확인. 아니면 기억해둔 본문 range를 복원해서 반환.
+        // 본문 selection이 한 번도 없었으면 null 반환 → 명령 실행 안 함.
+        function ensureEditorSelection() {
+            var s = window.getSelection();
+            if (s && s.rangeCount > 0) {
+                var r = s.getRangeAt(0);
+                if (editor.contains(r.commonAncestorContainer)) return r;
+            }
+            // 본문 바깥에 selection이 있거나 selection이 없음 → 기억해둔 본문 range 복원
+            if (_lastEditorRange && editor.contains(_lastEditorRange.commonAncestorContainer)) {
+                try {
+                    var sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(_lastEditorRange);
+                    editor.focus();
+                    return _lastEditorRange;
+                } catch (e) {}
+            }
+            return null;
+        }
+
+        // 공통 서식 명령 (bold/italic/underline)
+        //  - 본문에 selection이 있거나 본문 selection 기억이 있을 때만 실행.
+        //  - 본문을 한 번도 클릭한 적이 없으면 아무 일도 하지 않음.
+        window.fmt = function(cmd) {
+            var r = ensureEditorSelection();
+            if (!r) { updateToolbarState(); return; }
+            try { document.execCommand(cmd, false, null); } catch (e) {}
+            updateToolbarState();
+        };
+
+        // 형광펜 토글
+        //  - execCommand('hiliteColor')는 적용 상태가 입력 모드에 남아 그 다음 타이핑까지 칠해지는 문제가 있어
+        //    DOM을 직접 조작하는 방식으로 처리.
+        //  - 동작:
+        //      1) 선택 영역이 이미 형광펜 안 → 해제 (앵커 span 풀기)
+        //      2) 그 외 → 선택 영역을 <span class="hl-mark"> 로 감싸기 (class 기반이라 CSS로 색 제어)
+        //  - 적용 후 selection을 끝으로 collapse → 사용자가 이어서 타이핑해도 형광펜이 따라붙지 않음
+        window.toggleHighlight = function() {
+            var range = ensureEditorSelection();
+            if (!range) { updateToolbarState(); return; }
+            // 최신 selection의 range로 다시 받음 (ensureEditorSelection이 복원한 경우 포함)
+            var sel = window.getSelection();
+            range = sel.getRangeAt(0);
+
+            // 빈 선택(커서만 있는 경우): 커서가 형광펜 영역 안에 있으면 그 span을 해제, 아니면 무시
+            if (range.collapsed) {
+                var span = findHlSpan(range.startContainer);
+                if (span) {
+                    unwrapHlSpan(span);
+                    // 커서 위치 보존: span이 있던 자리에 빈 커서
+                    editor.focus();
+                }
+                updateToolbarState();
+                return;
+            }
+
+            // 선택 영역 안에 형광펜이 하나라도 있으면 → 해제 모드
+            // (영역에 걸친 모든 hl-mark span을 풀어버림)
+            if (rangeIntersectsHl(range)) {
+                removeHlInRange(range);
+            } else {
+                wrapRangeWithHl(range);
+            }
+
+            // 핵심: 선택을 끝점으로 collapse → 다음 타이핑은 형광펜 밖에서 시작
+            // (브라우저가 selection 끝의 스타일을 이어받지 않게 함)
+            collapseToEndOutsideHl();
+            updateToolbarState();
+        };
+
+        // 노드에서 위로 올라가며 hl-mark span 찾기 (editor 경계까지)
+        function findHlSpan(node) {
+            if (!node) return null;
+            if (node.nodeType === 3) node = node.parentNode;
+            while (node && node !== editor) {
+                if (node.nodeType === 1 && node.classList && node.classList.contains('hl-mark')) return node;
+                node = node.parentNode;
+            }
+            return null;
+        }
+
+        // hl-mark span의 자식들을 부모로 풀어내고 자신은 제거
+        function unwrapHlSpan(span) {
+            var parent = span.parentNode;
+            while (span.firstChild) parent.insertBefore(span.firstChild, span);
+            parent.removeChild(span);
+        }
+
+        // 선택 영역과 교차하는 hl-mark span이 하나라도 있는지
+        function rangeIntersectsHl(range) {
+            var marks = editor.querySelectorAll('.hl-mark');
+            for (var i = 0; i < marks.length; i++) {
+                if (range.intersectsNode && range.intersectsNode(marks[i])) return true;
+                // 폴백: 시작/끝 컨테이너가 그 안인지
+                if (marks[i].contains(range.startContainer) || marks[i].contains(range.endContainer)) return true;
+            }
+            return false;
+        }
+
+        // 선택 영역에 걸친 hl-mark를 모두 해제 (영역 단위 정밀 해제까지는 안 하고 통째로 풀음)
+        function removeHlInRange(range) {
+            var marks = editor.querySelectorAll('.hl-mark');
+            var hit = [];
+            for (var i = 0; i < marks.length; i++) {
+                var m = marks[i];
+                var inside = (range.intersectsNode && range.intersectsNode(m))
+                    || m.contains(range.startContainer) || m.contains(range.endContainer);
+                if (inside) hit.push(m);
+            }
+            hit.forEach(unwrapHlSpan);
+        }
+
+        // 선택 영역을 hl-mark span으로 감싸기 (현재 _currentHlColor 사용)
+        function wrapRangeWithHl(range) {
+            var span = document.createElement('span');
+            span.className = 'hl-mark';
+            span.style.backgroundColor = _currentHlColor;
+            try {
+                // 가장 단순: extractContents → wrap → insert
+                var frag = range.extractContents();
+                span.appendChild(frag);
+                range.insertNode(span);
+            } catch (e) {
+                // 복잡한 셀렉션(예: 부분 노드 걸침)에서 실패할 수 있음
+                try { range.surroundContents(span); } catch (ee) {}
+            }
+            // 기준 텍스트 저장 (input 가드에서 늘어난 부분을 밖으로 빼낼 때 비교용)
+            span.setAttribute('data-hl-locked-text', span.textContent);
+        }
+
+        // 선택을 hl-mark 바깥의 끝점으로 collapse → 이후 타이핑이 형광펜 밖으로 가게
+        //  - 단순히 setStartAfter(hl)로 caret을 옮기면 일부 브라우저(Chrome 등)가 caret의
+        //    스타일 컨텍스트를 직전 형제(hl-mark)에서 상속해, 새로 입력된 글자가 hl-mark 안으로
+        //    들어가는 문제가 있음.
+        //  - 해결: hl-mark 직후에 zero-width space 텍스트 노드(\u200B)를 삽입하고 그 안으로 caret을
+        //    옮긴다. 그러면 새 글자가 그 텍스트 노드 안에 들어가 hl-mark 밖에서 시작됨.
+        //  - ZWS는 저장(innerText) 시 sanitizeEditorText로 제거됨.
+        function collapseToEndOutsideHl() {
+            var sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            var range = sel.getRangeAt(0);
+            var endNode = range.endContainer;
+            var hl = findHlSpan(endNode);
+            var newRange = document.createRange();
+
+            if (hl && hl.parentNode) {
+                // hl-mark 바로 다음에 새 ZWS 텍스트 노드를 삽입
+                // (이전 ZWS가 남아있어도 sanitizeEditorText로 저장 시 모두 정리됨)
+                var zws = document.createTextNode('\u200B');
+                hl.parentNode.insertBefore(zws, hl.nextSibling);
+                // ZWS 텍스트 노드 끝(=ZWS 뒤)에 caret을 둠 → 입력 시 ZWS 뒤에 글자가 붙음
+                newRange.setStart(zws, zws.nodeValue.length);
+                newRange.collapse(true);
+            } else {
+                newRange.setStart(range.endContainer, range.endOffset);
+                newRange.collapse(true);
+            }
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+            editor.focus();
+        }
+
+        // 툴바 활성 상태 갱신
+        function updateToolbarState() {
+            // 현재 selection이 editor 안에 없으면 모든 버튼 비활성 표시 해제
+            var sel = window.getSelection();
+            var inEditor = false;
+            if (sel && sel.rangeCount > 0) {
+                var n = sel.getRangeAt(0).commonAncestorContainer;
+                inEditor = editor.contains(n) || editor === n;
+            }
+
+            var setActive = function(cmd, on) {
+                var btn = document.querySelector('.tb-btn[data-cmd="' + cmd + '"]');
+                if (btn) btn.classList.toggle('active', !!on);
+            };
+
+            if (!inEditor) {
+                setActive('bold', false);
+                setActive('italic', false);
+                setActive('underline', false);
+                setActive('hilite', false);
+                return;
+            }
+
+            try { setActive('bold',      document.queryCommandState('bold')); }      catch (e) {}
+            try { setActive('italic',    document.queryCommandState('italic')); }    catch (e) {}
+            try { setActive('underline', document.queryCommandState('underline')); } catch (e) {}
+            // 형광펜 활성 표시: 커서가 hl-mark 안에 있을 때
+            var anchorNode = sel.getRangeAt(0).startContainer;
+            setActive('hilite', !!findHlSpan(anchorNode));
+        }
+
+        // selection 변경 추적: 가장 안정적인 방법은 document selectionchange
+        document.addEventListener('selectionchange', updateToolbarState);
+        // 키 입력 후에도 갱신
+        editor.addEventListener('keyup', updateToolbarState);
+        editor.addEventListener('mouseup', updateToolbarState);
+        editor.addEventListener('focus', updateToolbarState);
+        editor.addEventListener('blur', function() {
+            // 포커스 잃었을 때 버튼은 그대로 두기보다 비우는 게 자연스러움
+            setTimeout(updateToolbarState, 50);
+        });
+
+        /* ─── 형광펜 영역으로 입력이 흘러드는 것 방지 ─────────────────
+         * 일부 브라우저(Chrome 등)는 caret이 형광펜 span 직후에 있어도
+         * 직전 인라인 요소의 스타일 컨텍스트를 상속해 새 글자를 span 안에 넣음.
+         * (ZWS 분리자도 케이스에 따라 통하지 않음)
+         *
+         * 해결: 형광펜 적용 시점의 텍스트를 data-hl-locked-text에 저장하고,
+         * input 이벤트마다 각 hl-mark의 textContent가 그 기준의 끝에 글자가
+         * 붙은 형태로 늘어났는지 검사. 늘어났다면 그 늘어난 부분(=새 입력)을
+         * hl-mark 밖으로 끄집어내고 caret을 그 위치로 옮긴다.
+         *
+         * IME 친화: input 이벤트는 한글 조합이 끝난 후에 발생하므로 안전.
+         * compositionend도 추가로 처리하여 한글 입력 직후에도 가드가 도는 것을 보장.
+         */
+        function evictTailFromHl(span, baseText) {
+            // span의 마지막 텍스트 노드를 찾아 baseText 길이 이후의 글자를 잘라낸다.
+            // span 안에 여러 노드가 있을 수 있으나, 일반적으로 입력은 마지막 텍스트 노드에 들어감.
+            var current = span.textContent;
+            if (current.length <= baseText.length) return null;
+            if (current.indexOf(baseText) !== 0) return null; // prefix가 아니면 처리 안 함
+            var addedText = current.substring(baseText.length);
+            if (!addedText) return null;
+
+            // span의 노드들을 뒤에서부터 훑으며 addedText 길이만큼 잘라냄
+            var remaining = addedText.length;
+            // 가장 단순한 처리: span의 마지막 텍스트 노드부터 잘라냄
+            var lastTextNode = null;
+            var walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT, null);
+            var textNodes = [];
+            while (walker.nextNode()) textNodes.push(walker.currentNode);
+            if (textNodes.length === 0) return null;
+
+            // 끝에서부터 remaining만큼 자르며 모음
+            var addedFragment = document.createDocumentFragment();
+            for (var i = textNodes.length - 1; i >= 0 && remaining > 0; i--) {
+                var tn = textNodes[i];
+                var v = tn.nodeValue || '';
+                if (v.length >= remaining) {
+                    var keep = v.substring(0, v.length - remaining);
+                    var taken = v.substring(v.length - remaining);
+                    tn.nodeValue = keep;
+                    addedFragment.insertBefore(document.createTextNode(taken), addedFragment.firstChild);
+                    remaining = 0;
+                } else {
+                    addedFragment.insertBefore(document.createTextNode(v), addedFragment.firstChild);
+                    remaining -= v.length;
+                    tn.parentNode.removeChild(tn);
+                }
+            }
+            // 빈 텍스트 노드 정리
+            // (정리는 자연스럽게 유지되어도 무방)
+
+            // addedFragment를 span 다음 형제로 삽입
+            var parent = span.parentNode;
+            var inserted = addedFragment;
+            // 이미 span 다음에 텍스트 노드가 있으면 그 앞에 합쳐 caret 위치를 명확히 함
+            var refNode = span.nextSibling;
+            if (refNode && refNode.nodeType === 3) {
+                // 텍스트 노드 앞에 새 텍스트 합치고, refNode 자체에 prepend
+                var newText = '';
+                while (inserted.firstChild) {
+                    if (inserted.firstChild.nodeType === 3) {
+                        newText += inserted.firstChild.nodeValue;
+                    }
+                    inserted.removeChild(inserted.firstChild);
+                }
+                refNode.nodeValue = newText + refNode.nodeValue;
+                // caret 위치: refNode의 newText 끝
+                return { node: refNode, offset: newText.length };
+            } else {
+                // 그냥 span 다음에 fragment 삽입
+                var firstAdded = inserted.firstChild;
+                parent.insertBefore(inserted, refNode);
+                // caret 위치: 새로 삽입된 마지막 텍스트 노드의 끝
+                if (firstAdded && firstAdded.nodeType === 3) {
+                    return { node: firstAdded, offset: firstAdded.nodeValue.length };
+                }
+            }
+            return null;
+        }
+
+        var _hlGuardRunning = false;
+        function guardHlInput() {
+            if (_hlGuardRunning) return;
+            _hlGuardRunning = true;
+            try {
+                var marks = editor.querySelectorAll('.hl-mark');
+                var caretPos = null;
+
+                // 1단계: 늘어난 hl-mark에서 추가 글자 끄집어내기
+                for (var i = 0; i < marks.length; i++) {
+                    var m = marks[i];
+                    var base = m.getAttribute('data-hl-locked-text');
+                    if (base == null) continue;
+                    var pos = evictTailFromHl(m, base);
+                    if (pos) caretPos = pos;
+                }
+
+                // 2단계: 빈(또는 ZWS만 남은) hl-mark 제거
+                //  - 사용자가 형광펜 글자를 모두 지운 경우 빈 <span class="hl-mark"></span>이 남고,
+                //    caret이 그 안에 있으면 새 글자가 형광펜 안에 들어가버림. 빈 span을 풀어야 함.
+                //  - 제거 전 caret이 이 span 안에 있었으면 caret을 span 직전 위치로 옮김.
+                var emptyMarks = editor.querySelectorAll('.hl-mark');
+                for (var j = 0; j < emptyMarks.length; j++) {
+                    var em = emptyMarks[j];
+                    var txt = (em.textContent || '').replace(/\u200B/g, '');
+                    if (txt.length === 0) {
+                        // caret이 이 span 안인지 확인
+                        var sel0 = window.getSelection();
+                        var caretInside = false;
+                        if (sel0 && sel0.rangeCount > 0) {
+                            var rr = sel0.getRangeAt(0);
+                            caretInside = em.contains(rr.startContainer) || em === rr.startContainer;
+                        }
+                        var parent = em.parentNode;
+                        var nextRef = em.nextSibling;
+                        parent.removeChild(em);
+                        if (caretInside) {
+                            // caret을 span이 있던 자리(부모 안)에 둠
+                            try {
+                                var sel1 = window.getSelection();
+                                var rr1 = document.createRange();
+                                if (nextRef) {
+                                    rr1.setStartBefore(nextRef);
+                                } else {
+                                    // 부모 끝
+                                    rr1.selectNodeContents(parent);
+                                    rr1.collapse(false);
+                                }
+                                sel1.removeAllRanges();
+                                sel1.addRange(rr1);
+                                caretPos = null; // 이미 caret을 직접 옮겼으니 아래 처리 스킵
+                            } catch (e) {}
+                        }
+                    }
+                }
+
+                if (caretPos) {
+                    try {
+                        var sel = window.getSelection();
+                        var r = document.createRange();
+                        r.setStart(caretPos.node, caretPos.offset);
+                        r.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(r);
+                    } catch (e) {}
+                }
+            } finally {
+                _hlGuardRunning = false;
+            }
+        }
+        editor.addEventListener('input', guardHlInput);
+        editor.addEventListener('compositionend', guardHlInput);
+
+        /* ─── 형광펜 색 팔레트 ─────────────────────────────────── */
+        var hlPopover  = document.getElementById('hlPopover');
+        var hlSwatches = document.getElementById('hlSwatches');
+        var hlBar      = document.getElementById('hlBar');
+
+        // 팔레트 swatch 렌더
+        function renderSwatches() {
+            hlSwatches.innerHTML = '';
+            HL_COLORS.forEach(function(c) {
+                var b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'hl-swatch' + (c.color === _currentHlColor ? ' selected' : '');
+                b.style.backgroundColor = c.color;
+                b.title = c.name;
+                b.setAttribute('aria-label', c.name);
+                b.setAttribute('data-color', c.color);
+                // 클릭 시 selection 보존
+                b.addEventListener('mousedown', function(e) { e.preventDefault(); });
+                b.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    chooseColor(c.color);
+                });
+                hlSwatches.appendChild(b);
+            });
+        }
+
+        // 현재 형광펜 아이콘의 바 색 갱신
+        function syncHlBar() {
+            if (hlBar) hlBar.style.background = _currentHlColor;
+        }
+
+        // 색 선택: 현재 색 변경 + (선택 영역이 있으면) 그 영역에 즉시 적용
+        function chooseColor(color) {
+            _currentHlColor = color;
+            try { localStorage.setItem('hl_color_pref', color); } catch (e) {}
+            // swatch 선택 표시 갱신
+            Array.prototype.forEach.call(hlSwatches.children, function(el) {
+                el.classList.toggle('selected', el.getAttribute('data-color') === color);
+            });
+            syncHlBar();
+
+            // 1) 본문에 선택 영역이 있으면: 적용 (또는 기존 형광펜 색만 변경)
+            var sel = window.getSelection();
+            var hasSelection = sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed
+                && editor.contains(sel.getRangeAt(0).commonAncestorContainer);
+
+            if (hasSelection) {
+                var range = sel.getRangeAt(0);
+                // 선택 영역에 이미 형광펜이 있으면 그 색만 바꾸고, 없으면 새로 칠함
+                if (rangeIntersectsHl(range)) {
+                    var marks = editor.querySelectorAll('.hl-mark');
+                    Array.prototype.forEach.call(marks, function(m) {
+                        var inside = (range.intersectsNode && range.intersectsNode(m))
+                            || m.contains(range.startContainer) || m.contains(range.endContainer);
+                        if (inside) m.style.backgroundColor = color;
+                    });
+                } else {
+                    wrapRangeWithHl(range);
+                }
+                collapseToEndOutsideHl();
+            }
+            // 2) 선택 영역이 없으면: 다음 형광펜 적용 시 사용할 색만 바뀜
+            closeHlPopover();
+            updateToolbarState();
+        }
+
+        function openHlPopover(triggerEl) {
+            hlPopover.classList.add('open');
+            // 트리거(▾ 버튼) 기준으로 좌표 계산 — fixed라 viewport 좌표 사용
+            if (triggerEl && triggerEl.getBoundingClientRect) {
+                var r = triggerEl.getBoundingClientRect();
+                // 일단 좌하단에 배치, viewBox 벗어나면 보정
+                hlPopover.style.top  = (r.bottom + 4) + 'px';
+                hlPopover.style.left = r.left + 'px';
+                // 우측 잘림 보정
+                var pw = hlPopover.offsetWidth || 180;
+                if (r.left + pw > window.innerWidth - 8) {
+                    hlPopover.style.left = Math.max(8, window.innerWidth - pw - 8) + 'px';
+                }
+            }
+        }
+        function closeHlPopover() { hlPopover.classList.remove('open'); }
+        window.toggleHlPopover = function(e) {
+            if (e) e.stopPropagation();
+            if (hlPopover.classList.contains('open')) closeHlPopover();
+            else openHlPopover(e && e.currentTarget);
+        };
+
+        // 바깥 클릭 시 팔레트 닫기
+        document.addEventListener('click', function(e) {
+            if (!hlPopover.classList.contains('open')) return;
+            if (hlPopover.contains(e.target)) return;
+            // 트리거 자체는 toggleHlPopover에서 처리하므로 그 외 클릭에만 닫음
+            if (e.target.closest && e.target.closest('.hl-caret')) return;
+            closeHlPopover();
+        });
+        // Esc로 닫기
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeHlPopover();
+        });
+
+        renderSwatches();
+        syncHlBar();
+
+        // 초기 1회
+        updateToolbarState();
+    })();
+
+    /* ═══════════════════════════════════════════════════════════
+       메모 기능
+    ═══════════════════════════════════════════════════════════ */
+    (function() {
+        var _memoMode      = false;
+        var _memoCounter   = 0;
+        var _currentMemoId = null;
+        var _pendingRange  = null;
+
+        var editor    = document.getElementById('editor');
+        var memoBtn   = document.getElementById('memoBtn');
+        var backdrop  = document.getElementById('memoModalBackdrop');
+        var textarea  = document.getElementById('memoTextarea');
+        var selTextEl = document.getElementById('memoSelectedText');
+        var deleteBtnEl = document.getElementById('memoBtnDelete');
+        var tooltip   = document.getElementById('memoTooltip');
+
+        window.toggleMemoMode = function() {
+            // 현재 선택된 텍스트가 있는지 확인
+            var sel = window.getSelection();
+            var hasSelection = sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed
+                && editor.contains(sel.getRangeAt(0).commonAncestorContainer);
+
+            if (!hasSelection) {
+                // 선택된 글이 없으면 활성화 안 함
+                showToast('메모를 달 텍스트를 먼저 선택해주세요.');
+                return;
+            }
+
+            // 선택된 텍스트가 있으면 바로 모달 열기 (모드 토글 없이)
+            openNewMemoModal(sel.getRangeAt(0));
+        };
+
+        function openNewMemoModal(range) {
+            _currentMemoId = null;
+            _pendingRange  = range ? range.cloneRange() : null;
+            selTextEl.textContent = _pendingRange ? _pendingRange.toString().trim() : '(선택된 텍스트 없음)';
+            textarea.value = '';
+            deleteBtnEl.style.display = 'none';
+            backdrop.classList.add('open');
+            setTimeout(function() { textarea.focus(); }, 80);
+        }
+
+        function openEditMemoModal(markEl) {
+            _currentMemoId = markEl.getAttribute('data-memo-id');
+            _pendingRange  = null;
+            selTextEl.textContent = markEl.textContent.trim();
+            textarea.value = markEl.getAttribute('data-memo-text') || '';
+            deleteBtnEl.style.display = 'inline-flex';
+            backdrop.classList.add('open');
+            setTimeout(function() { textarea.focus(); }, 80);
+        }
+
+        window.closeMemoModal = function() {
+            backdrop.classList.remove('open');
+            _pendingRange  = null;
+            _currentMemoId = null;
+            _memoMode = false;
+            memoBtn.classList.remove('active');
+        };
+
+        window.saveMemo = function() {
+            var text = textarea.value.trim();
+            if (!text) { showToast('메모 내용을 입력해주세요.'); return; }
+            if (_currentMemoId) {
+                var existing = editor.querySelector('[data-memo-id="' + _currentMemoId + '"]');
+                if (existing) existing.setAttribute('data-memo-text', text);
+            } else {
+                if (_pendingRange && !_pendingRange.collapsed) {
+                    var id = 'memo-' + (++_memoCounter);
+                    wrapRangeWithMemo(_pendingRange, id, text);
+                }
+            }
+            closeMemoModal();
+            showToast('메모가 저장되었습니다.');
+        };
+
+        window.deleteMemo = function() {
+            if (!_currentMemoId) return;
+            var mark = editor.querySelector('[data-memo-id="' + _currentMemoId + '"]');
+            if (mark) {
+                var parent = mark.parentNode;
+                while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+                parent.removeChild(mark);
+                parent.normalize();
+            }
+            closeMemoModal();
+            showToast('메모가 삭제되었습니다.');
+        };
+
+        function wrapRangeWithMemo(range, id, memoText) {
+            var createdMark = null;
+            try {
+                var mark = document.createElement('span');
+                mark.className = 'memo-mark';
+                mark.setAttribute('data-memo-id', id);
+                mark.setAttribute('data-memo-text', memoText);
+                range.surroundContents(mark);
+                attachMemoEvents(mark);
+                createdMark = mark;
+            } catch (e) {
+                try {
+                    var frag = range.extractContents();
+                    var mark2 = document.createElement('span');
+                    mark2.className = 'memo-mark';
+                    mark2.setAttribute('data-memo-id', id);
+                    mark2.setAttribute('data-memo-text', memoText);
+                    mark2.appendChild(frag);
+                    range.insertNode(mark2);
+                    attachMemoEvents(mark2);
+                    createdMark = mark2;
+                } catch (e2) {}
+            }
+            if (createdMark) {
+                // 메모 안 텍스트 길이를 잠가둠 (이후 가드에서 사용)
+                createdMark.setAttribute('data-memo-locked-text', createdMark.textContent || '');
+                // caret을 메모 마크 바로 뒤로 이동시켜 다음 입력이 메모 밖에서 시작되도록
+                try {
+                    var sel = window.getSelection();
+                    var r = document.createRange();
+                    r.setStartAfter(createdMark);
+                    r.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                } catch (eMove) {}
+            }
+        }
+
+        window._reattachMemoEvents = function(m) { attachMemoEvents(m); };
+        function attachMemoEvents(markEl) {
+            markEl.addEventListener('click', function(e) {
+                e.stopPropagation();
+                openEditMemoModal(markEl);
+            });
+            markEl.addEventListener('mouseenter', function(e) {
+                var text = markEl.getAttribute('data-memo-text');
+                if (!text) return;
+                tooltip.textContent = text;
+                tooltip.classList.add('show');
+                positionTooltip(e);
+            });
+            markEl.addEventListener('mousemove', positionTooltip);
+            markEl.addEventListener('mouseleave', function() {
+                tooltip.classList.remove('show');
+            });
+        }
+
+        function positionTooltip(e) {
+            var tw = tooltip.offsetWidth || 200;
+            var th = tooltip.offsetHeight || 36;
+            var x = e.clientX + 12;
+            var y = e.clientY - th - 8;
+            if (x + tw > window.innerWidth - 8) x = window.innerWidth - tw - 8;
+            if (y < 8) y = e.clientY + 20;
+            tooltip.style.left = x + 'px';
+            tooltip.style.top  = y + 'px';
+        }
+
+        backdrop.addEventListener('click', function(e) {
+            if (e.target === backdrop) closeMemoModal();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && backdrop.classList.contains('open')) closeMemoModal();
+        });
+
+        textarea.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                saveMemo();
+            }
+        });
+
+        Array.prototype.forEach.call(editor.querySelectorAll('.memo-mark'), function(m) {
+            attachMemoEvents(m);
+            if (!m.hasAttribute('data-memo-locked-text')) {
+                m.setAttribute('data-memo-locked-text', m.textContent || '');
+            }
+        });
+
+        /* ── 메모 가드: 메모 마크 끝에 글자가 추가되면 마크 밖으로 빼냄 ── */
+        var _memoGuardRunning = false;
+        function guardMemoInput() {
+            if (_memoGuardRunning) return;
+            _memoGuardRunning = true;
+            try {
+                var marks = editor.querySelectorAll('.memo-mark');
+                var caretPos = null;
+
+                // 1) 늘어난 memo-mark에서 추가 글자 끄집어내기
+                for (var i = 0; i < marks.length; i++) {
+                    var m = marks[i];
+                    var base = m.getAttribute('data-memo-locked-text');
+                    if (base == null) continue;
+                    var cur = m.textContent || '';
+                    if (cur.length <= base.length) continue;
+
+                    // 끝에 추가된 부분만 분리
+                    var extra = cur.substring(base.length);
+                    // memo 안 마지막 텍스트노드에서 추가된 글자 길이만큼 잘라냄
+                    var last = m.lastChild;
+                    while (last && last.nodeType !== 3 && last.lastChild) last = last.lastChild;
+                    if (last && last.nodeType === 3) {
+                        var ln = last.nodeValue || '';
+                        // 끝에서 extra 길이만큼 잘라냄
+                        if (ln.length >= extra.length) {
+                            last.nodeValue = ln.substring(0, ln.length - extra.length);
+                        }
+                    }
+                    // memo-mark 다음 형제 위치에 텍스트 노드 삽입(또는 기존 텍스트 노드에 prepend)
+                    var parent = m.parentNode;
+                    var next = m.nextSibling;
+                    var inserted;
+                    if (next && next.nodeType === 3) {
+                        next.nodeValue = extra + (next.nodeValue || '');
+                        inserted = next;
+                        caretPos = { node: inserted, offset: extra.length };
+                    } else {
+                        inserted = document.createTextNode(extra);
+                        parent.insertBefore(inserted, next);
+                        caretPos = { node: inserted, offset: extra.length };
+                    }
+                }
+
+                // 2) 빈 memo-mark 제거
+                var emptyMarks = editor.querySelectorAll('.memo-mark');
+                for (var j = 0; j < emptyMarks.length; j++) {
+                    var em = emptyMarks[j];
+                    var txt = (em.textContent || '');
+                    if (txt.length === 0) {
+                        var pn = em.parentNode;
+                        var nr = em.nextSibling;
+                        var sel0 = window.getSelection();
+                        var caretInside = false;
+                        if (sel0 && sel0.rangeCount > 0) {
+                            var rr = sel0.getRangeAt(0);
+                            caretInside = em.contains(rr.startContainer) || em === rr.startContainer;
+                        }
+                        pn.removeChild(em);
+                        if (caretInside) {
+                            try {
+                                var sel1 = window.getSelection();
+                                var rr1 = document.createRange();
+                                if (nr) rr1.setStartBefore(nr);
+                                else { rr1.selectNodeContents(pn); rr1.collapse(false); }
+                                sel1.removeAllRanges();
+                                sel1.addRange(rr1);
+                                caretPos = null;
+                            } catch (eMR) {}
+                        }
+                    }
+                }
+
+                if (caretPos) {
+                    try {
+                        var sel = window.getSelection();
+                        var r = document.createRange();
+                        r.setStart(caretPos.node, caretPos.offset);
+                        r.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(r);
+                    } catch (eC) {}
+                }
+            } finally {
+                _memoGuardRunning = false;
+            }
+        }
+        editor.addEventListener('input', guardMemoInput);
+        editor.addEventListener('compositionend', guardMemoInput);
+    })();
 </script>
 </body>
 </html>
