@@ -32,7 +32,16 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 
 .map-layout { display: flex; flex: 1; overflow: hidden; }
 .left-panel { width: 320px; flex-shrink: 0; border-right: 1px solid #e2e5ee; background: #fff; display: flex; flex-direction: column; overflow: hidden; }
-.right-panel { flex: 1; background: #0d1a33; position: relative; overflow: hidden; }
+.right-panel {
+    flex: 1; position: relative; overflow: hidden;
+    background: linear-gradient(165deg, #0d1a33 0%, #111d38 45%, #0f1829 100%);
+}
+.right-panel::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse 80% 50% at 70% 20%, rgba(74,124,220,0.08) 0%, transparent 55%),
+                radial-gradient(ellipse 60% 40% at 10% 90%, rgba(240,192,64,0.04) 0%, transparent 50%);
+}
+#timelineMount { position: absolute; inset: 0; z-index: 2; }
 
 .panel-content { flex: 1; overflow-y: auto; padding: 14px; scrollbar-width: thin; }
 
@@ -65,11 +74,16 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 .timeline-loading { display: none; text-align: center; padding: 28px 12px; font-size: 12px; color: #9ca3af; }
 .timeline-loading.show { display: block; }
 
-#timelineMount { position: absolute; inset: 0; }
 #timelineMount svg { display: block; width: 100%; height: 100%; cursor: grab; }
 #timelineMount svg:active { cursor: grabbing; }
+#timelineMount .lane-band { pointer-events: none; }
+#timelineMount .time-grid { pointer-events: none; }
+#timelineMount .layer-evt { transition: opacity 0.12s ease; }
+#timelineMount .layer-evt:hover { opacity: 1 !important; }
+#timelineMount .layer-evt.dimmed { opacity: 0.55; }
+#timelineMount .lane-label-bg { pointer-events: none; }
 
-.canvas-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1; pointer-events: none; }
+.canvas-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 3; pointer-events: none; }
 .canvas-empty-icon { width: 56px; height: 56px; margin-bottom: 14px; flex-shrink: 0; }
 .canvas-empty-icon svg { width: 100%; height: 100%; display: block; }
 .canvas-empty-icon--idle svg { stroke: rgba(255,255,255,0.2); fill: none; stroke-width: 1.4; stroke-linecap: round; }
@@ -93,34 +107,61 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 .canvas-empty.is-extracting p { color: rgba(147,197,253,0.95); }
 .canvas-empty p { font-size: 13px; color: rgba(255,255,255,0.45); text-align: center; line-height: 1.8; max-width: 320px; transition: color 0.2s; }
 
-.canvas-toolbar { position: absolute; top: 12px; right: 12px; z-index: 5; display: none; flex-direction: column; gap: 6px; }
+.canvas-toolbar {
+    position: absolute; top: 14px; right: 14px; z-index: 5; display: none;
+    flex-direction: column; gap: 6px; padding: 6px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px; backdrop-filter: blur(8px);
+}
 .canvas-toolbar.show { display: flex; }
-.canvas-tool-btn { width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.13s; }
-.canvas-tool-btn:hover { background: rgba(255,255,255,0.22); }
-.canvas-tool-btn svg { width: 14px; height: 14px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; }
+.canvas-tool-btn {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.12s;
+}
+.canvas-tool-btn:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.28); transform: scale(1.04); }
+.canvas-tool-btn svg { width: 14px; height: 14px; stroke: rgba(255,255,255,0.92); fill: none; stroke-width: 2; stroke-linecap: round; }
 
-.canvas-legend { position: absolute; bottom: 12px; left: 12px; z-index: 5; display: none; background: rgba(10,20,50,0.88); border-radius: 10px; padding: 9px 12px; flex-wrap: wrap; gap: 7px 12px; max-width: 340px; }
+.canvas-legend {
+    position: absolute; bottom: 14px; left: 14px; z-index: 5; display: none;
+    background: rgba(13,26,51,0.92); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px; padding: 10px 14px; flex-wrap: wrap; gap: 8px 14px;
+    max-width: 420px; backdrop-filter: blur(10px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+}
 .canvas-legend.show { display: flex; }
-.legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: rgba(255,255,255,0.78); }
-.legend-swatch { width: 14px; height: 8px; border-radius: 2px; flex-shrink: 0; }
-.legend-gap { width: 14px; height: 8px; border: 1px dashed #f87171; background: rgba(220,38,38,0.15); border-radius: 2px; }
+.legend-title { width: 100%; font-size: 9px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: rgba(255,255,255,0.4); margin-bottom: 2px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: rgba(255,255,255,0.82); }
+.legend-swatch { width: 16px; height: 9px; border-radius: 3px; flex-shrink: 0; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+.legend-gap { width: 16px; height: 9px; border: 1.5px dashed #f87171; background: rgba(220,38,38,0.12); border-radius: 3px; }
 
-.canvas-hint { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 5; display: none; background: rgba(0,0,0,0.5); border-radius: 20px; padding: 5px 14px; font-size: 10px; color: rgba(255,255,255,0.7); white-space: nowrap; pointer-events: none; }
+.canvas-hint {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 5; display: none;
+    background: rgba(13,26,51,0.75); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px; padding: 6px 16px; font-size: 10px; color: rgba(255,255,255,0.65);
+    white-space: nowrap; pointer-events: none; backdrop-filter: blur(6px);
+}
 .canvas-hint.show { display: block; }
 
-.evt-label { fill: rgba(255,255,255,0.9); font-size: 10px; pointer-events: none; }
-.lane-label-name { fill: rgba(255,255,255,0.92); font-size: 12px; font-weight: 500; }
-.lane-label-role { font-size: 10px; font-weight: 500; }
+.evt-label {
+    fill: rgba(255,255,255,0.95); font-size: 10px; font-weight: 500; pointer-events: none;
+    paint-order: stroke; stroke: rgba(13,26,51,0.85); stroke-width: 2.5px; stroke-linejoin: round;
+}
+.lane-label-name { fill: rgba(255,255,255,0.95); font-size: 12px; font-weight: 500; }
+.lane-label-role { font-size: 10px; font-weight: 600; letter-spacing: 0.2px; }
 .detail-role-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 10px; margin-right: 6px; }
 .detail-role-suspect { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
 .detail-role-victim { background: #f0fdf4; color: #3d8f6a; border: 1px solid #bbf7d0; }
 .detail-role-witness { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
 .detail-role-reference { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
 .detail-role-statement { background: #f4f6fb; color: #6b7280; border: 1px solid #e2e5ee; }
-.axis text { fill: rgba(255,255,255,0.55); font-size: 10px; }
-.axis line, .axis path { stroke: rgba(255,255,255,0.15); }
-.axis-x-top path.domain { stroke: rgba(255,255,255,0.22); }
-.axis-x-top .tick line { stroke: rgba(255,255,255,0.12); }
+.axis text { fill: rgba(255,255,255,0.5); font-size: 10px; font-family: 'Space Grotesk', 'Noto Sans KR', sans-serif; }
+.axis line, .axis path { stroke: rgba(255,255,255,0.12); }
+.axis-x-top path.domain { stroke: rgba(255,255,255,0.2); }
+.axis-x-top .tick line { stroke: rgba(255,255,255,0.1); stroke-dasharray: 2 4; }
+.tag-observation { background: #fffbeb; color: #b45309; }
+.tag-movement { background: #f5f3ff; color: #7c3aed; }
 
 .detail-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 300; }
 .detail-overlay.open { display: block; }
@@ -230,13 +271,15 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
         <button type="button" class="canvas-tool-btn" onclick="resetTimelineZoom()" title="초기화"><svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg></button>
     </div>
     <div class="canvas-legend" id="canvasLegend">
-        <div class="legend-item"><span class="legend-swatch" style="background:#dc2626"></span>피의자</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:#3d8f6a"></span>피해자</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:#4a7cdc"></span>목격자</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:rgba(74,124,220,0.65)"></span>알리바이</div>
+        <div class="legend-title">범례</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:rgba(74,124,220,0.7)"></span>알리바이</div>
         <div class="legend-item"><span class="legend-swatch" style="background:rgba(255,255,255,0.35)"></span>행위</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:rgba(240,192,64,0.55)"></span>목격</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:rgba(167,139,250,0.55)"></span>이동</div>
         <div class="legend-item"><span class="legend-gap"></span>알리바이 공백</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:rgba(255,255,255,0.25);border:1px dashed rgba(255,255,255,0.5)"></span>추정·상대 시간</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:rgba(255,255,255,0.2);border:1.5px dashed rgba(255,255,255,0.45)"></span>추정·상대</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:transparent;border:2px solid #dc2626"></span>피의자 레인</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:transparent;border:2px solid #3d8f6a"></span>피해자 레인</div>
     </div>
     <div class="canvas-hint" id="canvasHint">드래그로 이동 · 스크롤로 확대/축소 · 이벤트 클릭 시 상세</div>
 </div>
@@ -511,6 +554,43 @@ function laneColor(data, laneId) {
     return lane.color || roleColor(lane.roleKey);
 }
 
+function roleFillTint(roleKey, alpha) {
+    var c = roleColor(roleKey);
+    if (c.charAt(0) === '#') {
+        var r = parseInt(c.slice(1, 3), 16), g = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16);
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    }
+    return 'rgba(255,255,255,' + alpha + ')';
+}
+
+function getEventStyle(d, data) {
+    var uncertain = !!d.timeUncertain;
+    var type = (d.type || 'action').toLowerCase();
+    var stroke = laneColor(data, d.laneId);
+    var fill;
+    if (type === 'alibi') {
+        fill = uncertain ? 'rgba(74,124,220,0.32)' : 'rgba(74,124,220,0.62)';
+        stroke = uncertain ? '#6b9fff' : '#4a7cdc';
+    } else if (type === 'observation') {
+        fill = uncertain ? 'rgba(240,192,64,0.28)' : 'rgba(240,192,64,0.48)';
+        stroke = '#e6b830';
+    } else if (type === 'movement') {
+        fill = uncertain ? 'rgba(167,139,250,0.28)' : 'rgba(139,92,246,0.45)';
+        stroke = '#a78bfa';
+    } else {
+        fill = uncertain ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.3)';
+    }
+    return { fill: fill, stroke: stroke, dash: uncertain ? '5 4' : null, rx: type === 'observation' ? 8 : 6 };
+}
+
+function dimOtherEvents(hoverId) {
+    d3.selectAll('#timelineMount .layer-evt').classed('dimmed', function(d) { return d && d.id !== hoverId; });
+}
+
+function clearEventDim() {
+    d3.selectAll('#timelineMount .layer-evt').classed('dimmed', false);
+}
+
 function eventTimeRange(ev) {
     var s = new Date(ev.start).getTime();
     if (isNaN(s)) return [0, 0];
@@ -634,8 +714,8 @@ function renderTimeline(data) {
 
     var W = mount.clientWidth || 800;
     var H = mount.clientHeight || 500;
-    var plotTop = 36;
-    var margin = { top: 40, right: 28, bottom: 32, left: 128 };
+    var plotTop = 40;
+    var margin = { top: 44, right: 32, bottom: 36, left: 132 };
     var innerW = Math.max(200, W - margin.left - margin.right);
     var plotAreaH = H - margin.top - margin.bottom - plotTop;
     timelineLaneLayout = buildTimelineLaneLayout(data);
@@ -651,50 +731,97 @@ function renderTimeline(data) {
     var svg = d3.select(mount).append('svg')
         .attr('width', W).attr('height', H);
 
+    var defs = svg.append('defs');
+    var shadow = defs.append('filter').attr('id', 'evt-shadow').attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '140%');
+    shadow.append('feDropShadow').attr('dx', 0).attr('dy', 1).attr('stdDeviation', 2).attr('flood-color', '#000').attr('flood-opacity', 0.35);
+    var shadowHi = defs.append('filter').attr('id', 'evt-shadow-hover').attr('x', '-25%').attr('y', '-25%').attr('width', '150%').attr('height', '150%');
+    shadowHi.append('feDropShadow').attr('dx', 0).attr('dy', 2).attr('stdDeviation', 4).attr('flood-color', '#4a7cdc').attr('flood-opacity', 0.45);
+
     zoomRootG = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
     var xAxisG = zoomRootG.append('g')
         .attr('class', 'axis axis-x axis-x-top')
-        .call(d3.axisTop(baseXScale).ticks(6).tickFormat(d3.timeFormat('%m/%d %H:%M')));
+        .call(d3.axisTop(baseXScale).ticks(7).tickFormat(d3.timeFormat('%m/%d %H:%M')));
 
     zoomRootG.append('line')
         .attr('class', 'axis-x-baseline')
         .attr('x1', 0).attr('x2', innerW)
         .attr('y1', plotTop - 1).attr('y2', plotTop - 1)
-        .attr('stroke', 'rgba(255,255,255,0.18)');
+        .attr('stroke', 'rgba(255,255,255,0.22)');
 
     var chartG = zoomRootG.append('g')
         .attr('class', 'chart-root')
         .attr('transform', 'translate(0, ' + chartTop + ')');
 
+    chartG.append('rect')
+        .attr('class', 'chart-plot-bg')
+        .attr('x', 0).attr('y', 0)
+        .attr('width', innerW).attr('height', Math.max(chartH, 40))
+        .attr('fill', 'rgba(255,255,255,0.02)')
+        .attr('rx', 8)
+        .attr('stroke', 'rgba(255,255,255,0.06)');
+
     data.lanes.forEach(function(lane) {
         var le = layout.byId[lane.id];
         if (!le) return;
-        var laneG = chartG.append('g')
+        var rk = lane.roleKey || 'statement';
+        chartG.append('rect')
+            .attr('class', 'lane-band')
+            .attr('x', 0).attr('y', le.y0)
+            .attr('width', innerW).attr('height', le.height)
+            .attr('fill', roleFillTint(rk, 0.07))
+            .attr('rx', 6);
+        chartG.append('rect')
+            .attr('class', 'lane-band-accent')
+            .attr('x', 0).attr('y', le.y0 + 4)
+            .attr('width', 3).attr('height', Math.max(0, le.height - 8))
+            .attr('fill', roleColor(rk))
+            .attr('rx', 1.5);
+        var midY = le.y0 + le.height / 2;
+        var labelG = chartG.append('g')
             .attr('class', 'lane-label-group')
-            .attr('transform', 'translate(-10, ' + (le.y0 + le.height / 2) + ')');
-        laneG.append('text')
+            .attr('transform', 'translate(-14, ' + midY + ')');
+        labelG.append('rect')
+            .attr('class', 'lane-label-bg')
+            .attr('x', -112).attr('y', -17)
+            .attr('width', 106).attr('height', 34)
+            .attr('rx', 8)
+            .attr('fill', 'rgba(255,255,255,0.07)')
+            .attr('stroke', 'rgba(255,255,255,0.1)');
+        labelG.append('text')
             .attr('class', 'lane-label-name')
             .attr('text-anchor', 'end')
-            .attr('x', 0)
-            .attr('y', -5)
+            .attr('x', -8)
+            .attr('y', -4)
             .text(lane.name || '미상');
-        laneG.append('text')
+        labelG.append('text')
             .attr('class', 'lane-label-role')
             .attr('text-anchor', 'end')
-            .attr('x', 0)
-            .attr('y', 9)
-            .attr('fill', roleColor(lane.roleKey))
+            .attr('x', -8)
+            .attr('y', 10)
+            .attr('fill', roleColor(rk))
             .text(lane.role || '진술자');
-        chartG.append('line')
-            .attr('x1', 0).attr('x2', innerW)
-            .attr('y1', le.y0 + le.height).attr('y2', le.y0 + le.height)
-            .attr('stroke', 'rgba(255,255,255,0.08)');
+        if (le.y0 > 0) {
+            chartG.append('line')
+                .attr('class', 'lane-separator')
+                .attr('x1', 0).attr('x2', innerW)
+                .attr('y1', le.y0).attr('y2', le.y0)
+                .attr('stroke', 'rgba(255,255,255,0.06)');
+        }
     });
 
     function drawLayer(xScale) {
         var lay = timelineLaneLayout;
-        chartG.selectAll('.layer-gap, .layer-evt, .layer-evt-label').remove();
+        chartG.selectAll('.time-grid, .layer-gap, .layer-evt, .layer-evt-label').remove();
+
+        var gridTicks = xScale.ticks(8);
+        chartG.selectAll('.time-grid').data(gridTicks).join('line')
+            .attr('class', 'time-grid')
+            .attr('x1', function(t) { return xScale(t); })
+            .attr('x2', function(t) { return xScale(t); })
+            .attr('y1', 0)
+            .attr('y2', lay.chartH)
+            .attr('stroke', 'rgba(255,255,255,0.05)');
 
         chartG.selectAll('.layer-gap').data(data.gaps || []).join('rect')
             .attr('class', 'layer-gap')
@@ -708,16 +835,17 @@ function renderTimeline(data) {
                 var lane = lay.byId[d.laneId];
                 return lane ? lane.height - lane.pad * 2 : 36;
             })
-            .attr('fill', 'rgba(220,38,38,0.14)')
+            .attr('fill', 'rgba(220,38,38,0.12)')
             .attr('stroke', '#f87171')
-            .attr('stroke-dasharray', '5 4')
-            .attr('rx', 4)
+            .attr('stroke-width', 1.5)
+            .attr('stroke-dasharray', '6 4')
+            .attr('rx', 5)
             .style('cursor', 'pointer')
             .on('click', function(ev, d) { openGapDetail(d); });
 
         var plotEvents = lay.plotEvents;
 
-        chartG.selectAll('.layer-evt').data(plotEvents).join('rect')
+        chartG.selectAll('.layer-evt').data(plotEvents, function(d) { return d.id; }).join('rect')
             .attr('class', function(d) { return 'layer-evt' + (d.timeUncertain ? ' layer-evt-uncertain' : ''); })
             .attr('x', function(d) { return xScale(new Date(d.start)); })
             .attr('width', function(d) {
@@ -727,16 +855,22 @@ function renderTimeline(data) {
             })
             .attr('y', function(d) { return eventBlockY(d, lay); })
             .attr('height', function(d) { return eventBlockHeight(d, lay); })
-            .attr('rx', 5)
-            .attr('fill', function(d) {
-                if (d.type === 'alibi') return d.timeUncertain ? 'rgba(74,124,220,0.35)' : 'rgba(74,124,220,0.58)';
-                return d.timeUncertain ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.32)';
-            })
-            .attr('stroke', function(d) { return laneColor(data, d.laneId); })
-            .attr('stroke-width', 1.2)
-            .attr('stroke-dasharray', function(d) { return d.timeUncertain ? '4 3' : null; })
+            .attr('rx', function(d) { return getEventStyle(d, data).rx; })
+            .attr('fill', function(d) { return getEventStyle(d, data).fill; })
+            .attr('stroke', function(d) { return getEventStyle(d, data).stroke; })
+            .attr('stroke-width', 1.5)
+            .attr('stroke-dasharray', function(d) { return getEventStyle(d, data).dash; })
+            .attr('filter', 'url(#evt-shadow)')
             .style('cursor', 'pointer')
-            .on('click', function(ev, d) { openEventDetail(d); });
+            .on('click', function(ev, d) { openEventDetail(d); })
+            .on('mouseenter', function(ev, d) {
+                dimOtherEvents(d.id);
+                d3.select(this).attr('filter', 'url(#evt-shadow-hover)').attr('stroke-width', 2.2);
+            })
+            .on('mouseleave', function() {
+                clearEventDim();
+                d3.select(this).attr('filter', 'url(#evt-shadow)').attr('stroke-width', 1.5);
+            });
 
         var labelData = plotEvents.filter(function(d) {
             var end = d.end ? new Date(d.end) : new Date(d.start);
@@ -768,6 +902,10 @@ function renderTimeline(data) {
             var prefix = d.timeUncertain ? '~ ' : '';
             return prefix + (d.label || '');
         });
+
+        chartG.selectAll('.chart-plot-bg, .lane-band, .lane-band-accent, .lane-separator').lower();
+        chartG.selectAll('.lane-label-group').raise();
+        chartG.selectAll('.layer-evt-label').raise();
     }
 
     drawLayer(baseXScale);
@@ -816,8 +954,9 @@ function formatSourceTranscriptHtml(source, actorRole) {
 }
 
 function openEventDetail(ev) {
-    var tagCls = ev.type === 'alibi' ? 'tag-alibi' : 'tag-action';
-    var tagLabel = ev.type === 'alibi' ? '알리바이' : (ev.type === 'observation' ? '목격' : '행위');
+    var t = (ev.type || 'action').toLowerCase();
+    var tagCls = t === 'alibi' ? 'tag-alibi' : (t === 'observation' ? 'tag-observation' : (t === 'movement' ? 'tag-movement' : 'tag-action'));
+    var tagLabel = t === 'alibi' ? '알리바이' : (t === 'observation' ? '목격' : (t === 'movement' ? '이동' : '행위'));
     var roleKey = ev.actorRoleKey || 'statement';
     var roleLabel = ev.actorRole || '진술자';
     var actorName = ev.actorName || (ev.source && ev.source.stmtName) || '';
