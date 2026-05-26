@@ -30,10 +30,13 @@ public class BoardController {
                       @RequestParam(required = false) String category,
                       @RequestParam(required = false) String sort,
                       @RequestParam(required = false, defaultValue = "") String keyword,
+                      @RequestParam(required = false, defaultValue = "0") String mine,
                       HttpServletResponse res, HttpSession session) throws IOException {
         res.setContentType("application/json;charset=UTF-8");
         String loginUser = getLoginUser(session, res);
         if (loginUser == null) return;
+        // mine=1 이면 category를 "mine"으로 강제
+        if ("1".equals(mine)) category = "mine";
         switch (action) {
             case "list":   handleList(res, loginUser, category, sort, keyword); break;
             case "detail": handleDetail(res, loginUser, id);                   break;
@@ -172,7 +175,7 @@ public class BoardController {
         }
         try {
             int newId = boardService.write(loginUser, category, title, content, anonymous, tagsRaw,
-                req.getParameterValues("linkNames"), req.getParameterValues("linkUrls"));
+                    req.getParameterValues("linkNames"), req.getParameterValues("linkUrls"));
             res.getWriter().write("{\"success\":true,\"postId\":" + newId + "}");
         } catch (Exception e) {
             e.printStackTrace(); res.getWriter().write("{\"success\":false,\"error\":\"게시글 등록 중 오류\"}");
@@ -188,7 +191,7 @@ public class BoardController {
         }
         try {
             boolean ok = boardService.edit(loginUser, Integer.parseInt(idStr), title, content, anonymous, tagsRaw,
-                req.getParameterValues("linkNames"), req.getParameterValues("linkUrls"));
+                    req.getParameterValues("linkNames"), req.getParameterValues("linkUrls"));
             res.getWriter().write("{\"success\":" + ok + (ok ? "" : ",\"error\":\"수정 권한이 없습니다.\"") + "}");
         } catch (Exception e) {
             e.printStackTrace(); res.getWriter().write("{\"success\":false,\"error\":\"수정 중 오류\"}");
