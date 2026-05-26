@@ -46,7 +46,8 @@ public class CaseController {
             case "myDept":         handleMyDept(res, loginUser);                 break;
             case "transcriptText": handleTranscriptText(res, loginUser, transcriptId); break;
             case "getScore":       handleGetScore(res, loginUser, transcriptId);       break;
-            case "similarCases":   handleSimilarCases(res, loginUser, caseId, forceRefresh); break;
+            case "similarCases":      handleSimilarCases(res, loginUser, caseId, forceRefresh); break;
+            case "getEmotionAnalysis": handleGetEmotionAnalysis(res, loginUser, transcriptId);   break;
             default: res.getWriter().write("{\"error\":\"알 수 없는 action\"}");
         }
     }
@@ -360,31 +361,18 @@ public class CaseController {
     private void handleEmotionAnalyze(HttpServletResponse res, String loginUser, String idStr) throws IOException {
         if (isEmpty(idStr)) { res.getWriter().write("{\"error\":\"transcriptId가 필요합니다.\"}"); return; }
         try {
-            int tid = Integer.parseInt(idStr);
-            Optional<Map<String, Object>> opt = transcriptService.getText(tid, loginUser);
-            if (opt.isEmpty()) { res.getWriter().write("{\"error\":\"조서를 찾을 수 없거나 접근 권한이 없습니다.\"}"); return; }
-            Map<String, Object> row = opt.get();
-            String text     = nvl((String) row.get("original_text"), "");
-            String stmtName = nvl((String) row.get("stmt_name"), "");
-            String stmtType = nvl((String) row.get("stmt_type"), "");
-            if (text.isEmpty()) { res.getWriter().write("{\"error\":\"진술 내용이 비어 있습니다.\"}"); return; }
-
-            JSONObject body = new JSONObject();
-            body.put("text", text);
-            body.put("stmtName", stmtName);
-            body.put("stmtType", stmtType);
-
-            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
-            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
-                .uri(java.net.URI.create(transcriptService.getFlaskBaseUrl() + "/emotion/analyze"))
-                .header("Content-Type", "application/json")
-                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body.toString()))
-                .timeout(java.time.Duration.ofSeconds(120))
-                .build();
-            java.net.http.HttpResponse<String> resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-            res.getWriter().write(resp.body());
+            res.getWriter().write(transcriptService.analyzeAndSaveEmotion(Integer.parseInt(idStr), loginUser));
         } catch (Exception e) {
             e.printStackTrace(); res.getWriter().write("{\"error\":\"감정 분석 중 오류가 발생했습니다.\"}");
+        }
+    }
+
+    private void handleGetEmotionAnalysis(HttpServletResponse res, String loginUser, String idStr) throws IOException {
+        if (isEmpty(idStr)) { res.getWriter().write("{\"hasSaved\":false}"); return; }
+        try {
+            res.getWriter().write(transcriptService.getEmotionAnalysis(Integer.parseInt(idStr), loginUser));
+        } catch (Exception e) {
+            e.printStackTrace(); res.getWriter().write("{\"hasSaved\":false}");
         }
     }
 
