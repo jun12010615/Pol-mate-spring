@@ -34,12 +34,14 @@
     display: flex; align-items: center; gap: 8px;
     background: #f4f6fb; border: 1.5px solid #e2e5ee;
     border-radius: 12px; padding: 8px 14px; width: 240px;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.15s, box-shadow 0.15s, width 0.2s;
+    position: relative;
 }
 .pm-appbar-search:focus-within {
     border-color: #0d1a33;
     box-shadow: 0 0 0 3px rgba(13,26,51,0.07);
     background: #fff;
+    width: 320px;
 }
 .pm-appbar-search svg { color: #9ca3af; flex-shrink: 0; }
 .pm-appbar-search input {
@@ -48,6 +50,51 @@
     color: #1a1a2e; width: 100%;
 }
 .pm-appbar-search input::placeholder { color: #9ca3af; }
+.pm-search-drop {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    width: 420px;
+    background: #fff;
+    border: 1px solid #e2e5ee;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.13);
+    z-index: 9999;
+    max-height: 480px;
+    overflow-y: auto;
+}
+.pm-sd-section { border-bottom: 1px solid #f0f2f8; }
+.pm-sd-section:last-of-type { border-bottom: none; }
+.pm-sd-head {
+    padding: 10px 16px 4px;
+    font-size: 10px; font-weight: 600; color: #9ca3af;
+    text-transform: uppercase; letter-spacing: 0.7px;
+}
+.pm-sd-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 16px; cursor: pointer;
+    transition: background 0.1s; text-decoration: none; color: inherit;
+}
+.pm-sd-item:hover { background: #f4f6fb; }
+.pm-sd-icon {
+    width: 28px; height: 28px; border-radius: 8px; background: #f0f2f8;
+    display: flex; align-items: center; justify-content: center;
+    color: #6b7280; flex-shrink: 0; margin-top: 1px;
+}
+.pm-sd-text { flex: 1; min-width: 0; }
+.pm-sd-title { font-size: 13px; font-weight: 500; color: #1a1a2e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-sd-sub { font-size: 11px; color: #9ca3af; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-sd-snippet { font-size: 11px; color: #6b7280; margin-top: 3px; line-height: 1.6; }
+.pm-sd-more {
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+    padding: 11px 16px; font-size: 12px; color: #0d1a33; font-weight: 500;
+    cursor: pointer; border-top: 1px solid #f0f2f8; transition: background 0.1s;
+}
+.pm-sd-more:hover { background: #f4f6fb; }
+.pm-sd-empty { padding: 28px 16px; text-align: center; color: #9ca3af; font-size: 13px; }
+.pm-sd-loading { padding: 20px 16px; text-align: center; color: #9ca3af; font-size: 13px; }
+.pm-search-drop mark { background: #fef3c7; color: #92400e; border-radius: 2px; padding: 0 1px; font-style: normal; }
 .pm-appbar-actions { display: flex; align-items: center; gap: 4px; }
 .pm-appbar-icon-btn {
     width: 36px; height: 36px; border-radius: 10px;
@@ -97,7 +144,8 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
-        <input type="text" placeholder="사건번호, 피의자 검색..." oninput="pmGlobalSearch(this.value)">
+        <input type="text" id="pmSearchInput" placeholder="사건·피의자·조서·게시글 검색..." oninput="pmGlobalSearch(this.value)" autocomplete="off">
+        <div id="pmSearchDrop" class="pm-search-drop"></div>
     </div>
 
     <div class="pm-appbar-actions">
@@ -134,13 +182,111 @@
     setInterval(refreshAbDot, 60000);
 
     var _abTimer;
+    var _abDrop = null;
+
+    function pmEscHtml(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function pmHl(text, q) {
+        var safe = pmEscHtml(text);
+        if (!q) return safe;
+        var escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return safe.replace(new RegExp(escaped, 'gi'), function(m) { return '<mark>' + m + '</mark>'; });
+    }
+    function pmEnc(s) { return encodeURIComponent(s || ''); }
+
+    function pmRenderDrop(data, q) {
+        var drop = document.getElementById('pmSearchDrop');
+        if (!drop) return;
+        var total = (data.cases||[]).length + (data.transcripts||[]).length + (data.posts||[]).length;
+        var html = '';
+
+        if (total === 0) {
+            html = '<div class="pm-sd-empty">검색 결과가 없습니다.</div>';
+            drop.innerHTML = html; drop.style.display = 'block'; return;
+        }
+
+        if ((data.cases||[]).length > 0) {
+            html += '<div class="pm-sd-section"><div class="pm-sd-head">사건</div>';
+            data.cases.forEach(function(c) {
+                html += '<a class="pm-sd-item" href="/desktop/myCase?caseId=' + pmEnc(c.case_id) + '">' +
+                    '<div class="pm-sd-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>' +
+                    '<div class="pm-sd-text">' +
+                        '<div class="pm-sd-title">' + pmHl(c.case_name, q) + '</div>' +
+                        '<div class="pm-sd-sub">' + pmHl(c.case_id, q) + ' · 피의자: ' + pmHl(c.suspect, q) + '</div>' +
+                    '</div></a>';
+            });
+            html += '</div>';
+        }
+
+        if ((data.transcripts||[]).length > 0) {
+            html += '<div class="pm-sd-section"><div class="pm-sd-head">조서</div>';
+            data.transcripts.forEach(function(t) {
+                html += '<a class="pm-sd-item" href="/desktop/myCase?caseId=' + pmEnc(t.caseId) + '">' +
+                    '<div class="pm-sd-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></div>' +
+                    '<div class="pm-sd-text">' +
+                        '<div class="pm-sd-title">' + pmHl(t.stmtName, q) + ' ' + pmEscHtml(t.stmtType) + ' 조서</div>' +
+                        '<div class="pm-sd-sub">' + pmEscHtml(t.caseName) + '</div>' +
+                        (t.snippet ? '<div class="pm-sd-snippet">' + pmHl(t.snippet, q) + '</div>' : '') +
+                    '</div></a>';
+            });
+            html += '</div>';
+        }
+
+        if ((data.posts||[]).length > 0) {
+            html += '<div class="pm-sd-section"><div class="pm-sd-head">게시글</div>';
+            data.posts.forEach(function(p) {
+                html += '<a class="pm-sd-item" href="/desktop/boardView?postId=' + pmEnc(p.id) + '">' +
+                    '<div class="pm-sd-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>' +
+                    '<div class="pm-sd-text">' +
+                        '<div class="pm-sd-title">' + pmHl(p.title, q) + '</div>' +
+                        '<div class="pm-sd-sub">' + pmEscHtml(p.author) + '</div>' +
+                        (p.snippet ? '<div class="pm-sd-snippet">' + pmHl(p.snippet, q) + '</div>' : '') +
+                    '</div></a>';
+            });
+            html += '</div>';
+        }
+
+        html += '<div class="pm-sd-more" onclick="location.href=\'/desktop/myCase?q=\'+encodeURIComponent(document.getElementById(\'pmSearchInput\').value)">' +
+            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+            '사건 전체 검색 결과 보기' +
+        '</div>';
+
+        drop.innerHTML = html;
+        drop.style.display = 'block';
+    }
+
     window.pmGlobalSearch = function(q) {
         clearTimeout(_abTimer);
-        if (!q || q.trim().length < 2) return;
+        var drop = document.getElementById('pmSearchDrop');
+        if (!q || q.trim().length < 2) {
+            if (drop) drop.style.display = 'none';
+            return;
+        }
+        if (drop) { drop.innerHTML = '<div class="pm-sd-loading">검색 중...</div>'; drop.style.display = 'block'; }
         _abTimer = setTimeout(function() {
-            location.href = '/desktop/myCase?q=' + encodeURIComponent(q.trim());
-        }, 300);
+            fetch('/searchApi?q=' + encodeURIComponent(q.trim()), {credentials: 'same-origin'})
+                .then(function(r) { return r.json(); })
+                .then(function(data) { pmRenderDrop(data, q.trim()); })
+                .catch(function() { if (drop) drop.style.display = 'none'; });
+        }, 280);
     };
+
+    document.addEventListener('click', function(e) {
+        var drop = document.getElementById('pmSearchDrop');
+        if (!drop) return;
+        var searchWrap = drop.closest('.pm-appbar-search');
+        if (searchWrap && !searchWrap.contains(e.target)) drop.style.display = 'none';
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            var drop = document.getElementById('pmSearchDrop');
+            var inp  = document.getElementById('pmSearchInput');
+            if (drop) drop.style.display = 'none';
+            if (inp)  inp.blur();
+        }
+    });
 })();
 </script>
 </th:block>

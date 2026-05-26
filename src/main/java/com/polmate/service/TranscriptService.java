@@ -1,6 +1,7 @@
 package com.polmate.service;
 
 import com.polmate.entity.EmotionAnalysis;
+import com.polmate.annotation.LogAccess;
 import com.polmate.entity.Notification;
 import com.polmate.entity.Transcript;
 import com.polmate.entity.TranscriptScore;
@@ -40,6 +41,7 @@ public class TranscriptService {
     public String getFlaskBaseUrl() { return servBaseUrl; }
 
     // ── 조서 원문 + 요약 조회 ────────────────────────────────────
+    @LogAccess(type = "TRANSCRIPT_VIEW", nameKey = "stmt_name")
     public Optional<Map<String, Object>> getText(Integer transcriptId, String userId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
                 "SELECT t.transcript_id, t.case_id, t.original_text, t.original_html, t.stmt_type, t.stmt_name, t.ai_result, " +

@@ -1,5 +1,6 @@
 package com.polmate.service;
 
+import com.polmate.annotation.LogAccess;
 import com.polmate.entity.Case;
 import com.polmate.entity.CaseSimilarCache;
 import com.polmate.entity.Notification;
@@ -60,6 +61,7 @@ public class CaseService {
     }
 
     // ── 사건 상세 ─────────────────────────────────────────────────
+    @LogAccess(type = "CASE_VIEW", nameKey = "case_name")
     public Optional<Map<String, Object>> detail(String caseId, String userId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
                 "SELECT c.case_id, c.case_name, c.suspect, c.charge, c.status, " +
