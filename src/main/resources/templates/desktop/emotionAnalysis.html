@@ -166,6 +166,34 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
     --c-avoidance: #f59e0b;
     --c-anger: #8b5cf6;
 }
+
+/* ── 이전 결과 불러오기 버튼 ── */
+.btn-load {
+    padding: 11px 18px; background: #f4f6fb; color: #0d1a33;
+    border: 1.5px solid #e2e5ee; border-radius: 10px;
+    font-size: 13px; font-weight: 500; font-family: 'Noto Sans KR', sans-serif;
+    cursor: pointer; display: none; align-items: center; gap: 8px;
+    white-space: nowrap; transition: background 0.15s;
+}
+.btn-load:hover { background: #e8ecf5; }
+
+/* ── 저장됨 뱃지 ── */
+.badge-saved {
+    font-size: 10px; padding: 3px 8px; border-radius: 8px;
+    background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0;
+    font-weight: 500; display: none;
+}
+
+/* ── 저장 버튼 ── */
+.btn-save {
+    padding: 6px 14px; background: #0d1a33; color: #fff;
+    border: none; border-radius: 8px; font-size: 11px;
+    font-family: 'Noto Sans KR', sans-serif;
+    cursor: pointer; display: none; white-space: nowrap;
+    transition: background 0.15s;
+}
+.btn-save:hover { background: #1a2744; }
+.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -203,6 +231,10 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
                         <option value="">사건을 먼저 선택하세요</option>
                     </select>
                 </div>
+                <button class="btn-load" id="loadBtn" onclick="loadSavedResult()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    이전 결과 불러오기
+                </button>
                 <button class="btn-analyze" id="analyzeBtn" onclick="runAnalysis()" disabled>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                     감정 분석 실행
@@ -245,11 +277,15 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0d1a33" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                             감정 흐름 그래프
                         </div>
-                        <div class="legend-row">
-                            <div class="legend-item"><div class="legend-dot" style="background:var(--c-anxiety);"></div>불안</div>
-                            <div class="legend-item"><div class="legend-dot" style="background:var(--c-certainty);"></div>확신</div>
-                            <div class="legend-item"><div class="legend-dot" style="background:var(--c-avoidance);"></div>회피</div>
-                            <div class="legend-item"><div class="legend-dot" style="background:var(--c-anger);"></div>분노</div>
+                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                            <span class="badge-saved" id="savedBadge"></span>
+                            <button class="btn-save" id="saveBtn" onclick="saveAnalysisResult()">저장</button>
+                            <div class="legend-row">
+                                <div class="legend-item"><div class="legend-dot" style="background:var(--c-anxiety);"></div>불안</div>
+                                <div class="legend-item"><div class="legend-dot" style="background:var(--c-certainty);"></div>확신</div>
+                                <div class="legend-item"><div class="legend-dot" style="background:var(--c-avoidance);"></div>회피</div>
+                                <div class="legend-item"><div class="legend-dot" style="background:var(--c-anger);"></div>분노</div>
+                            </div>
                         </div>
                     </div>
                     <div class="card-body">
@@ -332,7 +368,11 @@ function loadTranscripts() {
                 tsel.appendChild(opt);
             });
             tsel.disabled = false;
-            tsel.onchange = function() { btn.disabled = !tsel.value; };
+            tsel.onchange = function() {
+                btn.disabled = !tsel.value;
+                if (tsel.value) checkSavedResult(tsel.value);
+                else document.getElementById('loadBtn').style.display = 'none';
+            };
         }).catch(function() {
             tsel.innerHTML = '<option value="">불러오기 실패</option>';
         });
@@ -349,6 +389,8 @@ function runAnalysis() {
     document.getElementById('statGrid').style.display = 'none';
     document.getElementById('statusBar').classList.add('show');
     document.getElementById('analyzeBtn').disabled = true;
+    document.getElementById('savedBadge').style.display = 'none';
+    document.getElementById('saveBtn').style.display = 'none';
 
     var params = new URLSearchParams({ action: 'emotionAnalyze', transcriptId: tid });
     fetch('/caseApi?' + params.toString(), {
@@ -367,6 +409,7 @@ function runAnalysis() {
         _sentences = data.sentences || [];
         _highlights = data.highlights || [];
         renderAll(data);
+        document.getElementById('saveBtn').style.display = 'inline-block';
     })
     .catch(function(e) {
         document.getElementById('statusBar').classList.remove('show');
@@ -596,6 +639,88 @@ function highlightSentence(idx) {
 
 function escapeHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── 저장 결과 확인 (조서 선택 시 호출) ─────────────────────────────────────
+function checkSavedResult(tid) {
+    document.getElementById('loadBtn').style.display = 'none';
+    fetch('/caseApi?action=getEmotionAnalysis&transcriptId=' + encodeURIComponent(tid), { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.hasSaved) document.getElementById('loadBtn').style.display = 'flex';
+    }).catch(function() {});
+}
+
+// ── 저장된 결과 불러오기 ──────────────────────────────────────────────────────
+function loadSavedResult() {
+    var tid = document.getElementById('transcriptSelect').value;
+    if (!tid) return;
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('resultGrid').style.display = 'none';
+    document.getElementById('statGrid').style.display = 'none';
+    document.getElementById('statusBar').classList.add('show');
+    document.querySelector('.status-text').textContent = '저장된 결과를 불러오는 중...';
+    document.getElementById('savedBadge').style.display = 'none';
+    document.getElementById('saveBtn').style.display = 'none';
+
+    fetch('/caseApi?action=getEmotionAnalysis&transcriptId=' + encodeURIComponent(tid), { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        document.getElementById('statusBar').classList.remove('show');
+        document.querySelector('.status-text').textContent = 'KoBERT 감정 분석 중입니다. 잠시 기다려 주세요...';
+        if (!data.hasSaved || !data.success) {
+            alert('저장된 분석 결과가 없습니다.');
+            document.getElementById('emptyState').style.display = 'block';
+            return;
+        }
+        _sentences = data.sentences || [];
+        _highlights = data.highlights || [];
+        renderAll(data);
+        var badge = document.getElementById('savedBadge');
+        var dateStr = data.analyzedAt ? data.analyzedAt.slice(0, 10) : '';
+        badge.textContent = '저장됨' + (dateStr ? ' (' + dateStr + ')' : '');
+        badge.style.display = 'inline-block';
+    })
+    .catch(function() {
+        document.getElementById('statusBar').classList.remove('show');
+        document.querySelector('.status-text').textContent = 'KoBERT 감정 분석 중입니다. 잠시 기다려 주세요...';
+        alert('불러오기 중 오류가 발생했습니다.');
+        document.getElementById('emptyState').style.display = 'block';
+    });
+}
+
+// ── DB 저장 ───────────────────────────────────────────────────────────────────
+function saveAnalysisResult() {
+    var tid = document.getElementById('transcriptSelect').value;
+    if (!tid) return;
+    var btn = document.getElementById('saveBtn');
+    btn.disabled = true;
+    btn.textContent = '저장 중...';
+
+    fetch('/caseApi?action=getEmotionAnalysis&transcriptId=' + encodeURIComponent(tid), { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.hasSaved && d.success) {
+            var badge = document.getElementById('savedBadge');
+            var dateStr = d.analyzedAt ? d.analyzedAt.slice(0, 10) : '';
+            badge.textContent = '저장됨' + (dateStr ? ' (' + dateStr + ')' : '');
+            badge.style.display = 'inline-block';
+            btn.textContent = '저장 완료';
+            setTimeout(function() {
+                btn.textContent = '저장';
+                btn.disabled = false;
+            }, 2000);
+        } else {
+            alert('저장 확인에 실패했습니다. 분석을 다시 실행해 주세요.');
+            btn.textContent = '저장';
+            btn.disabled = false;
+        }
+    })
+    .catch(function() {
+        alert('저장 중 오류가 발생했습니다.');
+        btn.textContent = '저장';
+        btn.disabled = false;
+    });
 }
 </script>
 </body>

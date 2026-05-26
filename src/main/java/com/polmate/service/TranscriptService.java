@@ -1,12 +1,15 @@
 package com.polmate.service;
 
+import com.polmate.entity.EmotionAnalysis;
 import com.polmate.entity.Notification;
 import com.polmate.entity.Transcript;
 import com.polmate.entity.TranscriptScore;
+import com.polmate.repository.EmotionAnalysisRepository;
 import com.polmate.repository.NotificationRepository;
 import com.polmate.repository.TranscriptRepository;
 import com.polmate.repository.TranscriptScoreRepository;
 import lombok.RequiredArgsConstructor;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -26,6 +29,7 @@ public class TranscriptService {
 
     private final TranscriptRepository transcriptRepo;
     private final TranscriptScoreRepository scoreRepo;
+    private final EmotionAnalysisRepository emotionRepo;
     private final NotificationRepository notifRepo;
     private final TimelineService timelineService;
     private final JdbcTemplate jdbc;
@@ -256,6 +260,76 @@ public class TranscriptService {
             result.put("success", false); result.put("message", "점수 파싱에 실패했습니다.");
         }
         return result;
+    }
+
+    // ── 감정 분석 실행 + DB 저장 ────────────────────────────────────
+    @Transactional
+    public String analyzeAndSaveEmotion(int transcriptId, String userId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT t.original_text, t.stmt_name, t.stmt_type FROM transcripts t " +
+                "JOIN cases c ON t.case_id=c.case_id WHERE t.transcript_id=? " +
+                "AND c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?)",
+                transcriptId, userId);
+        if (rows.isEmpty()) return "{\"success\":false,\"error\":\"접근 권한이 없습니다.\"}";
+
+        Map<String, Object> row = rows.get(0);
+        String text = (String) row.get("original_text");
+        if (text == null || text.trim().isEmpty())
+            return "{\"success\":false,\"error\":\"진술 내용이 비어 있습니다.\"}";
+
+        JSONObject body = new JSONObject();
+        body.put("text", text);
+        body.put("stmtName", nvl((String) row.get("stmt_name"), ""));
+        body.put("stmtType", nvl((String) row.get("stmt_type"), ""));
+
+        String resp = callFlask("/emotion/analyze", body);
+        if (resp == null) return "{\"success\":false,\"error\":\"감정 분석 서버 호출에 실패했습니다.\"}";
+
+        try {
+            JSONObject parsed = new JSONObject(resp);
+            if (parsed.optBoolean("success", false)) {
+                JSONArray sentences = parsed.optJSONArray("sentences");
+                JSONArray highlights = parsed.optJSONArray("highlights");
+                EmotionAnalysis ea = emotionRepo.findByTranscriptId(transcriptId)
+                        .orElse(EmotionAnalysis.builder().transcriptId(transcriptId).build());
+                ea.setModel(parsed.optString("model", "keyword"));
+                ea.setSentenceCount(sentences != null ? sentences.length() : 0);
+                ea.setHighlightCount(highlights != null ? highlights.length() : 0);
+                ea.setSentencesJson(sentences != null ? sentences.toString() : "[]");
+                ea.setHighlightsJson(highlights != null ? highlights.toString() : "[]");
+                ea.setAnalyzedAt(LocalDateTime.now());
+                emotionRepo.save(ea);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return resp;
+    }
+
+    // ── 저장된 감정 분석 결과 조회 ───────────────────────────────────
+    public String getEmotionAnalysis(int transcriptId, String userId) {
+        List<Map<String, Object>> check = jdbc.queryForList(
+                "SELECT 1 FROM transcripts t JOIN cases c ON t.case_id=c.case_id WHERE t.transcript_id=? " +
+                "AND c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?)",
+                transcriptId, userId);
+        if (check.isEmpty()) return "{\"hasSaved\":false}";
+
+        return emotionRepo.findByTranscriptId(transcriptId).map(ea -> {
+            JSONObject result = new JSONObject();
+            result.put("hasSaved", true);
+            result.put("success", true);
+            result.put("model", ea.getModel() != null ? ea.getModel() : "keyword");
+            result.put("analyzedAt", ea.getAnalyzedAt() != null ? ea.getAnalyzedAt().toString() : "");
+            try {
+                result.put("sentences",  new JSONArray(ea.getSentencesJson()  != null ? ea.getSentencesJson()  : "[]"));
+                result.put("highlights", new JSONArray(ea.getHighlightsJson() != null ? ea.getHighlightsJson() : "[]"));
+            } catch (Exception e) {
+                result.put("sentences",  new JSONArray());
+                result.put("highlights", new JSONArray());
+            }
+            return result.toString();
+        }).orElse("{\"hasSaved\":false}");
     }
 
     private String callFlask(String path, JSONObject body) {
