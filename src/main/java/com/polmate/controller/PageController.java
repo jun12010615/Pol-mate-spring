@@ -30,6 +30,8 @@ public class PageController {
     @GetMapping("/mobile/voiceTranscript") public String mobileVoiceTranscript() { return "mobile/voiceTranscript"; }
     @GetMapping("/mobile/writeTranscript") public String mobileWriteTranscript() { return "mobile/writeTranscript"; }
     @GetMapping("/mobile/caseRelationMap") public String mobileCaseRelationMap() { return "mobile/caseRelationMap"; }
+    @GetMapping("/mobile/caseTimeline")     public String mobileCaseTimeline()     { return "mobile/caseTimeline"; }
+    @GetMapping("/mobile/timelineCaseList") public String mobileTimelineCaseList() { return "mobile/timelineCaseList"; }
     @GetMapping("/mobile/cctvAnalysis") public String mobileCctvAnalysis() { return "mobile/cctvAnalysis"; }
     @GetMapping("/mobile/emotionAnalysis") public String mobileEmotionAnalysis() { return "mobile/emotionAnalysis"; }
 

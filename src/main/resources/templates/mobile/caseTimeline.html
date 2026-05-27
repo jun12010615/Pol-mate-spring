@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d1a33">
+<meta name="mobile-web-app-capable" content="yes">
+<title>POL-MATE | 타임라인</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Space+Grotesk:wght@500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+:root {
+  --deep:#0d1a33; --navy:#1a2744; --accent:#4a7cdc; --gold:#f0c040;
+  --tp:#1a1a2e; --tm:#9ca3af;
+}
+html, body {
+  width:100%; height:100%; height:100dvh; overflow:hidden;
+  font-family:'Noto Sans KR',sans-serif;
+  background:var(--deep);
+  color:#fff;
+  padding:0;
+  margin:0;
+}
+
+/* 세로 보기 시 JS가 크기·회전 적용 (브라우저 UI 제외한 inner 크기) */
+.landscape-shell {
+  position:fixed;
+  width:100%;
+  height:100%;
+  height:100dvh;
+  top:0; left:0;
+  overflow:hidden;
+  background:var(--deep);
+}
+.landscape-shell.portrait-rotate {
+  top:50%;
+  left:50%;
+  transform:translate(-50%, -50%) rotate(90deg);
+}
+
+/* 풀스크린 — 타임라인만 */
+.app {
+  position:absolute; inset:0;
+  display:flex; flex-direction:column;
+  background:linear-gradient(165deg, #0d1a33 0%, #111d38 50%, #0f1829 100%);
+}
+.app::before {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(ellipse 70% 40% at 80% 15%, rgba(74,124,220,0.1), transparent 55%);
+}
+
+.top-bar {
+  position:relative; z-index:20; flex-shrink:0;
+  display:flex; align-items:center; gap:10px;
+  padding:max(10px, env(safe-area-inset-top)) 12px 10px 14px;
+  background:rgba(13,26,51,0.92);
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  backdrop-filter:blur(10px);
+}
+.top-title {
+  flex:1; min-width:0;
+  font-size:13px; font-weight:500; color:rgba(255,255,255,0.95);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.top-sub { font-size:10px; color:rgba(255,255,255,0.45); margin-top:1px; }
+.btn-close {
+  width:40px; height:40px; border-radius:50%; flex-shrink:0;
+  border:1px solid rgba(255,255,255,0.15);
+  background:rgba(255,255,255,0.08);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+}
+.btn-close:active { background:rgba(255,255,255,0.18); }
+.btn-close svg { width:18px; height:18px; stroke:#fff; stroke-width:2; stroke-linecap:round; }
+.top-actions { display:flex; gap:8px; flex-shrink:0; }
+.btn-fs {
+  width:40px; height:40px; border-radius:50%;
+  border:1px solid rgba(255,255,255,0.15);
+  background:rgba(255,255,255,0.08);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+}
+.btn-fs:active { background:rgba(255,255,255,0.18); }
+.btn-fs svg { width:16px; height:16px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; }
+.btn-fs.hidden { display:none; }
+
+.fs-prompt {
+  position:fixed; inset:0; z-index:300;
+  background:rgba(13,26,51,0.92);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:24px; text-align:center;
+  backdrop-filter:blur(6px);
+}
+.fs-prompt.hidden { display:none; }
+.fs-prompt p { font-size:13px; color:rgba(255,255,255,0.75); line-height:1.7; margin-bottom:18px; max-width:280px; }
+.fs-prompt-btn {
+  padding:14px 28px; border-radius:12px; border:none;
+  background:var(--accent); color:#fff;
+  font-size:14px; font-weight:500; font-family:'Noto Sans KR',sans-serif;
+  cursor:pointer; box-shadow:0 4px 20px rgba(74,124,220,0.35);
+}
+.fs-prompt-btn:active { opacity:0.9; }
+.fs-prompt-skip {
+  margin-top:14px; background:none; border:none;
+  color:rgba(255,255,255,0.45); font-size:11px; font-family:'Noto Sans KR',sans-serif;
+  cursor:pointer; text-decoration:underline;
+}
+
+.chart-wrap {
+  position:relative; flex:1; min-height:0; z-index:2;
+}
+#timelineMount {
+  position:absolute; inset:0;
+}
+#timelineMount svg { display:block; width:100%; height:100%; touch-action:none; }
+
+.state-overlay {
+  position:absolute; inset:0; z-index:5;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:24px; text-align:center; pointer-events:none;
+}
+.state-overlay.hidden { display:none; }
+.state-overlay p { font-size:13px; color:rgba(255,255,255,0.5); line-height:1.7; margin-top:12px; }
+.spinner {
+  width:36px; height:36px; border:3px solid rgba(255,255,255,0.15);
+  border-top-color:var(--accent); border-radius:50%;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+
+.zoom-fab {
+  position:absolute; right:12px; bottom:max(12px, env(safe-area-inset-bottom));
+  z-index:15; display:flex; flex-direction:column; gap:6px;
+}
+.zoom-fab button {
+  width:40px; height:40px; border-radius:10px;
+  border:1px solid rgba(255,255,255,0.14);
+  background:rgba(13,26,51,0.85);
+  backdrop-filter:blur(8px);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+}
+.zoom-fab button:active { background:rgba(255,255,255,0.15); }
+.zoom-fab svg { width:16px; height:16px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; }
+
+.legend-mini {
+  position:absolute; left:10px; bottom:max(10px, env(safe-area-inset-bottom));
+  z-index:15; max-width:calc(100% - 70px);
+}
+.legend-toggle {
+  font-size:10px; padding:6px 10px; border-radius:8px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:rgba(13,26,51,0.88); color:rgba(255,255,255,0.75);
+  cursor:pointer;
+}
+.legend-panel {
+  display:none; margin-top:6px; padding:8px 10px; border-radius:10px;
+  background:rgba(13,26,51,0.92); border:1px solid rgba(255,255,255,0.1);
+  flex-wrap:wrap; gap:6px 10px; font-size:9px; color:rgba(255,255,255,0.8);
+}
+.legend-panel.open { display:flex; }
+.legend-dot { width:10px; height:6px; border-radius:2px; display:inline-block; vertical-align:middle; margin-right:4px; }
+
+.hint-bar {
+  position:absolute; left:50%; transform:translateX(-50%);
+  bottom:max(56px, calc(env(safe-area-inset-bottom) + 44px));
+  z-index:12; pointer-events:none;
+  font-size:9px; color:rgba(255,255,255,0.4);
+  padding:4px 12px; border-radius:12px;
+  background:rgba(0,0,0,0.35); white-space:nowrap;
+}
+
+/* 바텀시트 상세 */
+.sheet-backdrop {
+  display:none; position:fixed; inset:0; z-index:100;
+  background:rgba(0,0,0,0.45);
+}
+.sheet-backdrop.open { display:block; }
+.sheet {
+  position:fixed; left:0; right:0; bottom:0; z-index:101;
+  max-height:78vh; background:#fff; color:var(--tp);
+  border-radius:18px 18px 0 0;
+  transform:translateY(100%);
+  transition:transform 0.28s cubic-bezier(0.4,0,0.2,1);
+  display:flex; flex-direction:column;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.sheet.open { transform:translateY(0); }
+.sheet-handle { width:36px; height:4px; background:#e2e5ee; border-radius:2px; margin:10px auto 0; }
+.sheet-head { padding:12px 16px 10px; border-bottom:1px solid #e2e5ee; }
+.sheet-title { font-size:15px; font-weight:500; padding-right:8px; }
+.sheet-sub { font-size:11px; color:var(--tm); margin-top:4px; }
+.sheet-body { flex:1; overflow-y:auto; padding:14px 16px 20px; }
+.sheet-row { margin-bottom:14px; }
+.sheet-label { font-size:10px; font-weight:500; color:var(--tm); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
+.sheet-value { font-size:13px; line-height:1.65; }
+.sheet-quote {
+  background:#f4f6fb; border-left:3px solid var(--accent);
+  padding:10px 12px; border-radius:0 8px 8px 0; font-size:12px; color:#374151; line-height:1.7;
+}
+.sheet-tag { display:inline-block; font-size:10px; padding:2px 8px; border-radius:10px; margin-right:4px; margin-bottom:4px; }
+.tag-alibi { background:#eff6ff; color:#1d4ed8; }
+.tag-action { background:#f0fdf4; color:#16a34a; }
+.tag-observation { background:#fffbeb; color:#b45309; }
+.tag-movement { background:#f5f3ff; color:#7c3aed; }
+.tag-gap { background:#fef2f2; color:#dc2626; }
+.detail-role-suspect { background:#fef2f2; color:#dc2626; }
+.detail-role-victim { background:#f0fdf4; color:#3d8f6a; }
+.detail-role-witness { background:#eff6ff; color:#2563eb; }
+.detail-role-reference { background:#f5f3ff; color:#7c3aed; }
+.detail-role-statement { background:#f4f6fb; color:#6b7280; }
+.sheet-link { color:#2563eb; font-weight:500; text-decoration:none; }
+
+.evt-label { fill:rgba(255,255,255,0.95); font-size:9px; font-weight:500; pointer-events:none;
+  paint-order:stroke; stroke:rgba(13,26,51,0.85); stroke-width:2px; }
+.lane-label-name { fill:rgba(255,255,255,0.92); font-size:10px; font-weight:500; }
+.lane-label-role { font-size:9px; font-weight:600; }
+.axis text { fill:rgba(255,255,255,0.5); font-size:9px; font-family:'Space Grotesk','Noto Sans KR',sans-serif; }
+.axis line, .axis path { stroke:rgba(255,255,255,0.12); }
+#timelineMount .layer-evt.dimmed { opacity:0.5; }
+
+.toast {
+  position:fixed; bottom:max(24px, env(safe-area-inset-bottom));
+  left:50%; transform:translateX(-50%) translateY(80px);
+  background:#1a2744; color:#fff; padding:10px 18px; border-radius:10px;
+  font-size:12px; opacity:0; transition:all 0.25s; z-index:200; pointer-events:none;
+}
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="landscape-shell" id="landscapeShell">
+<div class="app">
+  <header class="top-bar">
+    <div style="flex:1;min-width:0">
+      <div class="top-title" id="topTitle">사건 타임라인</div>
+      <div class="top-sub" id="topSub">불러오는 중…</div>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="btn-fs" id="btnFullscreen" onclick="enterFullscreenFromButton()" aria-label="전체 화면" title="전체 화면">
+        <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      </button>
+      <button type="button" class="btn-close" onclick="exitTimeline()" aria-label="닫기">
+        <svg viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="chart-wrap" id="chartWrap">
+    <div id="timelineMount"></div>
+    <div class="state-overlay" id="stateLoading">
+      <div class="spinner"></div>
+      <p>타임라인을 불러오는 중…</p>
+    </div>
+    <div class="state-overlay hidden" id="stateEmpty">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>
+      <p id="stateEmptyText">표시할 이벤트가 없습니다.<br>조서 저장 후 다시 시도해 주세요.</p>
+    </div>
+    <div class="hint-bar" id="hintBar" style="display:none">핀치·드래그 · 탭하면 상세</div>
+    <div class="legend-mini" id="legendMini" style="display:none">
+      <button type="button" class="legend-toggle" onclick="toggleLegend()">범례</button>
+      <div class="legend-panel" id="legendPanel">
+        <span><i class="legend-dot" style="background:rgba(74,124,220,0.7)"></i>알리바이</span>
+        <span><i class="legend-dot" style="background:rgba(255,255,255,0.35)"></i>행위</span>
+        <span><i class="legend-dot" style="background:rgba(240,192,64,0.55)"></i>목격</span>
+        <span><i class="legend-dot" style="background:rgba(167,139,250,0.55)"></i>이동</span>
+        <span><i class="legend-dot" style="border:1px dashed rgba(255,255,255,0.5);background:transparent"></i>추정</span>
+      </div>
+    </div>
+    <div class="zoom-fab" id="zoomFab" style="display:none">
+      <button type="button" onclick="zoomTimeline(1.3)" aria-label="확대"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button type="button" onclick="zoomTimeline(0.77)" aria-label="축소"><svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button type="button" onclick="resetTimelineZoom()" aria-label="초기화"><svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg></button>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="sheet-backdrop" id="sheetBackdrop" onclick="closeSheet(event)"></div>
+<div class="sheet" id="detailSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <div class="sheet-title" id="sheetTitle">이벤트</div>
+    <div class="sheet-sub" id="sheetSub"></div>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+
+<div class="fs-prompt" id="fsPrompt">
+  <p>주소창·하단 바 때문에 타임라인이 잘릴 수 있습니다.<br><strong>전체 화면</strong>으로 보면 넓게 표시됩니다.</p>
+  <button type="button" class="fs-prompt-btn" onclick="enterFullscreenFromPrompt()">전체 화면으로 보기</button>
+  <button type="button" class="fs-prompt-skip" onclick="dismissFsPrompt()">그냥 계속 보기</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var _params = new URLSearchParams(window.location.search);
+var currentCaseId = _params.get('caseId') || '';
+var currentCaseName = '';
+var timelineData = null;
+var timelineLaneLayout = null;
+var zoomBehavior = null;
+var zoomRootG = null;
+var baseXScale = null;
+var chartG = null;
+var xAxisG = null;
+var resizeTimer = null;
+
+var ROLE_COLORS = { suspect:'#dc2626', victim:'#3d8f6a', witness:'#4a7cdc', reference:'#8b5cf6', statement:'#9ca3af' };
+
+var fsDismissed = false;
+
+function getViewportSize() {
+  var vv = window.visualViewport;
+  if (vv) return { w: Math.round(vv.width), h: Math.round(vv.height) };
+  return { w: window.innerWidth, h: window.innerHeight };
+}
+
+function isFullscreenActive() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+}
+
+function getFullscreenElement() {
+  return document.getElementById('landscapeShell');
+}
+
+function requestAppFullscreen() {
+  var el = getFullscreenElement();
+  if (!el) return Promise.reject();
+  var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+  if (!fn) return Promise.reject(new Error('unsupported'));
+  var p = fn.call(el);
+  if (p && p.then) {
+    return p.then(function() {
+      tryLockLandscape();
+      updateShellLayout();
+      if (timelineData) setTimeout(function() { renderTimeline(timelineData); }, 150);
+    });
+  }
+  return Promise.resolve();
+}
+
+function exitAppFullscreen() {
+  if (!isFullscreenActive()) return Promise.resolve();
+  var fn = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+  return fn ? fn.call(document) : Promise.resolve();
+}
+
+function updateShellLayout() {
+  var shell = document.getElementById('landscapeShell');
+  if (!shell) return;
+  var size = getViewportSize();
+  var w = size.w, h = size.h;
+  var portrait = w < h;
+  if (portrait) {
+    shell.classList.add('portrait-rotate');
+    shell.style.width = h + 'px';
+    shell.style.height = w + 'px';
+  } else {
+    shell.classList.remove('portrait-rotate');
+    if (isFullscreenActive()) {
+      shell.style.width = '100%';
+      shell.style.height = '100%';
+    } else {
+      shell.style.width = w + 'px';
+      shell.style.height = h + 'px';
+    }
+  }
+}
+
+function updateFullscreenUi() {
+  var fs = isFullscreenActive();
+  var btn = document.getElementById('btnFullscreen');
+  if (btn) btn.classList.toggle('hidden', fs);
+  if (fs) dismissFsPrompt();
+}
+
+function dismissFsPrompt() {
+  fsDismissed = true;
+  var el = document.getElementById('fsPrompt');
+  if (el) el.classList.add('hidden');
+}
+
+function enterFullscreenFromPrompt() {
+  requestAppFullscreen().then(function() {
+    dismissFsPrompt();
+  }).catch(function() {
+    showToast('전체 화면을 사용할 수 없습니다. 브라우저 메뉴에서 시도해 주세요.');
+    dismissFsPrompt();
+  });
+}
+
+function enterFullscreenFromButton() {
+  requestAppFullscreen().catch(function() {
+    showToast('전체 화면 전환에 실패했습니다.');
+  });
+}
+
+function maybeShowFsPrompt() {
+  if (fsDismissed || isFullscreenActive()) return;
+  var el = document.getElementById('fsPrompt');
+  if (el) el.classList.remove('hidden');
+}
+
+function exitTimeline() {
+  exitAppFullscreen().finally(function() {
+    if (window.history.length > 1) {
+      history.back();
+    } else {
+      location.href = 'timelineCaseList';
+    }
+  });
+}
+
+function tryLockLandscape() {
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape-primary').catch(function() {});
+    }
+  } catch (e) { /* iOS 등 미지원 */ }
+}
+
+function tryAutoFullscreen() {
+  requestAppFullscreen().then(dismissFsPrompt).catch(function() {
+    maybeShowFsPrompt();
+  });
+}
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 2400);
+}
+
+function toggleLegend() {
+  document.getElementById('legendPanel').classList.toggle('open');
+}
+
+function setLoading(on) {
+  document.getElementById('stateLoading').classList.toggle('hidden', !on);
+}
+function setEmpty(on, msg) {
+  var el = document.getElementById('stateEmpty');
+  el.classList.toggle('hidden', !on);
+  if (msg) document.getElementById('stateEmptyText').innerHTML = msg;
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function roleColor(k) { return ROLE_COLORS[k] || ROLE_COLORS.statement; }
+function roleDetailClass(k) { return 'detail-role-' + (k || 'statement'); }
+
+function laneColor(data, laneId) {
+  var lane = data.lanes.find(function(l) { return l.id === laneId; });
+  return lane ? (lane.color || roleColor(lane.roleKey)) : ROLE_COLORS.statement;
+}
+
+function roleFillTint(roleKey, alpha) {
+  var c = roleColor(roleKey);
+  if (c.charAt(0) === '#') {
+    var r = parseInt(c.slice(1,3),16), g = parseInt(c.slice(3,5),16), b = parseInt(c.slice(5,7),16);
+    return 'rgba('+r+','+g+','+b+','+alpha+')';
+  }
+  return 'rgba(255,255,255,'+alpha+')';
+}
+
+function getEventStyle(d, data) {
+  var uncertain = !!d.timeUncertain;
+  var type = (d.type || 'action').toLowerCase();
+  var stroke = laneColor(data, d.laneId);
+  var fill;
+  if (type === 'alibi') {
+    fill = uncertain ? 'rgba(74,124,220,0.32)' : 'rgba(74,124,220,0.62)';
+    stroke = uncertain ? '#6b9fff' : '#4a7cdc';
+  } else if (type === 'observation') {
+    fill = uncertain ? 'rgba(240,192,64,0.28)' : 'rgba(240,192,64,0.48)';
+    stroke = '#e6b830';
+  } else if (type === 'movement') {
+    fill = uncertain ? 'rgba(167,139,250,0.28)' : 'rgba(139,92,246,0.45)';
+    stroke = '#a78bfa';
+  } else {
+    fill = uncertain ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.3)';
+  }
+  return { fill: fill, stroke: stroke, dash: uncertain ? '5 4' : null, rx: type === 'observation' ? 7 : 5 };
+}
+
+function shortName(name, max) {
+  name = name || '미상';
+  return name.length > max ? name.slice(0, max) + '…' : name;
+}
+
+function eventTimeRange(ev) {
+  var s = new Date(ev.start).getTime();
+  if (isNaN(s)) return [0, 0];
+  var e = ev.end ? new Date(ev.end).getTime() : s + 5 * 60 * 1000;
+  if (isNaN(e) || e <= s) e = s + 60 * 1000;
+  return [s, e];
+}
+
+function eventsTimeOverlap(a, b) {
+  var ar = eventTimeRange(a), br = eventTimeRange(b);
+  return ar[0] < br[1] && br[0] < ar[1];
+}
+
+function eventsShouldStack(a, b) {
+  if (eventsTimeOverlap(a, b)) return true;
+  return Math.abs(eventTimeRange(a)[0] - eventTimeRange(b)[0]) < 3 * 60 * 1000;
+}
+
+function assignStackRows(events) {
+  if (!events.length) return 1;
+  var sorted = events.slice().sort(function(a,b) { return eventTimeRange(a)[0] - eventTimeRange(b)[0]; });
+  var rows = [];
+  sorted.forEach(function(ev) {
+    var placed = false;
+    for (var r = 0; r < rows.length; r++) {
+      if (rows[r].every(function(o) { return !eventsShouldStack(ev, o); })) {
+        rows[r].push(ev); ev._stackRow = r; placed = true; break;
+      }
+    }
+    if (!placed) { ev._stackRow = rows.length; rows.push([ev]); }
+  });
+  return Math.max(1, rows.length);
+}
+
+function buildTimelineLaneLayout(data) {
+  var EVT_ROW_H = 26, EVT_GAP = 2, LANE_PAD = 8, LANE_H_MIN = 48, LANE_H_MAX = 280;
+  var plotEvents = (data.events || []).filter(function(d) {
+    return d.start && !isNaN(new Date(d.start).getTime());
+  });
+  plotEvents.forEach(function(e) { delete e._stackRow; });
+  var laneList = [], byId = {}, y = 0;
+  (data.lanes || []).forEach(function(lane) {
+    var laneEvents = plotEvents.filter(function(e) { return e.laneId === lane.id; });
+    var stackCount = assignStackRows(laneEvents);
+    var rowH = EVT_ROW_H, gap = EVT_GAP, height = LANE_H_MIN;
+    if (stackCount > 1) {
+      var natural = LANE_PAD * 2 + stackCount * EVT_ROW_H + (stackCount - 1) * EVT_GAP;
+      height = Math.min(LANE_H_MAX, natural);
+      if (natural > LANE_H_MAX) {
+        var inner = LANE_H_MAX - LANE_PAD * 2;
+        gap = Math.max(1, Math.floor(EVT_GAP * inner / natural));
+        rowH = Math.max(16, (inner - (stackCount - 1) * gap) / stackCount);
+      }
+    }
+    var entry = { id: lane.id, y0: y, height: height, stackCount: stackCount, pad: LANE_PAD, evtRowH: rowH, evtGap: gap };
+    laneList.push(entry); byId[lane.id] = entry; y += height;
+  });
+  return { lanes: laneList, byId: byId, chartH: y, plotEvents: plotEvents };
+}
+
+function eventBlockY(ev, layout) {
+  var lane = layout.byId[ev.laneId];
+  if (!lane) return 0;
+  if (lane.stackCount <= 1) {
+    var barH = Math.min(28, lane.height - lane.pad * 2);
+    return lane.y0 + (lane.height - barH) / 2;
+  }
+  return lane.y0 + lane.pad + (ev._stackRow || 0) * (lane.evtRowH + lane.evtGap);
+}
+
+function eventBlockHeight(ev, layout) {
+  var lane = layout.byId[ev.laneId];
+  if (!lane) return 24;
+  if (lane.stackCount <= 1) return Math.min(28, lane.height - lane.pad * 2);
+  return lane.evtRowH;
+}
+
+function eventLabelY(ev, layout) {
+  return eventBlockY(ev, layout) + eventBlockHeight(ev, layout) / 2 + 3;
+}
+
+function renderTimeline(data) {
+  var mount = document.getElementById('timelineMount');
+  mount.innerHTML = '';
+  setEmpty(false);
+  setLoading(false);
+  document.getElementById('zoomFab').style.display = '';
+  document.getElementById('legendMini').style.display = '';
+  document.getElementById('hintBar').style.display = '';
+
+  var W = mount.clientWidth || 360;
+  var H = mount.clientHeight || 300;
+  var plotTop = 32;
+  var margin = { top: 36, right: 16, bottom: 20, left: 88 };
+  var innerW = Math.max(160, W - margin.left - margin.right);
+  var plotAreaH = H - margin.top - margin.bottom - plotTop;
+  timelineLaneLayout = buildTimelineLaneLayout(data);
+  var layout = timelineLaneLayout;
+  var chartH = layout.chartH;
+  var chartTop = plotTop + Math.max(0, (plotAreaH - chartH) / 2);
+
+  baseXScale = d3.scaleTime()
+    .domain([new Date(data.range.start), new Date(data.range.end)])
+    .range([0, innerW]);
+
+  var svg = d3.select(mount).append('svg').attr('width', W).attr('height', H);
+  var defs = svg.append('defs');
+  var sh = defs.append('filter').attr('id', 'evt-shadow');
+  sh.append('feDropShadow').attr('dx',0).attr('dy',1).attr('stdDeviation',1.5).attr('flood-opacity',0.3);
+
+  zoomRootG = svg.append('g').attr('transform', 'translate('+margin.left+','+margin.top+')');
+  xAxisG = zoomRootG.append('g').attr('class', 'axis axis-x')
+    .call(d3.axisTop(baseXScale).ticks(5).tickFormat(d3.timeFormat('%m/%d %H:%M')));
+
+  zoomRootG.append('line')
+    .attr('x1',0).attr('x2',innerW).attr('y1',plotTop-1).attr('y2',plotTop-1)
+    .attr('stroke','rgba(255,255,255,0.2)');
+
+  chartG = zoomRootG.append('g').attr('class', 'chart-root').attr('transform', 'translate(0,'+chartTop+')');
+
+  chartG.append('rect').attr('x',0).attr('y',0).attr('width',innerW).attr('height',Math.max(chartH,40))
+    .attr('fill','rgba(255,255,255,0.02)').attr('rx',6).attr('stroke','rgba(255,255,255,0.06)');
+
+  data.lanes.forEach(function(lane) {
+    var le = layout.byId[lane.id];
+    if (!le) return;
+    var rk = lane.roleKey || 'statement';
+    chartG.append('rect').attr('x',0).attr('y',le.y0).attr('width',innerW).attr('height',le.height)
+      .attr('fill', roleFillTint(rk, 0.08)).attr('rx',4);
+    chartG.append('rect').attr('x',0).attr('y',le.y0+3).attr('width',2.5).attr('height',Math.max(0,le.height-6))
+      .attr('fill', roleColor(rk)).attr('rx',1);
+    var midY = le.y0 + le.height / 2;
+    var lg = chartG.append('g').attr('transform', 'translate(-8,'+midY+')');
+    lg.append('rect').attr('x',-78).attr('y',-14).attr('width',72).attr('height',28).attr('rx',6)
+      .attr('fill','rgba(255,255,255,0.07)').attr('stroke','rgba(255,255,255,0.08)');
+    lg.append('text').attr('class','lane-label-name').attr('text-anchor','end').attr('x',-6).attr('y',-3)
+      .text(shortName(lane.name, 5));
+    lg.append('text').attr('class','lane-label-role').attr('text-anchor','end').attr('x',-6).attr('y',9)
+      .attr('fill', roleColor(rk)).text(shortName(lane.role || '진술', 4));
+    if (le.y0 > 0) {
+      chartG.append('line').attr('x1',0).attr('x2',innerW).attr('y1',le.y0).attr('y2',le.y0)
+        .attr('stroke','rgba(255,255,255,0.06)');
+    }
+  });
+
+  function drawLayer(xScale) {
+    var lay = timelineLaneLayout;
+    chartG.selectAll('.time-grid,.layer-gap,.layer-evt,.layer-evt-label').remove();
+
+    chartG.selectAll('.time-grid').data(xScale.ticks(6)).join('line')
+      .attr('class','time-grid').attr('x1',function(t){return xScale(t);}).attr('x2',function(t){return xScale(t);})
+      .attr('y1',0).attr('y2',lay.chartH).attr('stroke','rgba(255,255,255,0.05)');
+
+    chartG.selectAll('.layer-gap').data(data.gaps||[]).join('rect')
+      .attr('class','layer-gap')
+      .attr('x',function(d){return xScale(new Date(d.start));})
+      .attr('width',function(d){return Math.max(5,xScale(new Date(d.end))-xScale(new Date(d.start)));})
+      .attr('y',function(d){var l=lay.byId[d.laneId];return l?l.y0+l.pad:0;})
+      .attr('height',function(d){var l=lay.byId[d.laneId];return l?l.height-l.pad*2:28;})
+      .attr('fill','rgba(220,38,38,0.12)').attr('stroke','#f87171').attr('stroke-dasharray','5 3').attr('rx',4)
+      .on('click',function(ev,d){ openGapDetail(d); });
+
+    chartG.selectAll('.layer-evt').data(lay.plotEvents, function(d){return d.id;}).join('rect')
+      .attr('class',function(d){return 'layer-evt'+(d.timeUncertain?' layer-evt-uncertain':'');})
+      .attr('x',function(d){return xScale(new Date(d.start));})
+      .attr('width',function(d){
+        var end = d.end ? new Date(d.end) : new Date(d.start);
+        var w = xScale(end) - xScale(new Date(d.start));
+        return Math.max(d.timeUncertain?8:6, w + (d.end?0:5));
+      })
+      .attr('y',function(d){return eventBlockY(d,lay);})
+      .attr('height',function(d){return eventBlockHeight(d,lay);})
+      .attr('rx',function(d){return getEventStyle(d,data).rx;})
+      .attr('fill',function(d){return getEventStyle(d,data).fill;})
+      .attr('stroke',function(d){return getEventStyle(d,data).stroke;})
+      .attr('stroke-width',1.5)
+      .attr('stroke-dasharray',function(d){return getEventStyle(d,data).dash;})
+      .attr('filter','url(#evt-shadow)')
+      .on('click',function(ev,d){ openEventDetail(d); });
+
+    var labelData = lay.plotEvents.filter(function(d){
+      var end = d.end ? new Date(d.end) : new Date(d.start);
+      var bw = Math.max(6, xScale(end)-xScale(new Date(d.start))+(d.end?0:5));
+      return bw >= 22 && eventBlockHeight(d,lay) >= 12;
+    });
+    chartG.selectAll('.layer-evt-label').data(labelData, function(d){return d.id;}).join('text')
+      .attr('class','evt-label layer-evt-label')
+      .attr('x',function(d){return xScale(new Date(d.start))+3;})
+      .attr('y',function(d){return eventLabelY(d,lay);})
+      .attr('text-anchor','start').attr('dominant-baseline','middle')
+      .each(function(d){
+        var end = d.end ? new Date(d.end) : new Date(d.start);
+        var bw = Math.max(6, xScale(end)-xScale(new Date(d.start))+(d.end?0:5));
+        var chars = Math.max(3, Math.floor((bw-6)/5));
+        var lbl = (d.label||'');
+        var prefix = d.timeUncertain ? '~ ' : '';
+        d3.select(this).text(prefix + (lbl.length>chars ? lbl.slice(0,chars-1)+'…' : lbl));
+      });
+  }
+
+  drawLayer(baseXScale);
+
+  zoomBehavior = d3.zoom()
+    .scaleExtent([0.4, 14])
+    .on('zoom', function(ev) {
+      var zx = ev.transform.rescaleX(baseXScale);
+      xAxisG.call(d3.axisTop(zx).ticks(5).tickFormat(d3.timeFormat('%m/%d %H:%M')));
+      drawLayer(zx);
+    });
+  svg.call(zoomBehavior);
+}
+
+function zoomTimeline(f) {
+  var svg = d3.select('#timelineMount svg');
+  if (!svg.empty() && zoomBehavior) svg.transition().duration(180).call(zoomBehavior.scaleBy, f);
+}
+
+function resetTimelineZoom() {
+  var svg = d3.select('#timelineMount svg');
+  if (!svg.empty() && zoomBehavior) svg.transition().duration(220).call(zoomBehavior.transform, d3.zoomIdentity);
+}
+
+function openSheet() {
+  document.getElementById('sheetBackdrop').classList.add('open');
+  document.getElementById('detailSheet').classList.add('open');
+}
+function closeSheet(e) {
+  if (e && e.target !== document.getElementById('sheetBackdrop')) return;
+  document.getElementById('sheetBackdrop').classList.remove('open');
+  document.getElementById('detailSheet').classList.remove('open');
+}
+
+function formatKoreanClock(iso, approx) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  var h = d.getHours(), m = d.getMinutes(), period;
+  if (h < 5) period = '새벽 '; else if (h < 12) period = '오전 ';
+  else if (h < 17) period = '오후 '; else if (h < 22) period = '저녁 '; else period = '밤 ';
+  var h12 = h % 12; if (h12 === 0) h12 = 12;
+  return (approx ? '약 ' : '') + period + h12 + '시' + (m > 0 ? ' '+m+'분' : '');
+}
+
+function formatTimeRange(start, end, timeText, uncertain, precision) {
+  var prec = precision || '';
+  if (start && prec === 'exact') { var a = formatKoreanClock(start,false); if (a) return a; }
+  if (start && (prec === 'relative' || prec === 'approximate' || uncertain)) {
+    var e = formatKoreanClock(start, true); if (e) return '추정: '+e;
+  }
+  if (timeText) return uncertain ? '추정: '+timeText : timeText;
+  if (start) return formatKoreanClock(start, !!uncertain) || d3.timeFormat('%m/%d %H:%M')(new Date(start));
+  return '';
+}
+
+function formatSourceHtml(source, actorRole) {
+  if (!source) return '—';
+  var tid = source.transcriptId;
+  if (tid && Number(tid) > 0) {
+    var href = '/mobile/writeTranscript?transcriptId='+encodeURIComponent(tid)
+      +(currentCaseId ? '&caseId='+encodeURIComponent(currentCaseId) : '');
+    return '<a class="sheet-link" href="'+href+'">'+escHtml(source.stmtName||'조서')+' #'+tid+'</a>';
+  }
+  return escHtml((source.stmtName||'') + (actorRole ? ' · '+actorRole : ''));
+}
+
+function openEventDetail(ev) {
+  var t = (ev.type||'action').toLowerCase();
+  var tagCls = t==='alibi'?'tag-alibi':(t==='observation'?'tag-observation':(t==='movement'?'tag-movement':'tag-action'));
+  var tagLabel = t==='alibi'?'알리바이':(t==='observation'?'목격':(t==='movement'?'이동':'행위'));
+  document.getElementById('sheetTitle').textContent = ev.label || '이벤트';
+  document.getElementById('sheetSub').textContent =
+    (ev.actorName||'') + (ev.actorName?' · ':'') + formatTimeRange(ev.start,ev.end,ev.timeText,ev.timeUncertain,ev.timePrecision);
+  var timeTag = '';
+  if (ev.timePrecision==='exact') timeTag = '<span class="sheet-tag" style="background:#ecfdf5;color:#047857">절대시간</span>';
+  else if (ev.timePrecision==='relative'||ev.timeUncertain) timeTag = '<span class="sheet-tag" style="background:#fffbeb;color:#92400e">추정·상대</span>';
+  document.getElementById('sheetBody').innerHTML =
+    '<div class="sheet-row">'+timeTag+'<span class="sheet-tag '+tagCls+'">'+tagLabel+'</span>'+
+    '<span class="sheet-tag '+roleDetailClass(ev.actorRoleKey)+'">'+escHtml(ev.actorRole||'진술자')+'</span></div>'+
+    '<div class="sheet-row"><div class="sheet-label">시간 표현</div><div class="sheet-value">'+escHtml(ev.timeText||'—')+'</div></div>'+
+    '<div class="sheet-row"><div class="sheet-label">장소</div><div class="sheet-value">'+escHtml(ev.place||'—')+'</div></div>'+
+    '<div class="sheet-row"><div class="sheet-label">원문</div><div class="sheet-quote">'+escHtml(ev.quote||'')+'</div></div>'+
+    '<div class="sheet-row"><div class="sheet-label">출처</div><div class="sheet-value">'+formatSourceHtml(ev.source,ev.actorRole)+'</div></div>';
+  openSheet();
+}
+
+function openGapDetail(gap) {
+  var lane = timelineData && timelineData.lanes.find(function(l){return l.id===gap.laneId;});
+  document.getElementById('sheetTitle').textContent = '알리바이 공백';
+  document.getElementById('sheetSub').textContent = (lane?lane.name:'') + ' · ' + formatTimeRange(gap.start,gap.end);
+  document.getElementById('sheetBody').innerHTML =
+    '<div class="sheet-row"><span class="sheet-tag tag-gap">공백</span></div>'+
+    '<div class="sheet-row"><div class="sheet-label">근거</div><div class="sheet-value">'+escHtml(gap.reason||'')+'</div></div>';
+  openSheet();
+}
+
+function loadTimeline(caseId) {
+  setLoading(true);
+  setEmpty(false);
+  document.getElementById('timelineMount').innerHTML = '';
+  fetch('/timelineApi?action=get&caseId='+encodeURIComponent(caseId), {credentials:'same-origin'})
+    .then(function(r){return r.json();})
+    .then(function(res) {
+      setLoading(false);
+      if (!res.success) {
+        showToast(res.error||'조회 실패');
+        setEmpty(true, escHtml(res.error||'타임라인을 불러올 수 없습니다.'));
+        document.getElementById('topSub').textContent = '오류';
+        return;
+      }
+      var cnt = res.eventCount || 0;
+      document.getElementById('topSub').textContent =
+        (res.status==='ready' ? '이벤트 '+cnt+'건' : (res.status==='extracting' ? 'AI 추출 중…' : (res.message||res.status||'')));
+      if (res.status !== 'ready' || !res.timeline) {
+        setEmpty(true, '조서에서 시간 정보가 있는 행적이 없거나<br>아직 추출 중입니다.');
+        return;
+      }
+      timelineData = res.timeline;
+      renderTimeline(timelineData);
+    })
+    .catch(function() {
+      setLoading(false);
+      setEmpty(true, '네트워크 오류가 발생했습니다.');
+      showToast('타임라인 조회 실패');
+    });
+}
+
+function initPage() {
+  if (!currentCaseId) {
+    document.getElementById('topTitle').textContent = '타임라인';
+    document.getElementById('topSub').textContent = '사건 ID가 없습니다';
+    setLoading(false);
+    setEmpty(true, '내 사건에서 사건을 선택한 뒤<br>타임라인 버튼으로 들어와 주세요.');
+    return;
+  }
+  document.getElementById('topTitle').textContent = currentCaseId;
+  fetch('/caseApi?action=caseDetail&caseId='+encodeURIComponent(currentCaseId), {credentials:'same-origin'})
+    .then(function(r){return r.json();})
+    .then(function(c) {
+      if (!c.error && c.name) {
+        currentCaseName = c.name;
+        document.getElementById('topTitle').textContent = c.id + ' · ' + c.name;
+      }
+    }).catch(function(){});
+  loadTimeline(currentCaseId);
+}
+
+function onViewportChange() {
+  updateShellLayout();
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function() {
+    if (timelineData) renderTimeline(timelineData);
+  }, 200);
+}
+
+window.addEventListener('resize', onViewportChange);
+window.addEventListener('orientationchange', function() {
+  setTimeout(onViewportChange, 350);
+});
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', onViewportChange);
+  window.visualViewport.addEventListener('scroll', onViewportChange);
+}
+
+document.addEventListener('fullscreenchange', function() {
+  updateFullscreenUi();
+  updateShellLayout();
+  if (timelineData) setTimeout(function() { renderTimeline(timelineData); }, 120);
+});
+document.addEventListener('webkitfullscreenchange', function() {
+  updateFullscreenUi();
+  updateShellLayout();
+  if (timelineData) setTimeout(function() { renderTimeline(timelineData); }, 120);
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  updateShellLayout();
+  initPage();
+  if (_params.get('fs') === '1') {
+    setTimeout(maybeShowFsPrompt, 300);
+  }
+  setTimeout(function() {
+    tryAutoFullscreen();
+    updateShellLayout();
+  }, 500);
+});
+</script>
+</body>
+</html>

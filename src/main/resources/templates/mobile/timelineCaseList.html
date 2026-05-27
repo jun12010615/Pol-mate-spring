@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>POL-MATE | 타임라인 사건 선택</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+:root {
+  --deep:#0d1a33; --navy:#1a2744; --accent:#4a7cdc;
+  --tp:#1a1a2e; --ts:#6b7280; --tm:#9ca3af;
+  --bg:#f0f2f8; --card:#fff; --bd:#e2e5ee;
+  --bnav:64px;
+}
+html, body { height:100%; font-family:'Noto Sans KR',sans-serif; background:var(--bg); }
+.screen { max-width:420px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
+
+.top-header { background:var(--deep); padding:52px 16px 14px; position:sticky; top:0; z-index:10; }
+.header-row { display:flex; align-items:center; gap:12px; }
+.back-btn { width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.12); border:none;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.back-btn svg { width:18px; height:18px; stroke:#fff; }
+.header-title { font-size:17px; font-weight:500; color:#fff; flex:1; }
+.header-sub { font-size:10px; color:rgba(255,255,255,0.5); margin-top:2px; }
+
+.hint-card {
+  margin:16px 16px 0; padding:12px 14px; border-radius:12px;
+  background:#eff6ff; border:1px solid #bfdbfe; font-size:11px; color:#1e40af; line-height:1.6;
+}
+
+.content { flex:1; overflow-y:auto; padding:14px 16px calc(var(--bnav) + 16px); }
+.case-list { display:flex; flex-direction:column; gap:10px; }
+.case-item {
+  background:var(--card); border:1px solid var(--bd); border-radius:14px;
+  padding:14px 16px; display:flex; align-items:center; gap:12px; cursor:pointer;
+  transition:border-color 0.15s, background 0.15s;
+}
+.case-item:active { background:#f4f6fb; border-color:var(--accent); }
+.case-icon {
+  width:40px; height:40px; border-radius:10px; background:#e8edf5;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.case-icon svg { width:18px; height:18px; stroke:var(--navy); }
+.case-info { flex:1; min-width:0; }
+.case-id { font-size:10px; color:var(--tm); margin-bottom:2px; }
+.case-name { font-size:14px; font-weight:500; color:var(--tp); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.case-meta { font-size:10px; color:var(--ts); margin-top:4px; }
+.case-arrow svg { width:16px; height:16px; stroke:var(--tm); }
+.badge { font-size:10px; padding:3px 8px; border-radius:10px; flex-shrink:0; }
+.badge-warn { background:#fffbeb; color:#92400e; }
+.badge-ok { background:#f0fdf4; color:#16a34a; }
+.badge-done { background:#eff6ff; color:#1e40af; }
+.badge-danger { background:#fef2f2; color:#dc2626; }
+
+.empty { text-align:center; padding:48px 20px; color:var(--tm); font-size:13px; line-height:1.7; }
+.loading { text-align:center; padding:40px; color:var(--tm); font-size:12px; }
+
+.bottom-nav {
+  position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+  width:100%; max-width:420px; height:var(--bnav);
+  background:var(--card); border-top:1px solid var(--bd);
+  display:flex; align-items:center; justify-content:space-around; z-index:20;
+}
+.nav-item { display:flex; flex-direction:column; align-items:center; gap:3px; text-decoration:none; color:var(--tm); font-size:9px; }
+.nav-item.active { color:var(--accent); }
+.nav-icon svg { width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.8; }
+</style>
+</head>
+<body>
+<div class="screen">
+  <div class="top-header">
+    <div class="header-row">
+      <button type="button" class="back-btn" onclick="location.href='main'">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div>
+        <div class="header-title">타임라인</div>
+        <div class="header-sub">사건을 선택하세요</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hint-card">사건을 선택하면 <strong>가로 화면</strong> 타임라인으로 이동합니다. 핀치·드래그로 확대·이동할 수 있습니다.</div>
+
+  <div class="content">
+    <div id="caseListMount" class="loading">사건 목록 불러오는 중…</div>
+  </div>
+
+  <nav class="bottom-nav">
+    <a href="main" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>홈</a>
+    <a href="myCase" class="nav-item active"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>사건</a>
+    <a href="/askAI" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg></div>AI</a>
+    <a href="board" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>커뮤니티</a>
+    <a href="mypage" class="nav-item"><div class="nav-icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>마이</a>
+  </nav>
+</div>
+
+<script>
+function statusBadge(s) {
+  var map = { '검토필요':'badge-warn', '진행중':'badge-ok', '완료':'badge-done', '모순탐지':'badge-danger' };
+  return map[s] || 'badge-ok';
+}
+
+function openTimeline(caseId) {
+  location.href = 'caseTimeline?caseId=' + encodeURIComponent(caseId) + '&fs=1';
+}
+
+function renderCases(cases) {
+  var mount = document.getElementById('caseListMount');
+  if (!cases.length) {
+    mount.className = 'empty';
+    mount.innerHTML = '등록된 사건이 없습니다.<br><a href="myCase" style="color:#2563eb">사건 관리</a>에서 사건을 등록해 주세요.';
+    return;
+  }
+  mount.className = 'case-list';
+  mount.innerHTML = cases.map(function(c) {
+    var bCls = statusBadge(c.status);
+    return '<div class="case-item" onclick="openTimeline(\'' + String(c.id).replace(/'/g, "\\'") + '\')">' +
+      '<div class="case-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/><circle cx="18" cy="18" r="3"/></svg></div>' +
+      '<div class="case-info"><div class="case-id">' + (c.id||'') + '</div><div class="case-name">' + (c.name||'') + '</div>' +
+      '<div class="case-meta">조서 ' + (c.docs||0) + '건 · ' + (c.suspect||'') + '</div></div>' +
+      '<span class="badge ' + bCls + '">' + (c.status||'') + '</span>' +
+      '<div class="case-arrow"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>' +
+      '</div>';
+  }).join('');
+}
+
+fetch('/caseApi?action=caseList&status=all', { credentials:'same-origin' })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data && data.error) {
+      document.getElementById('caseListMount').className = 'empty';
+      document.getElementById('caseListMount').textContent = data.error;
+      return;
+    }
+    renderCases(Array.isArray(data) ? data : []);
+  })
+  .catch(function() {
+    document.getElementById('caseListMount').className = 'empty';
+    document.getElementById('caseListMount').textContent = '사건 목록을 불러오지 못했습니다.';
+  });
+</script>
+</body>
+</html>
