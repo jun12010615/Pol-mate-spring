@@ -37,18 +37,21 @@ public class AccessLogController {
         String loginUser = (String) session.getAttribute("loginUser");
         if (loginUser == null) { res.getWriter().write("{\"error\":\"로그인이 필요합니다.\"}"); return; }
 
+        Boolean isAdmin = (Boolean) session.getAttribute("isAdmin");
+        if (isAdmin == null) isAdmin = false;
+
         if ("stats".equals(action)) {
-            handleStats(res, loginUser);
+            handleStats(res, loginUser, isAdmin);
         } else {
-            handleList(res, loginUser, type, from, to, page, Math.min(size, 100));
+            handleList(res, loginUser, isAdmin, type, from, to, page, Math.min(size, 100));
         }
     }
 
-    private void handleList(HttpServletResponse res, String loginUser,
+    private void handleList(HttpServletResponse res, String loginUser, boolean isAdmin,
                             String type, String from, String to,
                             int page, int size) throws IOException {
         try {
-            List<Map<String, Object>> rows = accessLogService.list(loginUser, type, from, to, page, size);
+            List<Map<String, Object>> rows = accessLogService.list(loginUser, isAdmin, type, from, to, page, size);
             JSONArray arr = new JSONArray();
             for (Map<String, Object> r : rows) {
                 JSONObject o = new JSONObject();
@@ -70,9 +73,9 @@ public class AccessLogController {
         }
     }
 
-    private void handleStats(HttpServletResponse res, String loginUser) throws IOException {
+    private void handleStats(HttpServletResponse res, String loginUser, boolean isAdmin) throws IOException {
         try {
-            Map<String, Object> stats = accessLogService.stats(loginUser);
+            Map<String, Object> stats = accessLogService.stats(loginUser, isAdmin);
             JSONObject o = new JSONObject();
             Object today = stats.get("today"); o.put("today", today != null ? ((Number) today).longValue() : 0);
             Object week  = stats.get("week");  o.put("week",  week  != null ? ((Number) week).longValue()  : 0);

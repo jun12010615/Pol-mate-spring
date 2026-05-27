@@ -222,17 +222,29 @@
             </a>
         </div>
 
+        <!-- 관리자 섹션 — isAdmin=true 일 때만 렌더링 -->
+        <th:block th:if="${session.isAdmin}">
+        <div class="pm-nav-group">
+            <div class="pm-nav-group-title">관리자</div>
+            <a th:href="@{/desktop/adminPanel}"
+               th:class="${currentPage == 'adminPanel'} ? 'pm-nav-item active' : 'pm-nav-item'">
+                <span class="pm-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><polyline points="16 11 18 13 22 9"/></svg></span>
+                <span class="pm-nav-label">권한 관리</span>
+            </a>
+            <a th:href="@{/desktop/accessLog}"
+               th:class="${currentPage == 'accessLog'} ? 'pm-nav-item active' : 'pm-nav-item'">
+                <span class="pm-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="12" y1="9" x2="12" y2="15"/></svg></span>
+                <span class="pm-nav-label">접근 로그</span>
+            </a>
+        </div>
+        </th:block>
+
         <div class="pm-nav-group">
             <div class="pm-nav-group-title">기타</div>
             <a th:href="@{/desktop/board}"
                th:class="${currentPage == 'board'} ? 'pm-nav-item active' : 'pm-nav-item'">
                 <span class="pm-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
                 <span class="pm-nav-label">커뮤니티 게시판</span>
-            </a>
-            <a th:href="@{/desktop/accessLog}"
-               th:class="${currentPage == 'accessLog'} ? 'pm-nav-item active' : 'pm-nav-item'">
-                <span class="pm-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="12" y1="9" x2="12" y2="15"/></svg></span>
-                <span class="pm-nav-label">접근 로그</span>
             </a>
             <a th:href="@{/desktop/mypage}"
                th:class="${currentPage == 'mypage'} ? 'pm-nav-item active' : 'pm-nav-item'">

@@ -33,17 +33,25 @@ public class AccessLogService {
         } catch (Exception ignored) {}
     }
 
-    public List<Map<String, Object>> list(String myUserId, String targetType,
+    public List<Map<String, Object>> list(String myUserId, boolean isAdmin, String targetType,
                                           String fromDate, String toDate, int page, int size) {
         StringBuilder sql = new StringBuilder(
             "SELECT al.log_id, al.user_id, al.user_name, al.target_type, " +
             "al.target_id, al.target_name, al.ip_address, al.accessed_at " +
-            "FROM access_logs al " +
-            "WHERE al.user_id IN (" +
-            "  SELECT user_id FROM users WHERE dept_id=(SELECT dept_id FROM users WHERE user_id=?)" +
-            ") ");
+            "FROM access_logs al ");
         List<Object> params = new ArrayList<>();
-        params.add(myUserId);
+
+        if (isAdmin) {
+            // 관리자: 같은 부서 전원 조회
+            sql.append("WHERE al.user_id IN (" +
+                       "  SELECT user_id FROM users WHERE dept_id=(SELECT dept_id FROM users WHERE user_id=?)" +
+                       ") ");
+            params.add(myUserId);
+        } else {
+            // 일반 수사관: 본인 기록만
+            sql.append("WHERE al.user_id=? ");
+            params.add(myUserId);
+        }
 
         if (targetType != null && !targetType.isEmpty()) {
             sql.append("AND al.target_type=? ");
@@ -65,13 +73,22 @@ public class AccessLogService {
         return jdbc.queryForList(sql.toString(), params.toArray());
     }
 
-    public Map<String, Object> stats(String myUserId) {
-        return jdbc.queryForMap(
-            "SELECT " +
-            "SUM(CASE WHEN DATE(accessed_at)=CURDATE() THEN 1 ELSE 0 END) AS today, " +
-            "SUM(CASE WHEN accessed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS week " +
-            "FROM access_logs " +
-            "WHERE user_id IN (SELECT user_id FROM users WHERE dept_id=(SELECT dept_id FROM users WHERE user_id=?))",
-            myUserId);
+    public Map<String, Object> stats(String myUserId, boolean isAdmin) {
+        if (isAdmin) {
+            return jdbc.queryForMap(
+                "SELECT " +
+                "SUM(CASE WHEN DATE(accessed_at)=CURDATE() THEN 1 ELSE 0 END) AS today, " +
+                "SUM(CASE WHEN accessed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS week " +
+                "FROM access_logs " +
+                "WHERE user_id IN (SELECT user_id FROM users WHERE dept_id=(SELECT dept_id FROM users WHERE user_id=?))",
+                myUserId);
+        } else {
+            return jdbc.queryForMap(
+                "SELECT " +
+                "SUM(CASE WHEN DATE(accessed_at)=CURDATE() THEN 1 ELSE 0 END) AS today, " +
+                "SUM(CASE WHEN accessed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS week " +
+                "FROM access_logs WHERE user_id=?",
+                myUserId);
+        }
     }
 }

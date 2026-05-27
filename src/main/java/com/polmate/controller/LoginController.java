@@ -69,6 +69,7 @@ public class LoginController {
         session.setAttribute("userRank",   user.getUserRank());
         session.setAttribute("userOrg",    user.getUserOrg());
         session.setAttribute("userPhone",  user.getUserPhone());
+        session.setAttribute("isAdmin",    user.isAdmin());
         session.setMaxInactiveInterval(60 * 60);
 
         return "desktop".equals(redirectTo) ? "redirect:/desktop/main" : "redirect:/mobile/main";

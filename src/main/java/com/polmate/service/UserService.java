@@ -165,6 +165,25 @@ public class UserService {
         }
     }
 
+    /** 같은 부서의 모든 사용자 목록 (관리자 패널용) */
+    public List<Map<String, Object>> getDeptUsers(String myUserId) {
+        return jdbc.queryForList(
+            "SELECT u.user_id, u.user_name, u.user_rank, u.is_admin " +
+            "FROM users u " +
+            "WHERE u.dept_id = (SELECT dept_id FROM users WHERE user_id = ?) " +
+            "ORDER BY u.is_admin DESC, u.user_name ASC",
+            myUserId);
+    }
+
+    /** 관리자 권한 부여 / 해제 */
+    @Transactional
+    public boolean setAdminStatus(String targetUserId, boolean newIsAdmin) {
+        int rows = jdbc.update(
+            "UPDATE users SET is_admin = ? WHERE user_id = ?",
+            newIsAdmin ? 1 : 0, targetUserId);
+        return rows > 0;
+    }
+
     public Integer getDaysSincePasswordChange(String userId) {
         return userRepo.getDaysSincePasswordChange(userId);
     }

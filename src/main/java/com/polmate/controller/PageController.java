@@ -1,5 +1,6 @@
 package com.polmate.controller;
 
+import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 
@@ -51,5 +52,17 @@ public class PageController {
     @GetMapping("/desktop/cctvAnalysis")       public String desktopCctvAnalysis()       { return "desktop/cctvAnalysis"; }
     @GetMapping("/desktop/contradictionList")  public String desktopContradictionList()  { return "desktop/contradictionList"; }
     @GetMapping("/desktop/emotionAnalysis")    public String desktopEmotionAnalysis()    { return "desktop/emotionAnalysis"; }
-    @GetMapping("/desktop/accessLog")          public String desktopAccessLog()          { return "desktop/accessLog"; }
+    @GetMapping("/desktop/accessLog")
+    public String desktopAccessLog(HttpSession session) {
+        Boolean isAdmin = (Boolean) session.getAttribute("isAdmin");
+        if (isAdmin == null || !isAdmin) return "redirect:/desktop/main";
+        return "desktop/accessLog";
+    }
+
+    @GetMapping("/desktop/adminPanel")
+    public String desktopAdminPanel(HttpSession session) {
+        Boolean isAdmin = (Boolean) session.getAttribute("isAdmin");
+        if (isAdmin == null || !isAdmin) return "redirect:/desktop/main";
+        return "desktop/adminPanel";
+    }
 }

@@ -45,4 +45,5 @@ public interface UserRepository extends JpaRepository<User, String> {
                        @Param("nc") boolean nc,
                        @Param("nr") boolean nr,
                        @Param("nm") boolean nm);
+
 }

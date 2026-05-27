@@ -47,6 +47,9 @@ public class User {
     @Column(name = "night_mode")
     private boolean nightMode;
 
+    @Column(name = "is_admin")
+    private boolean isAdmin;
+
     @CreationTimestamp
 
     @Column(name = "created_at", updatable = false)
