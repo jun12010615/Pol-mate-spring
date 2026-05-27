@@ -2746,54 +2746,50 @@ def _compute_change_rate(emotions_list: list) -> list:
     return rates
 
 
-def _detect_highlights(rates: list, threshold_factor: float = 1.2, abs_min: float = 5.0) -> list:
+def _detect_highlights(rates: list, emotions_list: list = None) -> list:
     """
-    변화율 기반 하이라이트 구간 탐지 (개선).
+    감정 점수 기반 위험 구간 탐지.
 
-    기존 문제: threshold_factor=1.4 + 전체 변화가 작으면 아무것도 안 잡힘
-    개선:
-    - threshold_factor를 1.2로 낮춤 (더 민감하게)
-    - 절대값 하한선 abs_min 추가: 변화율이 낮아도 상대적으로 높은 구간은 탐지
-    - 전체 변화량이 매우 작은 경우(평탄한 진술) 최대 변화 구간 1개 강제 반환
+    위험 구간 조건 (하나라도 해당되면 위험 구간으로 표시):
+    1. 불안 ↑10 AND 회피 ↑10 AND 확신 ↓10  (이전 문장 대비 동시 충족)
+    2. 불안 절대값 ≥ 50
+    3. 확신이 이전 문장 대비 20점 이상 하락
+
+    ※ _compute_change_rate 는 그대로 유지하며, rates 는 maxChange 계산에 활용.
     """
-    if len(rates) < 2:
+    if not emotions_list:
         return []
 
-    non_zero = [r for r in rates if r > 0]
-    if not non_zero:
-        return []
-
-    mu    = sum(rates) / len(rates)
-    sigma = math.sqrt(sum((r - mu) ** 2 for r in rates) / len(rates))
-
-    # 변화량이 전반적으로 작은 경우 (sigma < 2.0): 최대값 구간 1개 강제 반환
-    if sigma < 2.0:
-        max_idx = rates.index(max(rates))
-        if rates[max_idx] > 0:
-            return [{
-                "start":     max(0, max_idx - 1),
-                "end":       max_idx,
-                "maxChange": round(rates[max_idx], 2),
-            }]
-        return []
-
-    threshold = max(mu + threshold_factor * sigma, abs_min)
     highlights = []
-    i = 0
-    while i < len(rates):
-        if rates[i] >= threshold:
-            start = max(0, i - 1)
-            end   = i
-            while end + 1 < len(rates) and rates[end + 1] >= threshold:
-                end += 1
+
+    for i, emo in enumerate(emotions_list):
+        # 조건 2: 불안 절대값 50점 이상
+        cond2 = emo.get("불안", 0) >= 50
+
+        cond1 = False
+        cond3 = False
+        if i > 0:
+            prev = emotions_list[i - 1]
+            anxiety_rise    = emo.get("불안", 0)  - prev.get("불안", 0)
+            avoidance_rise  = emo.get("회피", 0)  - prev.get("회피", 0)
+            confidence_drop = prev.get("확신", 0) - emo.get("확신", 0)
+
+            # 조건 1: 불안↑10 AND 회피↑10 AND 확신↓10 동시 충족
+            cond1 = (anxiety_rise >= 10 and avoidance_rise >= 10 and confidence_drop >= 10)
+            # 조건 3: 확신 20점 이상 급하락
+            cond3 = confidence_drop >= 20
+
+        if cond1 or cond2 or cond3:
+            start      = max(0, i - 1)
+            end        = i
+            rate_slice = rates[start: end + 1] if rates else [0.0]
+            max_change = round(max(rate_slice), 2) if rate_slice else 0.0
             highlights.append({
                 "start":     start,
                 "end":       end,
-                "maxChange": round(max(rates[start:end + 1]), 2),
+                "maxChange": max_change,
             })
-            i = end + 1
-        else:
-            i += 1
+
     return highlights
 
 
@@ -2815,7 +2811,7 @@ def emotion_analyze():
 
     emotions_list = [r["emotions"] for r in results]
     rates         = _compute_change_rate(emotions_list)
-    highlights    = _detect_highlights(rates)
+    highlights    = _detect_highlights(rates, emotions_list)
 
     output = []
     for i, r in enumerate(results):
