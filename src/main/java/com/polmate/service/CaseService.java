@@ -119,9 +119,17 @@ public class CaseService {
 
     // ── 조서 통계 ─────────────────────────────────────────────────
     public Map<String, Object> docStats(String userId) {
-        return jdbc.queryForMap(
-                "SELECT COUNT(*) AS total, SUM(CASE WHEN has_contradiction=1 THEN 1 ELSE 0 END) AS contradiction " +
-                        "FROM transcripts WHERE user_id=?", userId);
+        Map<String, Object> stats = new HashMap<>();
+        Integer total = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM transcripts WHERE user_id=?", Integer.class, userId);
+        // has_contradiction은 transcripts에서 업데이트되지 않으므로
+        // 실제 모순 탐지 결과가 저장된 contradiction_results 테이블에서 카운트
+        Integer contradiction = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM contradiction_results WHERE user_id=? AND has_contradiction=1",
+                Integer.class, userId);
+        stats.put("total", total != null ? total : 0);
+        stats.put("contradiction", contradiction != null ? contradiction : 0);
+        return stats;
     }
 
     // ── 사건 생성 ─────────────────────────────────────────────────

@@ -120,7 +120,7 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
     </div>
 
     <div class="stat-grid">
-        <div class="stat-card"><div class="stat-val" id="statCase">-</div><div class="stat-lbl">담당 사건 수</div></div>
+        <div class="stat-card"><div class="stat-val" id="statCase">-</div><div class="stat-lbl">전체 담당 사건 수</div></div>
         <div class="stat-card"><div class="stat-val" id="statTranscript">-</div><div class="stat-lbl">작성 진술 조서</div></div>
         <div class="stat-card"><div class="stat-val" id="statBoard">-</div><div class="stat-lbl">커뮤니티 게시글</div></div>
     </div>
@@ -312,7 +312,7 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
             var s = d.stats || {};
             if (document.getElementById('statCase'))       document.getElementById('statCase').textContent       = s.totalCases        != null ? s.totalCases        : '-';
             if (document.getElementById('statTranscript')) document.getElementById('statTranscript').textContent = s.totalTranscripts   != null ? s.totalTranscripts   : '-';
-            if (document.getElementById('statBoard'))      document.getElementById('statBoard').textContent      = '-';
+            if (document.getElementById('statBoard'))      document.getElementById('statBoard').textContent      = s.totalBoardPosts    != null ? s.totalBoardPosts    : '-';
         }).catch(function() {});
     loadHistory();
 })();

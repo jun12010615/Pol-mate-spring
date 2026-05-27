@@ -266,6 +266,12 @@ public class UserService {
 
         int relEdges = historyRepo.countByUserId(userId);
         stats.put("relationEdges", relEdges);
+
+        // 커뮤니티 게시글 수
+        Integer boardCount = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM board_posts WHERE user_id = ?", Integer.class, userId);
+        stats.put("totalBoardPosts", boardCount != null ? boardCount : 0);
+
         return stats;
     }
 }
