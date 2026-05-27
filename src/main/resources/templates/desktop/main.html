@@ -13,7 +13,7 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 .pm-greeting-name { font-size: 22px; font-weight: 500; color: #1a1a2e; }
 .pm-greeting-name strong { font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
 .pm-greeting-hint { font-size: 12px; color: #6b7280; margin-top: 4px; }
-.pm-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 28px 0; }
+.pm-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 28px 0; }
 .pm-stat-card { background: #fff; border: 1px solid #e2e5ee; border-radius: 16px; padding: 20px; text-align: center; }
 .pm-stat-val { font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700; color: #0d1a33; line-height: 1.1; }
 .pm-stat-val.danger { color: #dc2626; }
@@ -129,9 +129,8 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 
     <div class="pm-stat-grid">
         <div class="pm-stat-card"><div class="pm-stat-val" id="cntActive">—</div><div class="pm-stat-lbl">진행 중인 사건</div></div>
-        <div class="pm-stat-card"><div class="pm-stat-val danger" id="cntContradiction">—</div><div class="pm-stat-lbl">모순 탐지 사건</div></div>
         <div class="pm-stat-card"><div class="pm-stat-val" id="cntTranscript">—</div><div class="pm-stat-lbl">작성한 조서</div></div>
-        <div class="pm-stat-card"><div class="pm-stat-val danger" id="cntContradictionDoc">—</div><div class="pm-stat-lbl">조서 모순 탐지</div></div>
+        <div class="pm-stat-card"><div class="pm-stat-val danger" id="cntContradictionDoc">—</div><div class="pm-stat-lbl">모순 탐지</div></div>
     </div>
 
     <div class="pm-sec-label">주요 수사 도구</div>
@@ -226,7 +225,6 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
                 if (c.status === '모순탐지') { cntContra++; if (!alertCaseId) alertCaseId = c.id; }
             });
             document.getElementById('cntActive').textContent        = cntActive;
-            document.getElementById('cntContradiction').textContent = cntContra;
             document.getElementById('metaContradiction').textContent = '신규 ' + cntContra + '건';
 
             if (alertCaseId) {
