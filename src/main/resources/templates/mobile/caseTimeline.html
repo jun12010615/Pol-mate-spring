@@ -10,6 +10,7 @@
 <title>POL-MATE | 타임라인</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Space+Grotesk:wght@500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="/js/timeline-labels.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 :root {
@@ -213,8 +214,10 @@ html, body {
 .detail-role-statement { background:#f4f6fb; color:#6b7280; }
 .sheet-link { color:#2563eb; font-weight:500; text-decoration:none; }
 
-.evt-label { fill:rgba(255,255,255,0.95); font-size:9px; font-weight:500; pointer-events:none;
-  paint-order:stroke; stroke:rgba(13,26,51,0.85); stroke-width:2px; }
+.evt-label { font-weight:500; pointer-events:none; paint-order:stroke; stroke-linejoin:round; }
+.evt-label-inside { fill:rgba(255,255,255,0.96); font-size:10px; stroke:rgba(13,26,51,0.88); stroke-width:2px; }
+.evt-label-outside { fill:rgba(255,255,255,0.94); font-size:10px; stroke:rgba(13,26,51,0.92); stroke-width:2.5px; }
+.evt-label-bg { fill:rgba(13,26,51,0.9); stroke:rgba(255,255,255,0.1); stroke-width:0.5px; }
 .lane-label-name { fill:rgba(255,255,255,0.92); font-size:10px; font-weight:500; }
 .lane-label-role { font-size:9px; font-weight:600; }
 .axis text { fill:rgba(255,255,255,0.5); font-size:9px; font-family:'Space Grotesk','Noto Sans KR',sans-serif; }
@@ -258,7 +261,7 @@ html, body {
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>
       <p id="stateEmptyText">표시할 이벤트가 없습니다.<br>조서 저장 후 다시 시도해 주세요.</p>
     </div>
-    <div class="hint-bar" id="hintBar" style="display:none">핀치·드래그 · 탭하면 상세</div>
+    <div class="hint-bar" id="hintBar" style="display:none">막대 옆 요약 확인 · 탭하면 상세 · 핀치·드래그</div>
     <div class="legend-mini" id="legendMini" style="display:none">
       <button type="button" class="legend-toggle" onclick="toggleLegend()">범례</button>
       <div class="legend-panel" id="legendPanel">
@@ -510,7 +513,7 @@ function eventsTimeOverlap(a, b) {
 
 function eventsShouldStack(a, b) {
   if (eventsTimeOverlap(a, b)) return true;
-  return Math.abs(eventTimeRange(a)[0] - eventTimeRange(b)[0]) < 3 * 60 * 1000;
+  return Math.abs(eventTimeRange(a)[0] - eventTimeRange(b)[0]) < 10 * 60 * 1000;
 }
 
 function assignStackRows(events) {
@@ -642,7 +645,7 @@ function renderTimeline(data) {
 
   function drawLayer(xScale) {
     var lay = timelineLaneLayout;
-    chartG.selectAll('.time-grid,.layer-gap,.layer-evt,.layer-evt-label').remove();
+    chartG.selectAll('.time-grid,.layer-gap,.layer-evt,.layer-evt-label-g').remove();
 
     chartG.selectAll('.time-grid').data(xScale.ticks(6)).join('line')
       .attr('class','time-grid').attr('x1',function(t){return xScale(t);}).attr('x2',function(t){return xScale(t);})
@@ -675,24 +678,15 @@ function renderTimeline(data) {
       .attr('filter','url(#evt-shadow)')
       .on('click',function(ev,d){ openEventDetail(d); });
 
-    var labelData = lay.plotEvents.filter(function(d){
-      var end = d.end ? new Date(d.end) : new Date(d.start);
-      var bw = Math.max(6, xScale(end)-xScale(new Date(d.start))+(d.end?0:5));
-      return bw >= 22 && eventBlockHeight(d,lay) >= 12;
+    var labelLayouts = TimelineLabels.computeLayouts(lay.plotEvents, xScale, lay, innerW, {
+      charWidth: 5.6,
+      maxExtend: 96,
+      summaryMax: 20,
+      labelY: function(d) { return eventLabelY(d, lay); },
+      blockHeight: function(d) { return eventBlockHeight(d, lay); }
     });
-    chartG.selectAll('.layer-evt-label').data(labelData, function(d){return d.id;}).join('text')
-      .attr('class','evt-label layer-evt-label')
-      .attr('x',function(d){return xScale(new Date(d.start))+3;})
-      .attr('y',function(d){return eventLabelY(d,lay);})
-      .attr('text-anchor','start').attr('dominant-baseline','middle')
-      .each(function(d){
-        var end = d.end ? new Date(d.end) : new Date(d.start);
-        var bw = Math.max(6, xScale(end)-xScale(new Date(d.start))+(d.end?0:5));
-        var chars = Math.max(3, Math.floor((bw-6)/5));
-        var lbl = (d.label||'');
-        var prefix = d.timeUncertain ? '~ ' : '';
-        d3.select(this).text(prefix + (lbl.length>chars ? lbl.slice(0,chars-1)+'…' : lbl));
-      });
+    TimelineLabels.drawLabelGroups(chartG, labelLayouts);
+    chartG.selectAll('.layer-evt-label-g').raise();
   }
 
   drawLayer(baseXScale);
@@ -705,6 +699,7 @@ function renderTimeline(data) {
       drawLayer(zx);
     });
   svg.call(zoomBehavior);
+  TimelineLabels.applyInitialZoom(svg, zoomBehavior, layout.plotEvents, baseXScale, innerW);
 }
 
 function zoomTimeline(f) {

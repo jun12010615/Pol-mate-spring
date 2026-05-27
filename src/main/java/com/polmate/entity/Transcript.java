@@ -57,6 +57,10 @@ public class Transcript {
     @Column(name = "has_contradiction")
     private int hasContradiction;
 
+    /** 타임라인 AI 추출 시점의 원문 해시 — 재추출 시 본문 동일하면 스킵 */
+    @Column(name = "timeline_source_hash", length = 64)
+    private String timelineSourceHash;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

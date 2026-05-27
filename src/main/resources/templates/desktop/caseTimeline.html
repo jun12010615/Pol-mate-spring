@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" th:href="@{/css/polmate.css}">
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script th:src="@{/js/timeline-labels.js}"></script>
 <script th:inline="javascript">
 var _ctx = '';
 var _initCaseId = /*[[${param.caseId ?: ''}]]*/ '';
@@ -28,6 +29,9 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 .btn-toolbar:hover { border-color: #0d1a33; color: #0d1a33; }
 .btn-toolbar:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-toolbar svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; flex-shrink: 0; }
+/* DEV-ONLY */
+.btn-toolbar-dev { border-color: #f59e0b; color: #b45309; background: #fffbeb; }
+.btn-toolbar-dev:hover:not(:disabled) { border-color: #d97706; color: #92400e; background: #fef3c7; }
 .toolbar-divider { width: 1px; height: 22px; background: #e2e5ee; }
 
 .map-layout { display: flex; flex: 1; overflow: hidden; }
@@ -145,8 +149,19 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 .canvas-hint.show { display: block; }
 
 .evt-label {
-    fill: rgba(255,255,255,0.95); font-size: 10px; font-weight: 500; pointer-events: none;
-    paint-order: stroke; stroke: rgba(13,26,51,0.85); stroke-width: 2.5px; stroke-linejoin: round;
+    font-weight: 500; pointer-events: none;
+    paint-order: stroke; stroke-linejoin: round;
+}
+.evt-label-inside {
+    fill: rgba(255,255,255,0.96); font-size: 11px;
+    stroke: rgba(13,26,51,0.88); stroke-width: 2.5px;
+}
+.evt-label-outside {
+    fill: rgba(255,255,255,0.94); font-size: 11px;
+    stroke: rgba(13,26,51,0.92); stroke-width: 3px;
+}
+.evt-label-bg {
+    fill: rgba(13,26,51,0.88); stroke: rgba(255,255,255,0.12); stroke-width: 0.5px;
 }
 .lane-label-name { fill: rgba(255,255,255,0.95); font-size: 12px; font-weight: 500; }
 .lane-label-role { font-size: 10px; font-weight: 600; letter-spacing: 0.2px; }
@@ -209,6 +224,10 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
     <span class="toolbar-case" id="toolbarCaseName">사건을 선택해 주세요</span>
     <span class="toolbar-badge" id="toolbarStatus" style="display:none;"></span>
     <div class="toolbar-spacer"></div>
+    <!-- DEV-ONLY: 개발용 재추출 (배포 전 아래 버튼·CSS·rebuildTimelineDev 삭제) -->
+    <button type="button" class="btn-toolbar btn-toolbar-dev" id="btnRebuildDev" onclick="rebuildTimelineDev()" disabled title="본문 동일해도 전 조서 강제 재추출">
+        <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>개발용 재추출
+    </button>
     <button type="button" class="btn-toolbar" id="btnRebuild" onclick="rebuildTimeline()" disabled>
         <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>이벤트 재추출
     </button>
@@ -281,7 +300,7 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
         <div class="legend-item"><span class="legend-swatch" style="background:transparent;border:2px solid #dc2626"></span>피의자 레인</div>
         <div class="legend-item"><span class="legend-swatch" style="background:transparent;border:2px solid #3d8f6a"></span>피해자 레인</div>
     </div>
-    <div class="canvas-hint" id="canvasHint">드래그로 이동 · 스크롤로 확대/축소 · 이벤트 클릭 시 상세</div>
+    <div class="canvas-hint" id="canvasHint">요약은 막대·옆 글자로 표시 · 클릭하면 상세 · 드래그·스크롤로 이동·확대</div>
 </div>
 
 </div>
@@ -318,8 +337,10 @@ var rebuildPollTimer = null;
 
 function setRebuildButtonsEnabled(on) {
     var tb = document.getElementById('btnRebuild');
+    var db = document.getElementById('btnRebuildDev');
     var pb = document.getElementById('btnRebuildPanel');
     if (tb) tb.disabled = !on;
+    if (db) db.disabled = !on;
     if (pb) {
         pb.disabled = !on;
         if (on) pb.classList.add('show');
@@ -419,14 +440,17 @@ function showRebuildProgress(res) {
     document.getElementById('canvasHint').classList.remove('show');
 }
 
-function rebuildTimeline() {
+function rebuildTimeline(forceDev) {
     if (!currentCaseId) { showToast('사건을 먼저 선택해 주세요.'); return; }
     var tb = document.getElementById('btnRebuild');
+    var db = document.getElementById('btnRebuildDev');
     var pb = document.getElementById('btnRebuildPanel');
     if (tb) tb.disabled = true;
+    if (db) db.disabled = true;
     if (pb) pb.disabled = true;
-    showRebuildProgress({ message: '재추출 요청 중…' });
-    fetch('/timelineApi?action=rebuild&caseId=' + encodeURIComponent(currentCaseId), { credentials: 'same-origin' })
+    var action = forceDev ? 'rebuildDev' : 'rebuild';
+    showRebuildProgress({ message: forceDev ? '[개발용] 강제 재추출 요청 중…' : '재추출 요청 중…' });
+    fetch('/timelineApi?action=' + action + '&caseId=' + encodeURIComponent(currentCaseId), { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(res) {
             if (!res.success) {
@@ -445,6 +469,11 @@ function rebuildTimeline() {
             setRebuildButtonsEnabled(!!currentCaseId);
             loadTimeline(currentCaseId);
         });
+}
+
+/* DEV-ONLY: 배포 전 삭제 */
+function rebuildTimelineDev() {
+    rebuildTimeline(true);
 }
 
 function pollTimelineAfterRebuild(attempt) {
@@ -628,11 +657,11 @@ function assignStackRows(events) {
     return Math.max(1, rows.length);
 }
 
-/** 시간 구간 겹침 또는 시작 시각이 가까우면(축소 시 라벨 겹침 방지) 다른 행에 배치 */
+/** 시간 겹침·근접 시 막대·요약 라벨이 겹치지 않도록 다른 행에 배치 */
 function eventsShouldStack(a, b) {
     if (eventsTimeOverlap(a, b)) return true;
     var as = eventTimeRange(a)[0], bs = eventTimeRange(b)[0];
-    return Math.abs(as - bs) < 3 * 60 * 1000;
+    return Math.abs(as - bs) < 10 * 60 * 1000;
 }
 
 function buildTimelineLaneLayout(data) {
@@ -812,7 +841,7 @@ function renderTimeline(data) {
 
     function drawLayer(xScale) {
         var lay = timelineLaneLayout;
-        chartG.selectAll('.time-grid, .layer-gap, .layer-evt, .layer-evt-label').remove();
+        chartG.selectAll('.time-grid, .layer-gap, .layer-evt, .layer-evt-label-g').remove();
 
         var gridTicks = xScale.ticks(8);
         chartG.selectAll('.time-grid').data(gridTicks).join('line')
@@ -872,31 +901,14 @@ function renderTimeline(data) {
                 d3.select(this).attr('filter', 'url(#evt-shadow)').attr('stroke-width', 1.5);
             });
 
-        var labelData = plotEvents.filter(function(d) {
-            var end = d.end ? new Date(d.end) : new Date(d.start);
-            var w = xScale(end) - xScale(new Date(d.start));
-            var bw = Math.max(d.timeUncertain ? 10 : 8, w + (d.end ? 0 : 6));
-            var bh = eventBlockHeight(d, lay);
-            return bw >= 28 && bh >= 14;
+        var labelLayouts = TimelineLabels.computeLayouts(plotEvents, xScale, lay, innerW, {
+            charWidth: 6.2,
+            maxExtend: 130,
+            summaryMax: 24,
+            labelY: function(d) { return eventLabelY(d, lay); },
+            blockHeight: function(d) { return eventBlockHeight(d, lay); }
         });
-
-        chartG.selectAll('.layer-evt-label').data(labelData, function(d) { return d.id; }).join('text')
-            .attr('class', 'evt-label layer-evt-label')
-            .attr('x', function(d) { return xScale(new Date(d.start)) + 4; })
-            .attr('y', function(d) { return eventLabelY(d, lay); })
-            .attr('text-anchor', 'start')
-            .attr('dominant-baseline', 'middle')
-            .each(function(d) {
-                var end = d.end ? new Date(d.end) : new Date(d.start);
-                var x0 = xScale(new Date(d.start));
-                var x1 = xScale(end);
-                var bw = Math.max(8, x1 - x0 + (d.end ? 0 : 6));
-                var chars = Math.max(4, Math.floor((bw - 8) / 6));
-                var prefix = d.timeUncertain ? '~ ' : '';
-                var lbl = d.label || '';
-                var text = prefix + (lbl.length > chars ? lbl.slice(0, Math.max(1, chars - 1)) + '…' : lbl);
-                d3.select(this).text(text);
-            });
+        TimelineLabels.drawLabelGroups(chartG, labelLayouts);
 
         chartG.selectAll('.layer-evt').attr('title', function(d) {
             var prefix = d.timeUncertain ? '~ ' : '';
@@ -905,7 +917,7 @@ function renderTimeline(data) {
 
         chartG.selectAll('.chart-plot-bg, .lane-band, .lane-band-accent, .lane-separator').lower();
         chartG.selectAll('.lane-label-group').raise();
-        chartG.selectAll('.layer-evt-label').raise();
+        chartG.selectAll('.layer-evt-label-g').raise();
     }
 
     drawLayer(baseXScale);
@@ -922,6 +934,7 @@ function renderTimeline(data) {
 
     svg.call(zoomBehavior);
     currentTransform = d3.zoomIdentity;
+    TimelineLabels.applyInitialZoom(svg, zoomBehavior, layout.plotEvents, baseXScale, innerW);
 }
 
 function zoomTimeline(factor) {

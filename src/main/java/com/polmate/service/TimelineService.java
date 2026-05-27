@@ -26,6 +26,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -47,6 +48,7 @@ public class TimelineService {
         volatile String message = "";
         volatile int processed;
         volatile int total;
+        volatile int skipped;
         volatile int eventsSaved;
         volatile String currentLabel = "";
     }
@@ -79,15 +81,33 @@ public class TimelineService {
     private record KoreanClock(int hour24, int minute, String phrase, int position) {}
 
     private static final Pattern[] KR_CLOCK_PATTERNS = {
-        Pattern.compile("(오전)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
-        Pattern.compile("(오후)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
-        Pattern.compile("(밤)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
-        Pattern.compile("(저녁)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
-        Pattern.compile("(새벽)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
-        Pattern.compile("(낮)\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(오전)\\s*(\\d{1,2})\\s*시(?!\\s*간)(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(오후)\\s*(\\d{1,2})\\s*시(?!\\s*간)(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(밤)\\s*(\\d{1,2})\\s*시(?!\\s*간)(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(저녁)\\s*(\\d{1,2})\\s*시(?!\\s*간)(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(새벽)\\s*(\\d{1,2})\\s*시(?!\\s*간)(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(낮)\\s*(\\d{1,2})\\s*시(?!\\s*간)(?:\\s*(\\d{1,2})\\s*분)?"),
+        Pattern.compile("(아침)\\s*(\\d{1,2})\\s*시(?!\\s*간)(?:\\s*(\\d{1,2})\\s*분)?"),
     };
 
-    private static final boolean[] KR_CLOCK_IS_PM = {false, true, true, true, false, false};
+    /** 오전/오후 없는 「3시 10분」「15시」 — signal 탐지와 파싱 일치 */
+    private static final Pattern KR_BARE_CLOCK = Pattern.compile(
+        "(?<!(?:오전|오후|새벽|저녁|밤|낮|아침)\\s)(\\d{1,2})\\s*시(?!\\s*간)(?:\\s*(\\d{1,2})\\s*분)?");
+
+    private static final Pattern KR_COLON_CLOCK = Pattern.compile("\\d{1,2}\\s*:\\s*\\d{2}");
+
+    private static final Pattern TIMELESS_RELATIONSHIP = Pattern.compile(
+        "(?:알고\\s*지낸|지기\\s*친구|비즈니스\\s*관계|관계(?:일|로)\\s*뿐|인맥|아는\\s*사이|"
+            + "고교\\s*시절|오래\\s*알|면\\s*알|친분|지인|동창|동업)",
+        Pattern.CASE_INSENSITIVE);
+
+    private static final Pattern KR_MONTH_DAY = Pattern.compile("(\\d{1,2})\\s*월\\s*(\\d{1,2})\\s*일");
+
+    private static final Pattern CASE_ID_DATE = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})");
+
+    private static final Pattern CASE_ID_COMPACT = Pattern.compile("(\\d{4})[-_](\\d{2})(\\d{2})\\b");
+
+    private static final boolean[] KR_CLOCK_IS_PM = {false, true, true, true, false, false, false};
 
     private final TimelineEventRepository eventRepo;
     private final CaseRepository caseRepo;
@@ -303,11 +323,37 @@ public class TimelineService {
         return h;
     }
 
+    private static int inferBareKoreanHour24(int h, String text, int matchStart) {
+        h = Math.max(0, Math.min(23, h));
+        int from = Math.max(0, matchStart - 24);
+        String ctx = text.substring(from, matchStart);
+        if (ctx.contains("새벽") || ctx.contains("오전") || ctx.contains("아침")) {
+            return h == 12 ? 0 : h;
+        }
+        if (ctx.contains("오후") || ctx.contains("저녁") || ctx.contains("밤")) {
+            if (h == 12) {
+                return 12;
+            }
+            return (h >= 1 && h <= 11) ? h + 12 : h;
+        }
+        if (h >= 13) {
+            return h;
+        }
+        if (h == 12) {
+            return 12;
+        }
+        if (h >= 1 && h <= 11) {
+            return h + 12;
+        }
+        return 12;
+    }
+
     private static List<KoreanClock> findAllKoreanClocks(String text) {
         if (text == null || text.isBlank()) {
             return List.of();
         }
         List<KoreanClock> hits = new ArrayList<>();
+        boolean[] covered = new boolean[text.length() + 1];
         for (int i = 0; i < KR_CLOCK_PATTERNS.length; i++) {
             Matcher m = KR_CLOCK_PATTERNS[i].matcher(text);
             boolean pm = KR_CLOCK_IS_PM[i];
@@ -318,8 +364,32 @@ public class TimelineService {
                     int minute = minGroup != null && !minGroup.isBlank() ? Integer.parseInt(minGroup) : 0;
                     int h24 = koreanTo24Hour(h12, minute, pm);
                     hits.add(new KoreanClock(h24, minute, m.group(0).trim(), m.start()));
+                    for (int p = m.start(); p < m.end() && p < covered.length; p++) {
+                        covered[p] = true;
+                    }
                 } catch (NumberFormatException ignored) {
                 }
+            }
+        }
+        Matcher bare = KR_BARE_CLOCK.matcher(text);
+        while (bare.find()) {
+            boolean overlap = false;
+            for (int p = bare.start(); p < bare.end(); p++) {
+                if (p < covered.length && covered[p]) {
+                    overlap = true;
+                    break;
+                }
+            }
+            if (overlap) {
+                continue;
+            }
+            try {
+                int h = Integer.parseInt(bare.group(1));
+                String minGroup = bare.group(2);
+                int minute = minGroup != null && !minGroup.isBlank() ? Integer.parseInt(minGroup) : 0;
+                int h24 = inferBareKoreanHour24(h, text, bare.start());
+                hits.add(new KoreanClock(h24, minute, bare.group(0).trim(), bare.start()));
+            } catch (NumberFormatException ignored) {
             }
         }
         hits.sort(Comparator.comparingInt(KoreanClock::position));
@@ -359,29 +429,89 @@ public class TimelineService {
         return nvl(e.getQuote(), "") + "\n" + nvl(e.getTimeText(), "") + "\n" + nvl(e.getLabel(), "");
     }
 
-    private static LocalDate parseDateFromEventText(String text) {
+    private static LocalDate parseDateFromEventText(String text, LocalDate referenceDate) {
         if (text == null || text.isBlank()) {
             return null;
         }
         Matcher dm = KR_DATE_PREFIX.matcher(text);
-        if (!dm.find()) {
+        if (dm.find()) {
+            try {
+                return LocalDate.of(
+                    Integer.parseInt(dm.group(1)),
+                    Integer.parseInt(dm.group(2)),
+                    Integer.parseInt(dm.group(3)));
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        if (referenceDate != null) {
+            Matcher md = KR_MONTH_DAY.matcher(text);
+            if (md.find()) {
+                try {
+                    return LocalDate.of(
+                        referenceDate.getYear(),
+                        Integer.parseInt(md.group(1)),
+                        Integer.parseInt(md.group(2)));
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+            }
+            if (text.contains("어제")) {
+                return referenceDate.minusDays(1);
+            }
+            if (text.contains("그제") || text.contains("그저께")) {
+                return referenceDate.minusDays(2);
+            }
+            if (text.contains("오늘") || text.contains("금일")) {
+                return referenceDate;
+            }
+        }
+        return null;
+    }
+
+    private static LocalDate inferCaseReferenceDate(String caseId) {
+        if (caseId == null || caseId.isBlank()) {
             return null;
         }
-        try {
-            return LocalDate.of(
-                Integer.parseInt(dm.group(1)),
-                Integer.parseInt(dm.group(2)),
-                Integer.parseInt(dm.group(3)));
-        } catch (NumberFormatException e) {
-            return null;
+        Matcher m = CASE_ID_DATE.matcher(caseId.trim());
+        if (m.find()) {
+            try {
+                return LocalDate.of(
+                    Integer.parseInt(m.group(1)),
+                    Integer.parseInt(m.group(2)),
+                    Integer.parseInt(m.group(3)));
+            } catch (NumberFormatException e) {
+                return null;
+            }
         }
+        Matcher c = CASE_ID_COMPACT.matcher(caseId.trim());
+        if (c.find()) {
+            try {
+                return LocalDate.of(
+                    Integer.parseInt(c.group(1)),
+                    Integer.parseInt(c.group(2)),
+                    Integer.parseInt(c.group(3)));
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private LocalDate resolveTranscriptReferenceDate(Transcript tr) {
+        if (tr.getPreambleYear() != null && tr.getPreambleYear() > 0
+            && tr.getPreambleMonth() != null && tr.getPreambleMonth() > 0
+            && tr.getPreambleDay() != null && tr.getPreambleDay() > 0) {
+            return LocalDate.of(tr.getPreambleYear(), tr.getPreambleMonth(), tr.getPreambleDay());
+        }
+        return inferCaseReferenceDate(tr.getCaseId());
     }
 
     private static final Pattern ISO_DATETIME_IN_TEXT = Pattern.compile(
         "(\\d{4})-(\\d{2})-(\\d{2})[T\\s](\\d{1,2}):(\\d{2})(?::(\\d{2}))?");
 
-    /** time_text → label → quote 순으로 날짜·시각을 읽어 time_start/end 확정 (AI time_start보다 우선). */
-    private void reconcileEventTimesFromQuote(TimelineEvent e) {
+    /** quote·기준일에 근거가 있을 때만 time_start/end 확정. */
+    private void reconcileEventTimesFromQuote(TimelineEvent e, LocalDate referenceDate) {
         String timeText = nvl(e.getTimeText(), "");
         String label = nvl(e.getLabel(), "");
         String quote = nvl(e.getQuote(), "");
@@ -390,9 +520,23 @@ public class TimelineService {
             return;
         }
 
-        LocalDateTime isoStart = parseDateTimeFromTextField(timeText);
+        if (!eventTimeGrounded(e, referenceDate)) {
+            sanitizeHallucinatedEventTimes(e, referenceDate);
+            return;
+        }
+
+        LocalDateTime isoStart = null;
+        LocalDateTime fromTt = parseDateTimeFromTextField(timeText);
+        if (fromTt != null && (quoteContainsTimeEvidence(quote, timeText, fromTt)
+            || (textHasTimelineClockSignal(timeText) && eventTimeGrounded(e, referenceDate)))) {
+            isoStart = fromTt;
+        }
         if (isoStart == null) {
-            isoStart = parseDateTimeFromTextField(label);
+            LocalDateTime fromLabel = parseDateTimeFromTextField(label);
+            if (fromLabel != null && (quoteContainsTimeEvidence(quote, label, fromLabel)
+                || (textHasTimelineClockSignal(label) && eventTimeGrounded(e, referenceDate)))) {
+                isoStart = fromLabel;
+            }
         }
         if (isoStart != null) {
             e.setTimeStart(isoStart);
@@ -406,21 +550,28 @@ public class TimelineService {
 
         KoreanClock start = pickStartClock(timeText, label, quote);
         if (start == null) {
+            sanitizeHallucinatedEventTimes(e, referenceDate);
             return;
         }
-
-        LocalDate base = parseDateFromEventText(timeText);
+        LocalDate base = parseDateFromEventText(quote, referenceDate);
         if (base == null) {
-            base = parseDateFromEventText(label);
+            base = parseDateFromEventText(timeText, referenceDate);
         }
         if (base == null) {
-            base = parseDateFromEventText(quote);
+            base = parseDateFromEventText(label, referenceDate);
         }
-        if (base == null && e.getTimeStart() != null) {
-            base = e.getTimeStart().toLocalDate();
+        if (base == null && referenceDate != null
+            && textHasTimelineClockSignal(quote, timeText, label)) {
+            base = referenceDate;
         }
         if (base == null) {
-            base = LocalDate.now();
+            e.setTimeStart(null);
+            e.setTimeEnd(null);
+            e.setTimePrecision("unknown");
+            if (timeText.isBlank()) {
+                e.setTimeText(start.phrase());
+            }
+            return;
         }
 
         LocalDateTime startDt = LocalDateTime.of(base, LocalTime.of(start.hour24(), start.minute()));
@@ -475,7 +626,7 @@ public class TimelineService {
     }
 
     private static KoreanClock pickStartClock(String timeText, String label, String quote) {
-        for (String src : List.of(timeText, label, quote)) {
+        for (String src : List.of(quote, timeText, label)) {
             if (src.isBlank()) {
                 continue;
             }
@@ -488,7 +639,7 @@ public class TimelineService {
     }
 
     private static KoreanClock pickEndClock(String timeText, String label, String quote, KoreanClock start) {
-        for (String src : List.of(timeText, label, quote)) {
+        for (String src : List.of(quote, timeText, label)) {
             if (src.isBlank()) {
                 continue;
             }
@@ -565,14 +716,30 @@ public class TimelineService {
     }
 
     private void normalizeTimelineEventTimes(List<TimelineEvent> rows, boolean deleteMergedRows) {
+        normalizeTimelineEventTimes(rows, deleteMergedRows, null);
+    }
+
+    private void normalizeTimelineEventTimes(List<TimelineEvent> rows, boolean deleteMergedRows, LocalDate referenceDate) {
         for (TimelineEvent row : rows) {
-            reconcileEventTimesFromQuote(row);
+            reconcileEventTimesFromQuote(row, referenceDate);
         }
         resolveRelativeDurationsFromText(rows);
         applyActivityDurationEnd(rows);
         mergeSamePeriodAlibiBlocks(rows, deleteMergedRows);
         inheritSameTimeContext(rows);
+        sanitizeAllEventTimes(rows, referenceDate);
         resolveVagueEventTimes(rows);
+    }
+
+    private static boolean quoteContainsTimeEvidence(String quote, String field, LocalDateTime dt) {
+        if (quote == null || quote.isBlank() || dt == null) {
+            return false;
+        }
+        if (field != null && !field.isBlank() && quote.contains(field.trim())) {
+            return true;
+        }
+        String iso = dt.format(ISO);
+        return quote.contains(iso) || textHasTimelineClockSignal(quote);
     }
 
     private void applyActivityDurationEnd(List<TimelineEvent> rows) {
@@ -817,19 +984,13 @@ public class TimelineService {
         if (isSameSpeakerAlibiContinuation(quote)) {
             return false;
         }
-        if (quote.contains("대신") && (quote.contains("봤") || quote.contains("보았") || quote.contains("목격"))) {
+        if (quote.contains("대신") && (quote.contains("봤") || quote.contains("보았") || quote.contains("목격")
+            || quote.contains("보이지") || quote.contains("없었") || quote.contains("있었"))) {
             return true;
         }
-        for (String c : SAME_TIME_CONNECTORS) {
-            if ("대신".equals(c)) continue;
-            if (quote.contains(c)) return true;
-        }
-        String[] markers = {"보이지", "목격", "봤", "보았"};
-        for (String m : markers) {
-            if (quote.contains(m)) return true;
-        }
-        return false;
+        return quote.contains("그러나") || quote.contains("그런데") || quote.contains("하지만");
     }
+
 
     private void persistTimelineTimeNormalization(List<TimelineEvent> rows) {
         if (rows.isEmpty()) {
@@ -841,8 +1002,9 @@ public class TimelineService {
                 before.put(row.getEventId(), TimelineTimeSnapshot.of(row));
             }
         }
+        LocalDate ref = rows.isEmpty() ? null : inferCaseReferenceDate(rows.get(0).getCaseId());
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            normalizeTimelineEventTimes(rows, true);
+            normalizeTimelineEventTimes(rows, true, ref);
             for (TimelineEvent row : rows) {
                 if (row.getEventId() == null) {
                     continue;
@@ -890,18 +1052,168 @@ public class TimelineService {
         return tid + "|" + normPersonName(nvl(e.getStmtName(), ""));
     }
 
-    /** 타임라인 저장·표시 대상: 시간 단서가 있는 이벤트만 */
+    /** 타임라인 저장·표시 대상: quote(원문)에 시간 근거가 있는 이벤트만 */
     private boolean hasTimeSignal(TimelineEvent e) {
-        if (e.getTimeStart() != null) return true;
-        String prec = nvl(e.getTimePrecision(), "");
-        String tt = nvl(e.getTimeText(), "");
-        if (tt.isEmpty()) return false;
-        if ("exact".equals(prec) || "approximate".equals(prec) || "relative".equals(prec)) return true;
-        String[] hints = {"시", "분", "쯤", "경", "전", "후", "뒤", "이후", "이전", "당시", "무렵", "오전", "오후", "새벽", "저녁"};
-        for (String h : hints) {
-            if (tt.contains(h)) return true;
+        return eventTimeGrounded(e, inferCaseReferenceDate(e.getCaseId()));
+    }
+
+    private static boolean eventTimeGrounded(TimelineEvent e, LocalDate referenceDate) {
+        String quote = nvl(e.getQuote(), "").trim();
+        String timeText = nvl(e.getTimeText(), "").trim();
+        if (quote.isBlank()) {
+            return false;
         }
-        return false;
+        if (isTimelessRelationshipStatement(e)) {
+            return false;
+        }
+        if (textHasTimelineClockSignal(quote)) {
+            return true;
+        }
+        if (tryParseRelativeOffsetMinutes(quote) != null) {
+            return true;
+        }
+        if (parseDateFromEventText(quote, referenceDate) != null) {
+            return true;
+        }
+        String label = nvl(e.getLabel(), "").trim();
+        if (!timeText.isBlank() && textHasTimelineClockSignal(timeText)
+            && clockPhraseOverlapsQuote(timeText, quote, label)) {
+            return true;
+        }
+        if (referenceDate != null && textHasTimelineClockSignal(quote, timeText)) {
+            return true;
+        }
+        return "observation".equalsIgnoreCase(nvl(e.getEventType(), ""))
+            && observationHasTimeAnchor(e);
+    }
+
+    private static boolean clockPhraseOverlapsQuote(String timeText, String quote, String label) {
+        if (timeText.isBlank()) {
+            return false;
+        }
+        if (!quote.isBlank() && quote.contains(timeText)) {
+            return true;
+        }
+        if (!label.isBlank() && label.contains(timeText)) {
+            return true;
+        }
+        for (KoreanClock c : findAllKoreanClocks(timeText)) {
+            if (!quote.isBlank() && quote.contains(c.phrase())) {
+                return true;
+            }
+            if (!label.isBlank() && label.contains(c.phrase())) {
+                return true;
+            }
+        }
+        Matcher md = KR_MONTH_DAY.matcher(timeText);
+        if (md.find()) {
+            String frag = md.group(0);
+            if ((!quote.isBlank() && quote.contains(frag)) || (!label.isBlank() && label.contains(frag))) {
+                return true;
+            }
+        }
+        return quote.isBlank() && label.isBlank();
+    }
+
+    private static boolean isTimelessRelationshipStatement(TimelineEvent e) {
+        String quote = nvl(e.getQuote(), "").trim();
+        if (quote.isBlank()) {
+            return false;
+        }
+        if (textHasTimelineClockSignal(quote) || tryParseRelativeOffsetMinutes(quote) != null) {
+            return false;
+        }
+        if (!TIMELESS_RELATIONSHIP.matcher(quote).find()) {
+            return false;
+        }
+        String[] timedActions = {"갔", "왔", "했다", "하였", "만났", "출발", "도착", "이동", "들어", "나갔", "머물", "체류", "방문"};
+        for (String v : timedActions) {
+            if (quote.contains(v)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void sanitizeHallucinatedEventTimes(TimelineEvent e, LocalDate referenceDate) {
+        if (eventTimeGrounded(e, referenceDate)) {
+            return;
+        }
+        e.setTimeStart(null);
+        e.setTimeEnd(null);
+        e.setTimePrecision("unknown");
+        String tt = nvl(e.getTimeText(), "");
+        String quote = nvl(e.getQuote(), "");
+        if (!tt.isBlank() && !quote.isBlank() && !quote.contains(tt) && !textHasTimelineClockSignal(quote)) {
+            e.setTimeText(null);
+        }
+    }
+
+    private void sanitizeAllEventTimes(List<TimelineEvent> rows, LocalDate referenceDate) {
+        for (TimelineEvent row : rows) {
+            sanitizeHallucinatedEventTimes(row, referenceDate);
+        }
+    }
+
+    private static boolean observationHasTimeAnchor(TimelineEvent e) {
+        String quote = nvl(e.getQuote(), "");
+        if (textHasTimelineClockSignal(quote)) {
+            return true;
+        }
+        if (tryParseRelativeOffsetMinutes(quote) != null) {
+            return true;
+        }
+        return quote.contains("대신")
+            && (quote.contains("봤") || quote.contains("보았") || quote.contains("목격")
+            || quote.contains("보이지") || quote.contains("없었") || quote.contains("있었"));
+    }
+
+    private static boolean textHasTimelineClockSignal(String... parts) {
+        if (parts == null || parts.length == 0) {
+            return false;
+        }
+        if (parts.length == 1) {
+            return textHasTimelineClockSignalInText(parts[0]);
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String p : parts) {
+            if (p != null && !p.isBlank()) {
+                if (sb.length() > 0) sb.append(' ');
+                sb.append(p.trim());
+            }
+        }
+        return textHasTimelineClockSignalInText(sb.toString());
+    }
+
+    private static boolean textHasTimelineClockSignalInText(String joined) {
+        if (joined == null || joined.isBlank()) {
+            return false;
+        }
+        if (!findAllKoreanClocks(joined).isEmpty()) {
+            return true;
+        }
+        if (REL_MINUTES_AFTER.matcher(joined).find() || REL_HOURS_AFTER.matcher(joined).find()) {
+            return true;
+        }
+        if (ISO_DATETIME_IN_TEXT.matcher(joined).find()) {
+            return true;
+        }
+        if (KR_MONTH_DAY.matcher(joined).find()) {
+            return true;
+        }
+        if (joined.matches(".*\\d{4}\\s*년\\s*\\d{1,2}\\s*월.*")) {
+            return true;
+        }
+        if (joined.matches(".*\\d{1,2}/\\d{1,2}.*")) {
+            return true;
+        }
+        if (joined.contains("당일") || joined.contains("그날") || joined.contains("이날")
+            || joined.contains("금일") || joined.contains("범행 당시") || joined.contains("사건 당시")
+            || joined.contains("어제") || joined.contains("그제") || joined.contains("그저께")
+            || joined.contains("오늘")) {
+            return true;
+        }
+        return KR_COLON_CLOCK.matcher(joined).find() || KR_BARE_CLOCK.matcher(joined).find();
     }
 
     private static final Pattern REL_MINUTES_AFTER = Pattern.compile(
@@ -1154,6 +1466,15 @@ public class TimelineService {
     }
 
     public Map<String, Object> startRebuildForCase(String caseId, String userId) {
+        return startRebuildForCase(caseId, userId, false);
+    }
+
+    /** DEV-ONLY: 본문 해시 동일해도 전 조서 AI 재추출. 배포 전 삭제. */
+    public Map<String, Object> startDevRebuildForCase(String caseId, String userId) {
+        return startRebuildForCase(caseId, userId, true);
+    }
+
+    private Map<String, Object> startRebuildForCase(String caseId, String userId, boolean forceExtract) {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("success", false);
         if (caseId == null || caseId.isBlank()) {
@@ -1190,66 +1511,128 @@ public class TimelineService {
             return out;
         }
 
-        scheduleRebuildForCase(caseId, targets);
+        long toExtract = forceExtract
+            ? targets.size()
+            : targets.stream().filter(t -> !shouldSkipExtract(t)).count();
+        long skipCount = targets.size() - toExtract;
+
+        if (!forceExtract && toExtract == 0) {
+            RebuildJob job = new RebuildJob();
+            job.status = "completed";
+            job.total = targets.size();
+            job.processed = targets.size();
+            job.skipped = targets.size();
+            job.message = "조서 " + targets.size() + "건 본문 동일 — 기존 타임라인 이벤트를 유지했습니다.";
+            rebuildJobs.put(caseId, job);
+            out.put("success", true);
+            out.put("caseId", caseId);
+            out.put("transcriptCount", targets.size());
+            out.put("status", "completed");
+            out.put("message", job.message);
+            attachRebuildJob(out, caseId);
+            return out;
+        }
+
+        scheduleRebuildForCase(caseId, targets, forceExtract);
         out.put("success", true);
         out.put("caseId", caseId);
         out.put("transcriptCount", targets.size());
         out.put("status", "extracting");
-        out.put("message", "조서 " + targets.size() + "건에 대해 AI 타임라인 추출을 시작했습니다.");
+        if (forceExtract) {
+            out.put("message", "[개발용] 조서 " + targets.size() + "건 강제 AI 재추출을 시작했습니다.");
+        } else if (skipCount > 0) {
+            out.put("message", "조서 " + targets.size() + "건 중 " + toExtract + "건만 AI 추출(나머지 " + skipCount + "건은 기존 이벤트 유지).");
+        } else {
+            out.put("message", "조서 " + targets.size() + "건에 대해 AI 타임라인 추출을 시작했습니다.");
+        }
         attachRebuildJob(out, caseId);
         return out;
     }
 
     public void scheduleRebuildForCase(String caseId, List<Transcript> targets) {
+        scheduleRebuildForCase(caseId, targets, false);
+    }
+
+    private void scheduleRebuildForCase(String caseId, List<Transcript> targets, boolean forceExtract) {
         RebuildJob job = new RebuildJob();
         job.total = targets.size();
-        job.message = "AI 추출 준비 중…";
+        job.message = forceExtract ? "[개발용] AI 추출 준비 중…" : "AI 추출 준비 중…";
         rebuildJobs.put(caseId, job);
 
-        Thread t = new Thread(() -> runRebuildForCase(caseId, targets, job), "timeline-rebuild-" + caseId);
+        String threadName = forceExtract ? "timeline-rebuild-dev-" + caseId : "timeline-rebuild-" + caseId;
+        Thread t = new Thread(() -> runRebuildForCase(caseId, targets, job, forceExtract), threadName);
         t.setDaemon(true);
         t.start();
     }
 
-    private void runRebuildForCase(String caseId, List<Transcript> targets, RebuildJob job) {
+    private void runRebuildForCase(String caseId, List<Transcript> targets, RebuildJob job, boolean forceExtract) {
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
         int savedTotal = 0;
+        int skipped = 0;
+        int extracted = 0;
         String lastError = null;
 
         try {
             synchronized (lockForCase(caseId)) {
-                tx.executeWithoutResult(status -> eventRepo.deleteByCaseId(caseId));
                 for (Transcript tr : targets) {
                     job.processed++;
                     job.currentLabel = nvl(tr.getStmtName(), "조서 #" + tr.getTranscriptId());
                     job.message = rebuildProgressMessage(job);
+                    if (!forceExtract && shouldSkipExtract(tr)) {
+                        skipped++;
+                        job.skipped = skipped;
+                        continue;
+                    }
                     try {
                         int saved = tx.execute(status -> doExtractEventsForTranscript(tr));
                         savedTotal += saved;
+                        extracted++;
                     } catch (Exception e) {
                         lastError = e.getMessage();
                         log.warn("timeline rebuild failed transcriptId={}: {}", tr.getTranscriptId(), e.getMessage(), e);
                     }
                     job.eventsSaved = savedTotal;
+                    job.skipped = skipped;
                 }
             }
 
             job.eventsSaved = savedTotal;
-            if (lastError != null && savedTotal == 0) {
+            job.skipped = skipped;
+            if (lastError != null && extracted == 0 && skipped == 0) {
                 job.status = "failed";
                 job.message = lastError;
-            } else if (savedTotal == 0) {
+            } else if (extracted == 0 && skipped == targets.size()) {
                 job.status = "completed";
-                job.message = "조서 " + job.processed + "건을 처리했으나, 시간 정보가 있는 이벤트가 추출되지 않았습니다.";
+                job.message = "조서 " + skipped + "건 본문 동일 — 기존 타임라인 이벤트를 유지했습니다.";
+            } else if (savedTotal == 0 && extracted > 0) {
+                job.status = "completed";
+                job.message = rebuildDoneMessage(skipped, extracted, savedTotal);
             } else {
                 job.status = "completed";
-                job.message = "조서 " + job.processed + "건에서 이벤트 " + savedTotal + "건을 추출·저장했습니다.";
+                job.message = rebuildDoneMessage(skipped, extracted, savedTotal);
             }
         } catch (Exception e) {
             job.status = "failed";
             job.message = "재추출 중 오류: " + e.getMessage();
             log.warn("timeline rebuild case {} failed: {}", caseId, e.getMessage(), e);
         }
+    }
+
+    private static String rebuildDoneMessage(int skipped, int extracted, int savedTotal) {
+        StringBuilder sb = new StringBuilder();
+        if (skipped > 0) {
+            sb.append("조서 ").append(skipped).append("건 스킵(본문 동일·이벤트 유지)");
+        }
+        if (extracted > 0) {
+            if (!sb.isEmpty()) sb.append(", ");
+            sb.append("추출 ").append(extracted).append("건");
+            if (savedTotal > 0) {
+                sb.append(" · 이벤트 ").append(savedTotal).append("건 저장");
+            } else {
+                sb.append(" · 시간 정보 있는 이벤트 없음");
+            }
+        }
+        return sb.isEmpty() ? "재추출을 완료했습니다." : sb.toString();
     }
 
     private String rebuildProgressMessage(RebuildJob job) {
@@ -1270,19 +1653,27 @@ public class TimelineService {
         m.put("processed", job.processed);
         m.put("total", job.total);
         m.put("eventsSaved", job.eventsSaved);
+        m.put("skipped", job.skipped);
         m.put("currentLabel", job.currentLabel);
         out.put("rebuildJob", m);
     }
 
     private String resolveTranscriptBody(Transcript tr) {
-        String raw;
+        String raw = "";
         if (tr.getOriginalText() != null && !tr.getOriginalText().isBlank()) {
             raw = tr.getOriginalText().trim();
-        } else {
+        }
+        if (raw.isBlank() && tr.getOriginalHtml() != null && !tr.getOriginalHtml().isBlank()) {
+            raw = tr.getOriginalHtml().replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
+        }
+        if (raw.isBlank()) {
             String ai = tr.getAiResult();
-            if (ai == null || ai.isBlank()) return "";
-            String plain = ai.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
-            raw = plain.length() >= 30 ? plain : "";
+            if (ai != null && !ai.isBlank()) {
+                String plain = ai.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
+                if (plain.length() >= 30) {
+                    raw = plain;
+                }
+            }
         }
         return truncateForTimelineExtract(raw);
     }
@@ -1353,6 +1744,7 @@ public class TimelineService {
         return eventRepo.save(event);
     }
 
+    /** 조서 저장(신규) 직후 해당 조서만 백그라운드 추출 */
     public void scheduleExtractForTranscript(Integer transcriptId) {
         if (transcriptId == null) return;
         Thread t = new Thread(() -> {
@@ -1373,17 +1765,66 @@ public class TimelineService {
         Transcript tr = opt.get();
         String caseId = tr.getCaseId();
         if (caseId == null || caseId.isBlank()) return;
+        if (resolveTranscriptBody(tr).isBlank()) return;
 
         synchronized (lockForCase(caseId)) {
+            if (shouldSkipExtract(tr)) {
+                log.debug("timeline extract skip unchanged transcriptId={}", transcriptId);
+                return;
+            }
             TransactionTemplate tx = new TransactionTemplate(transactionManager);
             tx.executeWithoutResult(status -> doExtractEventsForTranscript(tr));
+        }
+    }
+
+    private boolean shouldSkipExtract(Transcript tr) {
+        if (tr == null || tr.getTranscriptId() == null) return false;
+        String stored = tr.getTimelineSourceHash();
+        if (stored == null || stored.isBlank()) return false;
+        return stored.equals(computeExtractSourceHash(tr));
+    }
+
+    private String computeExtractSourceHash(Transcript tr) {
+        String body = resolveTranscriptBody(tr);
+        String ref = Optional.ofNullable(resolveTranscriptReferenceDate(tr))
+            .map(LocalDate::toString)
+            .orElse("");
+        String meta = nvl(tr.getStmtName(), "") + "|" + nvl(tr.getStmtType(), "")
+            + "|" + tr.getPreambleYear() + "|" + tr.getPreambleMonth() + "|" + tr.getPreambleDay()
+            + "|" + timelineMaxTextChars + "|extract-v4";
+        return sha256Hex(body + "\n" + ref + "\n" + meta);
+    }
+
+    private void persistExtractSourceHash(Transcript tr) {
+        if (tr == null || tr.getTranscriptId() == null) return;
+        String hash = computeExtractSourceHash(tr);
+        transcriptRepo.updateTimelineSourceHash(tr.getTranscriptId(), hash);
+        tr.setTimelineSourceHash(hash);
+    }
+
+    private static String sha256Hex(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
         }
     }
 
     private int doExtractEventsForTranscript(Transcript tr) {
         Integer transcriptId = tr.getTranscriptId();
         String text = resolveTranscriptBody(tr);
-        if (text.isEmpty()) return 0;
+        if (text.isEmpty()) {
+            throw new IllegalStateException(
+                "조서 #" + transcriptId + " 본문이 비어 있습니다. 원문(또는 HTML)을 저장한 뒤 재추출하세요.");
+        }
+
+        LocalDate referenceDate = resolveTranscriptReferenceDate(tr);
 
         JSONObject body = new JSONObject();
         body.put("caseId", nvl(tr.getCaseId(), ""));
@@ -1391,6 +1832,14 @@ public class TimelineService {
         body.put("stmtName", nvl(tr.getStmtName(), "미입력"));
         body.put("stmtType", nvl(tr.getStmtType(), "진술자"));
         body.put("text", text);
+        if (referenceDate != null) {
+            body.put("referenceDate", referenceDate.toString());
+        }
+        if (tr.getPreambleYear() != null) {
+            body.put("preambleYear", tr.getPreambleYear());
+            body.put("preambleMonth", tr.getPreambleMonth());
+            body.put("preambleDay", tr.getPreambleDay());
+        }
 
         FlaskCall fc = callFlask("/timeline/extract", body);
         if (!fc.ok) {
@@ -1412,6 +1861,7 @@ public class TimelineService {
         JSONArray events = resp.optJSONArray("events");
         eventRepo.deleteByTranscriptId(transcriptId);
         if (events == null || events.isEmpty()) {
+            persistExtractSourceHash(tr);
             return 0;
         }
         String caseId = tr.getCaseId();
@@ -1423,7 +1873,7 @@ public class TimelineService {
         for (int i = 0; i < events.length(); i++) {
             JSONObject ev = events.optJSONObject(i);
             if (ev == null) continue;
-            if (!jsonEventHasTimeSignal(ev)) continue;
+            if (!jsonEventHasTimeSignal(ev, referenceDate)) continue;
 
             String label = pickEventLabel(ev, "이벤트");
             String quote = pickEventQuote(ev);
@@ -1451,12 +1901,16 @@ public class TimelineService {
                 .build();
             batch.add(row);
         }
-        normalizeTimelineEventTimes(batch);
+        normalizeTimelineEventTimes(batch, false, referenceDate);
         int saved = 0;
         for (TimelineEvent row : batch) {
+            if (row.getTimeStart() == null || !eventTimeGrounded(row, referenceDate)) {
+                continue;
+            }
             eventRepo.save(row);
             saved++;
         }
+        persistExtractSourceHash(tr);
         return saved;
     }
 
@@ -1584,18 +2038,54 @@ public class TimelineService {
         return null;
     }
 
-    private boolean jsonEventHasTimeSignal(JSONObject ev) {
-        if (parseDateTime(ev.optString("time_start", ev.optString("timeStart", null))) != null) {
+    private boolean jsonEventHasTimeSignal(JSONObject ev, LocalDate referenceDate) {
+        String quote = nvl(ev.optString("quote", ""), "").trim();
+        String timeText = nvl(optString(ev, "time_text", "timeText"), "");
+        if (quote.isBlank()) {
+            return false;
+        }
+        String eventType = nvl(ev.optString("event_type", ev.optString("eventType", "")), "");
+        if (isTimelessRelationshipJson(ev, quote)) {
+            return false;
+        }
+        if (textHasTimelineClockSignal(quote)) {
             return true;
         }
-        String tt = nvl(optString(ev, "time_text", "timeText"), "");
-        if (tt.isEmpty()) return false;
-        String prec = nvl(optString(ev, "time_precision", "timePrecision"), "");
-        if ("exact".equals(prec) || "approximate".equals(prec) || "relative".equals(prec)) return true;
-        String[] hints = {"시", "분", "쯤", "경", "전", "후", "뒤", "이후", "이전", "당시", "무렵", "오전", "오후", "새벽", "저녁"};
-        for (String h : hints) {
-            if (tt.contains(h)) return true;
+        if (tryParseRelativeOffsetMinutes(quote) != null) {
+            return true;
+        }
+        if (parseDateFromEventText(quote, referenceDate) != null) {
+            return true;
+        }
+        String label = nvl(pickEventLabel(ev, ""), "").trim();
+        if (!timeText.isBlank() && textHasTimelineClockSignal(timeText)
+            && clockPhraseOverlapsQuote(timeText, quote, label)) {
+            return true;
+        }
+        if (referenceDate != null && textHasTimelineClockSignal(quote, timeText)) {
+            return true;
+        }
+        if ("observation".equalsIgnoreCase(eventType)) {
+            return quote.contains("대신")
+                && (quote.contains("봤") || quote.contains("보았") || quote.contains("목격")
+                || quote.contains("보이지"));
         }
         return false;
+    }
+
+    private static boolean isTimelessRelationshipJson(JSONObject ev, String quote) {
+        if (textHasTimelineClockSignal(quote) || tryParseRelativeOffsetMinutes(quote) != null) {
+            return false;
+        }
+        if (!TIMELESS_RELATIONSHIP.matcher(quote).find()) {
+            return false;
+        }
+        String[] timedActions = {"갔", "왔", "했다", "하였", "만났", "출발", "도착", "이동", "들어", "나갔", "머물", "체류", "방문"};
+        for (String v : timedActions) {
+            if (quote.contains(v)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

@@ -55,7 +55,7 @@ CORS(app, resources={r"/*": {"origins": "*"}},
 # [섹션 1] 진술 분석 / 관계망 — 설정 및 전역 변수
 # ════════════════════════════════════════════════════════════════════════════
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
-MODEL      = os.environ.get("OLLAMA_MODEL", "exaone3.5:2.4b")
+MODEL      = os.environ.get("OLLAMA_MODEL", "sam860/exaone-4.0:1.2b")
 
 _ANALYZE_JOBS: dict      = {}
 _ANALYZE_JOBS_LOCK       = threading.Lock()
@@ -184,30 +184,53 @@ def clean_output(text: str) -> str:
     return re.sub(r"[#*]", "", text)
 
 
-def call_ollama(prompt: str, expect_json: bool = False) -> str:
-    for attempt in range(3):
+TIMELINE_MAX_TEXT = int(os.environ.get("TIMELINE_MAX_TEXT", "9000"))
+TIMELINE_NUM_PREDICT = int(os.environ.get("TIMELINE_NUM_PREDICT", "3072"))
+TIMELINE_OLLAMA_TIMEOUT = int(os.environ.get("TIMELINE_OLLAMA_TIMEOUT", "180"))
+
+
+def call_ollama(prompt: str, expect_json: bool = False, *, timeline: bool = False) -> str:
+    """Ollama 호출. timeline=True 이면 타임라인 추출용 옵션·타임아웃."""
+    if timeline:
+        options = {
+            "temperature": 0.05,
+            "repeat_penalty": 1.0,
+            "num_predict": TIMELINE_NUM_PREDICT,
+            "num_ctx": int(os.environ.get("TIMELINE_NUM_CTX", "8192")),
+        }
+        attempts, timeout = 2, TIMELINE_OLLAMA_TIMEOUT
+    else:
+        options = {"temperature": 0.1, "repeat_penalty": 1.0}
+        attempts, timeout = 3, 300
+
+    for attempt in range(attempts):
         try:
-            res = requests.post(OLLAMA_URL, json={
-                "model":   MODEL,
-                "prompt":  prompt,
-                "stream":  False,
-                "options": {"temperature": 0.1, "repeat_penalty": 1.0}
-            }, timeout=300)
-            text = res.json().get("response", "")
+            res = requests.post(
+                OLLAMA_URL,
+                json={"model": MODEL, "prompt": prompt, "stream": False, "options": options},
+                timeout=timeout,
+            )
+            res.raise_for_status()
+            text = res.json().get("response", "") or ""
+            if timeline:
+                text = text.strip()
+                mobj = re.search(r'\{[\s\S]*"events"\s*:\s*\[[\s\S]*\}', text)
+                if mobj:
+                    return mobj.group(0).strip()
+                return text
             if not expect_json:
                 return strip_markdown(text)
-            match = re.search(r'\{[\s\S]*\}', text)
+            match = re.search(r"\{[\s\S]*\}", text)
             if match:
                 return match.group(0)
         except Exception as e:
-            if attempt == 2:
+            if attempt == attempts - 1:
                 raise e
     return ""
 
 
-TIMELINE_MAX_TEXT = int(os.environ.get("TIMELINE_MAX_TEXT", "9000"))
-TIMELINE_NUM_PREDICT = int(os.environ.get("TIMELINE_NUM_PREDICT", "3072"))
-TIMELINE_OLLAMA_TIMEOUT = int(os.environ.get("TIMELINE_OLLAMA_TIMEOUT", "180"))
+def call_ollama_timeline(prompt: str) -> str:
+    return call_ollama(prompt, timeline=True)
 
 
 def _truncate_timeline_text(text: str, max_chars=None) -> str:
@@ -220,33 +243,6 @@ def _truncate_timeline_text(text: str, max_chars=None) -> str:
     if nl > limit * 7 // 10:
         cut = cut[:nl]
     return cut + "\n…(이하 생략)"
-
-
-def call_ollama_timeline(prompt: str) -> str:
-    """타임라인 전용: 출력 토큰 상한·짧은 타임아웃으로 속도 우선."""
-    opts = {
-        "temperature": 0.05,
-        "repeat_penalty": 1.0,
-        "num_predict": TIMELINE_NUM_PREDICT,
-        "num_ctx": int(os.environ.get("TIMELINE_NUM_CTX", "8192")),
-    }
-    for attempt in range(2):
-        try:
-            res = requests.post(OLLAMA_URL, json={
-                "model": MODEL,
-                "prompt": prompt,
-                "stream": False,
-                "options": opts,
-            }, timeout=TIMELINE_OLLAMA_TIMEOUT)
-            res.raise_for_status()
-            text = res.json().get("response", "")
-            match = re.search(r'\{[\s\S]*\}', text)
-            if match:
-                return match.group(0)
-        except Exception as e:
-            if attempt == 1:
-                raise e
-    return ""
 
 
 def iter_ollama_tokens(prompt: str):
@@ -267,11 +263,6 @@ def iter_ollama_tokens(prompt: str):
             piece = obj.get("response")
             if piece:
                 yield piece
-
-
-def iter_ollama_tokens_display(prompt: str):
-    for piece in iter_ollama_tokens(prompt):
-        yield clean_output(piece)
 
 
 # ── 프롬프트 빌더 ────────────────────────────────────────────────────────────
@@ -317,56 +308,6 @@ def _pass1_prompt(case_num: str, n: int, full_body: str) -> str:
 1. 원본에서 날짜·시간·장소·인물이 불명확한 항목만. 없으면 한 줄로 "없음". 최대 3개.
 
 짧고 명확하게 한국어로만 답해라."""
-
-
-def _cross_rules(n: int) -> str:
-    if n <= 1:
-        return ""
-    cross_rules = (
-        f"\n총 {n}개 조서를 서로 비교한다. "
-        "statement_a와 statement_b 인용은 반드시 위 [원본 진술 전체]에 나타난 문장을 그대로 복사해라. "
-        "서로 다른 조서에서 인용해도 된다."
-    )
-    if n > 2:
-        cross_rules += (
-            " 조서가 세 개 이상이면 모든 조서 쌍·조합을 고려해 "
-            "날짜·시간·장소·행동 등의 불일치를 빠짐없이 탐지해라."
-        )
-    return cross_rules
-
-
-def _pass2_prompt(full_body: str, n: int) -> str:
-    cross_rules = _cross_rules(n)
-    return f"""당신은 형사 진술 대조 전문가다. 아래 [원본 진술 전체] **원문만** 근거로 논리·사실 모순을 찾아라.{cross_rules}
-별도 요약문은 제공되지 않는다. [진술 1:] … 형태의 블록을 검색·대조(RAG 근거 단편)처럼 각각 읽고 서로 비교해라.
-
-반드시 아래 JSON 형식으로만 답하라. JSON 외 문장은 쓰지 마라.
-
-[원본 진술 전체]
-{full_body}
-
-핵심 규칙:
-1. statement_a, statement_b는 위 원문에서 **연속된 문자열을 한 글자도 바꾸지 말고** 복사한다. 부정어·조사·띄어쓰기까지 동일해야 한다.
-2. **부정·전면 부정**(전혀, 일절, 절대, 한 번도, 없다, 하지 않았다, 한 적 없다 등)과 **부분·긍정**(잠시, 잠깐, 한 적 있다, 했다 등)이 **같은 사건·행위**를 말할 때 서로 배치되면 모순 후보로 본다.
-3. 서로 다른 [진술 i] 블록에서 인용해도 된다.
-4. 확실하지 않으면 contradictions 배열을 비운다.
-
-JSON 형식:
-{{
-  "contradictions": [
-    {{
-      "type": "시간 불일치 또는 장소 불일치 또는 행동 불일치",
-      "statement_a": "원문에서 그대로 인용한 첫 번째 진술",
-      "statement_b": "원문에서 그대로 인용한 두 번째 진술 (statement_a와 모순)",
-      "reason": "왜 모순인지 한 문장 설명"
-    }}
-  ],
-  "further_checks": [
-    "원본 진술에서 날짜·시간·장소·인물이 불명확한 항목만 적을 것.",
-    "추측이나 새로운 의혹 제기 금지. 최대 2개.",
-    "해당 없으면 빈 배열 []로 둘 것."
-  ]
-}}"""
 
 
 def _pass3_prompt(corpus: str, verified_contradictions: list) -> str:
@@ -422,48 +363,238 @@ relType: accomplice=공동범행·공모·방조 등이 나올 때만. 업무·�
 예: {{"persons":[{{"name":"홍길동","role":"suspect","memo":""}},{{"name":"김철수","role":"victim","memo":""}}],"edges":[{{"src":"홍길동","dst":"김철수","relType":"harm","status":"unknown","context":""}}]}}"""
 
 
-def _timeline_event_has_time_signal(ev: dict) -> bool:
-    """시간 단서가 있는 이벤트만 타임라인 대상."""
+# 「1시간」「10년」 등에서 「1시」「10시」로 오인하지 않도록 시 뒤 '간' 제외
+_KR_HOUR_NOT_DURATION = r"(?!\s*간)"
+_KR_CLOCK_SIGNAL_RE = re.compile(
+    (
+        r"(?:오전|오후|새벽|저녁|밤|낮|아침)\s*\d{1,2}\s*시" + _KR_HOUR_NOT_DURATION
+        + r"|\d{1,2}\s*:\s*\d{2}"
+        + r"|\d{1,2}\s*시" + _KR_HOUR_NOT_DURATION + r"\s*\d{1,2}\s*분"
+        + r"|\d{1,2}\s*시" + _KR_HOUR_NOT_DURATION + r"(?:\s*(?:경|쯤|반|무렵|전후))?"
+        + r"|\d{4}\s*년\s*\d{1,2}\s*월"
+        + r"|\d{1,2}/\d{1,2}"
+    ),
+    re.I,
+)
+_DAY_MONTH_RE = re.compile(r"\d{1,2}\s*월\s*\d{1,2}\s*일")
+_TIMELESS_RELATIONSHIP_RE = re.compile(
+    r"(?:알고\s*지낸|지기\s*친구|비즈니스\s*관계|관계(?:일|로)\s*뿐|인맥|아는\s*사이|"
+    r"고교\s*시절|오래\s*알|면\s*알|친분|지인|동창|동업)",
+    re.I,
+)
+_REL_TIME_OFFSET_RE = re.compile(
+    r"\d{1,4}\s*분\s*(?:후|뒤|이후|지난|경과)"
+    r"|\d{1,2}\s*시간\s*(?:후|뒤|이후|지난|경과)",
+    re.I,
+)
+
+
+def _infer_case_reference_date(case_id: str):
+    """사건 ID에서 기준일 추론."""
+    from datetime import date
+    cid = (case_id or "").strip()
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", cid)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except (TypeError, ValueError):
+            pass
+    m = re.search(r"(\d{4})[-_](\d{2})(\d{2})\b", cid)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def _parse_reference_date_from_request(data: dict):
+    """조서 전문부 날짜·요청 referenceDate·사건 ID 순으로 기준일."""
+    from datetime import date
+    if not isinstance(data, dict):
+        return None
+    for key in ("referenceDate", "reference_date"):
+        raw = (data.get(key) or "").strip()
+        if not raw:
+            continue
+        dt = _parse_timeline_iso(raw) or _parse_timeline_iso(raw + "T00:00:00")
+        if dt:
+            return dt.date()
+        m = re.search(r"(\d{4})-(\d{2})-(\d{2})", raw)
+        if m:
+            try:
+                return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except (TypeError, ValueError):
+                pass
+    try:
+        y = int(data.get("preambleYear") or data.get("preamble_year") or 0)
+        mo = int(data.get("preambleMonth") or data.get("preamble_month") or 0)
+        d = int(data.get("preambleDay") or data.get("preamble_day") or 0)
+        if y > 0 and mo > 0 and d > 0:
+            return date(y, mo, d)
+    except (TypeError, ValueError):
+        pass
+    return _infer_case_reference_date(data.get("caseId") or data.get("case_id") or "")
+
+
+def _text_has_timeline_clock_signal(*parts: str) -> bool:
+    """조서에 실제 시각·날짜·상대시간(N분 후) 표현이 있는지(단순 '목격'·'분' 포함 단어 제외)."""
+    joined = " ".join((p or "").strip() for p in parts if p and str(p).strip())
+    if not joined:
+        return False
+    if _KR_CLOCK_SIGNAL_RE.search(joined):
+        return True
+    if _DAY_MONTH_RE.search(joined):
+        return True
+    if _REL_TIME_OFFSET_RE.search(joined):
+        return True
+    if _find_all_korean_clocks_in_text(joined):
+        return True
+    if re.search(r"(?:당일|그날|이날|금일|범행\s*당시|사건\s*당일|어제|그제|그저께|오늘)", joined):
+        return True
+    return False
+
+
+def _clock_phrase_overlaps_quote(time_text: str, quote: str, label: str = "") -> bool:
+    """time_text의 시각 표현이 quote·label과 같은 사건 서술인지(부분 일치)."""
+    tt = (time_text or "").strip()
+    q = (quote or "").strip()
+    lb = (label or "").strip()
+    if not tt:
+        return False
+    if q and tt in q:
+        return True
+    if lb and tt in lb:
+        return True
+    for _h, _m, phrase in _find_all_korean_clocks_in_text(tt):
+        if not phrase:
+            continue
+        if q and phrase in q:
+            return True
+        if lb and phrase in lb:
+            return True
+    dm = _DAY_MONTH_RE.search(tt)
+    if dm:
+        frag = dm.group(0)
+        if (q and frag in q) or (lb and frag in lb):
+            return True
+    if q or lb:
+        return False
+    return True
+
+
+def _observation_has_time_anchor(ev: dict) -> bool:
+    """목격·관찰 이벤트: 본문에 시각 단서가 있거나, 앞 시각 문장과 '대신'으로 이어진 경우만."""
+    quote = (ev.get("quote") or "").strip()
+    tt = (ev.get("time_text") or "").strip()
+    label = (ev.get("label") or "").strip()
+    if _text_has_timeline_clock_signal(tt, label, quote):
+        return True
+    src = quote or tt or label
+    if _parse_relative_offset_minutes(src) is not None:
+        return True
+    if "대신" in quote and any(m in quote for m in ("봤", "보았", "목격", "보이지", "없었", "있었")):
+        return True
+    return False
+
+
+def _is_timeless_relationship_statement(ev: dict) -> bool:
+    """인적관계·신분 설명만 있고 그 순간의 시각이 없는 진술."""
+    quote = (ev.get("quote") or "").strip()
+    if not quote:
+        return False
+    if _text_has_timeline_clock_signal(quote) or _parse_relative_offset_minutes(quote) is not None:
+        return False
+    if not _TIMELESS_RELATIONSHIP_RE.search(quote):
+        return False
+    timed_action = (
+        "갔", "왔", "했다", "하였", "만났", "출발", "도착", "이동", "들어", "나갔",
+        "머물", "체류", "방문",
+    )
+    if any(v in quote for v in timed_action):
+        return False
+    return True
+
+
+def _event_time_grounded(ev: dict, reference_date=None) -> bool:
+    """
+    타임라인에 올릴 수 있는지: quote(원문) 또는 quote와 맞닿은 time_text에 시간 근거.
+    AI time_start 단독·인적관계-only 서술은 제외.
+    """
     if not isinstance(ev, dict):
         return False
-    if _parse_timeline_iso(ev.get("time_start")):
-        return True
+    quote = (ev.get("quote") or "").strip()
     tt = (ev.get("time_text") or "").strip()
-    prec = (ev.get("time_precision") or "").lower()
-    if prec in ("exact", "approximate", "relative") and tt:
+    if not quote:
+        return False
+    if _is_timeless_relationship_statement(ev):
+        return False
+    if _text_has_timeline_clock_signal(quote):
         return True
-    # 본문에 시간·순서 표현이 있으면 포함
-    if tt and prec != "unknown":
+    if _parse_relative_offset_minutes(quote) is not None:
         return True
-    time_hints = ("시", "분", "쯤", "경", "전", "후", "뒤", "이후", "이전", "당시", "무렵", "경", "오전", "오후", "새벽", "저녁", "낮")
-    return any(h in tt for h in time_hints)
+    if _parse_date_from_event_text(quote, reference_date):
+        return True
+    label = (ev.get("label") or "").strip()
+    if tt and _text_has_timeline_clock_signal(tt) and _clock_phrase_overlaps_quote(tt, quote, label):
+        return True
+    if reference_date and _text_has_timeline_clock_signal(quote, tt):
+        return True
+    if (ev.get("event_type") or "").lower() == "observation" and _observation_has_time_anchor(ev):
+        return True
+    return False
 
 
-def _filter_timeline_time_only(events: list) -> list:
-    return [e for e in events if isinstance(e, dict) and _timeline_event_has_time_signal(e)]
+def _sanitize_hallucinated_event_times(ev: dict, reference_date=None) -> dict:
+    """원문에 없는 시각·날짜 제거(AI·서버 추정 포함)."""
+    if not isinstance(ev, dict):
+        return ev
+    if _event_time_grounded(ev, reference_date):
+        return ev
+    ev["time_start"] = None
+    ev["time_end"] = None
+    ev["time_precision"] = "unknown"
+    tt = (ev.get("time_text") or "").strip()
+    quote = (ev.get("quote") or "").strip()
+    if tt and quote and tt not in quote and not _text_has_timeline_clock_signal(quote):
+        ev["time_text"] = ""
+    return ev
 
 
-def _timeline_extract_prompt(case_id: str, stmt_name: str, stmt_type: str, text: str) -> str:
+def _sanitize_all_event_times(events: list, reference_date=None) -> list:
+    return [_sanitize_hallucinated_event_times(ev, reference_date) for ev in events if isinstance(ev, dict)]
+
+
+def _filter_timeline_time_only(events: list, reference_date=None) -> list:
+    return [e for e in events if isinstance(e, dict) and _event_time_grounded(e, reference_date)]
+
+
+def _timeline_extract_prompt(case_id: str, stmt_name: str, stmt_type: str, text: str, reference_date=None) -> str:
+    ref_line = ""
+    if reference_date:
+        ref_line = f"\n사건·조서 기준일(날짜 없는 'N월 N일'·'오후 N시'는 이 날짜에 붙임): {reference_date.isoformat()}\n"
     return f"""{NO_MARKDOWN}
 조서 원문에서 시간·시각·순서와 직접 관련된 행적·행위만 뽑아 JSON 객체 하나만 출력한다. 설명·마크다운·코드펜스 금지. JSON 밖 문장은 쓰지 마라.
 모순·진술 대조·관계망 인물 추출은 하지 않는다.
 
 사건: {case_id}
 이 조서 화자(진술자): {stmt_name}
+{ref_line}
 
 [조서]
 {text}
 
 원문 보존(타임라인·모순 대조에 쓰이므로 생략·왜곡 금지):
 1. time_text, quote는 [조서] 시간·순서·행위 표현을 원문 그대로 적는다.
-2. **label**은 [조서]에 실제로 쓰인 **단어·어구를 그대로** 이어 붙여 한 줄로 쓴다. 요약·의역·번역·대체어 금지.
+2. label은 [조서]에 실제로 쓰인 단어·어구를 그대로 이어 붙여 한 줄로 쓴다. 요약·의역·번역·대체어 금지.
    - 조서에 「가죽 가방」이면 label에도 「가죽 가방」(leather bag 등 영어·다른 표현 금지).
    - 조서에 「김철수」면 「피해자」「상대방」 등으로 바꾸지 말고 「김철수」.
    - 조서에 「코인노래방」이면 그 표기 그대로(노래방·가라오케 등으로 바꾸지 말 것).
-   - label에 넣는 모든 명사·동사·부정어(전혀, 일절, 하지 않았다 등)는 quote·[조서]에서 **복사**할 것. 새로 짓지 말 것.
+   - label에 넣는 모든 명사·동사·부정어(전혀, 일절, 하지 않았다 등)는 quote·[조서]에서 복사할 것. 새로 짓지 말 것.
 3. 날짜·시각·장소·인물·행위를 추측으로 보완하지 말 것. 불명확하면 time_precision을 approximate 또는 relative로 두고 time_text에 원문 표현을 남긴다.
-4. **time_start·time_end는 time_text를 기준**으로 채운다(오후 3시 5분→15:05). time_text·label에 시각이 있으면 quote에 없어도 time_start를 넣는다. AI가 넣은 time_start가 time_text와 다르면 time_text가 맞다.
-5. 부정·전면 부정(전혀, 일절, 한 번도, 없다, 하지 않았다 등)과 부분·긍정 표현은 quote에서 빼거나 약화하지 말 것.
+4. **절대시각 정확도**: time_text·quote·label에 나온 시·분·오전/오후/밤·날짜를 time_start·time_end에 그대로 반영한다. period(오전/오후/밤)를 바꾸지 말 것. 「밤 11시 5분」→23:05, 「오후 3시 10분」→15:10. 끝 시각이 본문에 있으면 time_end에 넣고 5분 등으로 대체하지 말 것.
+5. time_start·time_end는 quote 또는 time_text에 시각·날짜·상대시간(N분 후·N시간 동안 등)이 있을 때만 채운다. [조서]에 없는 시각을 넣지 말 것.
+6. 부정·전면 부정(전혀, 일절, 한 번도, 없다, 하지 않았다 등)과 부분·긍정 표현은 quote에서 빼거나 약화하지 말 것.
 
 반드시 아래 JSON 형식으로만 답하라. 키 이름은 그대로 쓴다.
 
@@ -483,46 +614,38 @@ sort_order: 10, 20, 30 … 시간순
 핵심 규칙:
 0. **label = 원문 단어 조합**: 한 줄이어도 [조서]에 없는 표현·영어·일반화된 호칭을 넣지 말 것. quote에 있는 표현을 우선해 label을 만든다.
 1. label, time_text, quote 중 하나라도 비거나 근거가 없으면 그 이벤트는 넣지 말 것.
-2. 시간·순서 단서가 전혀 없는 일반 서술은 넣지 말 것.
+2. 시간·순서 단서가 전혀 없는 일반 서술은 넣지 말 것. **몇 시·몇 분·N분 후·당일·날짜·상대시간 없이** 「~를 봤다」「~하는 것을 목격」만 있는 단순 목격은 events에 넣지 말 것(observation 금지).
+2-1. **인적관계·신분·경력 설명만** 있는 문장(예: N년 지기, 비즈니스 관계, 고교 때부터 앎, 진술했다)은 시각이 없으면 events에 넣지 말 것.
+2-2. **time_start·time_end는 quote에 시각·날짜·상대시간이 있을 때만** 채운다. 없으면 반드시 null. 오늘 날짜·임의 19시·사건 추정 시각을 넣지 말 것.
+2-3. label·time_text에 quote에 없는 시각·날짜를 새로 쓰지 말 것.
 3. stmt_name은 행위 주체 이름. 다른 인물의 행위면 그 인물 이름을 쓸 것.
 4. quote에 적힌 시각과 time_start, time_end, time_text가 일치해야 한다. 시작·끝 시각이 둘 다 있으면(예: 밤 10시 40분에 … 밤 11시 5분에) time_start·time_end·time_text에 각각 반영하고, 끝 시각을 임의로 5분 뒤로 대체하지 말 것.
 5. exact는 본문에 구체 시각(몇 시 몇 분·날짜)이 있을 때만 time_start를 채운다. approximate는 대략·경·쯤. N분 후·N시간 뒤만 있으면 time_start는 null로 두고 time_text·quote에 원문(예: 20분 후)을 그대로 남긴다(서버가 직전 이벤트 시각 기준으로 계산).
 6. events는 시간순, sort_order 오름차순.
-7. **쪼개기(SPLIT)**: 같은 시각대라도 **타인에 대한 목격·부재·대신 관찰**(「대신」「그러나」+ 다른 사람 행적)은 이벤트를 나눈다. observation으로 분리.
+7. **쪼개기(SPLIT)**: **같은 문장·같은 시각 표현 안**에서 **타인에 대한 목격·부재·대신 관찰**(「대신」「그러나」+ 다른 사람 행적)만 observation으로 분리. 앞 절에 시각이 없으면 observation 단독 이벤트를 만들지 말 것.
 8. **묶기(MERGE)**: 진술자 **본인의 한 시각대 알리바이**—어디 있었는지·하지 않은 일·당시 하던 일(코인노래방 1시간 등)—가 **연속**이면 **이벤트 1개**로 묶는다. event_type은 alibi. time_start=시작 시각, time_end=「N시간 동안」이 있으면 시작+N시간(예: 오후 3시쯤+1시간→4시). label·quote에 부정(금은방 미접근)과 체류(노래방)를 함께 요약해도 된다.
 9. 「당시 저는 …」「…긴 했지만 … 하지 않았습니다」처럼 앞 문장 시각을 이어받는 **본인 행적 후속**은 새 이벤트로 쪼개지 말고 앞 알리바이에 합친다.
 10. 예(묶기): 「어제 오후 3시쯤 서면 지하상가 근처였지만 금은방에는 가지 않았고, 당시 코인노래방에서 1시간 노래」→ **1개** alibi, time_text에 3시~1시간, place=코인노래방.
 11. 예(쪼개기): 「3시 10분쯤 코인노래방 앞으로 갔는데 현우는 안에 없었고, 대신 비상구에서 봤다」→ movement+observation 분리(규칙 7).
-12. 해당 없으면 {{"events":[]}}
+12. [조서]에 「시」「분」「어제」「오후」「N시간」 등 시간·순서 표현이 하나라도 있으면 events는 **최소 1개 이상** 넣는다. 정말 시간 단서가 전혀 없을 때만 {{"events":[]}}.
 
-JSON 형식:
-{{
-  "events": [
-    {{
-      "stmt_name": "홍길동",
-      "stmt_type": "피의자",
-      "event_type": "action",
-      "time_precision": "exact",
-      "time_start": "2024-05-01T14:30:00",
-      "time_end": null,
-      "time_text": "2024년 5월 1일 오후 2시 30분경",
-      "place": "역삼동 주택",
-      "label": "오후 2시 30분경 역삼동 집 앞에서 김철수를 만남",
-      "quote": "그때 역삼동 집 앞에서 김철수를 만났다.",
-      "confidence": "high",
-      "sort_order": 10
-    }}
-  ]
-}}"""
+출력: JSON 객체 하나만. 키는 events 배열. 각 항목의 quote·label·time_text는 반드시 [조서] 원문에서만 가져온다."""
 
 
 _KR_CLOCK_PATTERNS = (
-    (re.compile(r"(오전)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "am"),
-    (re.compile(r"(오후)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "pm"),
-    (re.compile(r"(밤)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "pm"),
-    (re.compile(r"(저녁)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "pm"),
-    (re.compile(r"(새벽)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "am"),
-    (re.compile(r"(낮)\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?"), "am"),
+    (re.compile(r"(오전)\s*(\d{1,2})\s*시(?!\s*간)(?:\s*(\d{1,2})\s*분)?"), "am"),
+    (re.compile(r"(오후)\s*(\d{1,2})\s*시(?!\s*간)(?:\s*(\d{1,2})\s*분)?"), "pm"),
+    (re.compile(r"(밤)\s*(\d{1,2})\s*시(?!\s*간)(?:\s*(\d{1,2})\s*분)?"), "pm"),
+    (re.compile(r"(저녁)\s*(\d{1,2})\s*시(?!\s*간)(?:\s*(\d{1,2})\s*분)?"), "pm"),
+    (re.compile(r"(새벽)\s*(\d{1,2})\s*시(?!\s*간)(?:\s*(\d{1,2})\s*분)?"), "am"),
+    (re.compile(r"(낮)\s*(\d{1,2})\s*시(?!\s*간)(?:\s*(\d{1,2})\s*분)?"), "am"),
+    (re.compile(r"(아침)\s*(\d{1,2})\s*시(?!\s*간)(?:\s*(\d{1,2})\s*분)?"), "am"),
+)
+# 오전/오후 없이 「3시 10분」「15시」 등 (signal 정규식과 동일하게 파싱까지 연결)
+_BARE_KR_CLOCK_RE = re.compile(
+    r"(?<!오전)(?<!오후)(?<!새벽)(?<!저녁)(?<!밤)(?<!낮)(?<!아침)"
+    r"(\d{1,2})\s*시(?!\s*간)(?:\s*(\d{1,2})\s*분)?",
+    re.I,
 )
 
 
@@ -546,13 +669,24 @@ def _korean_period_to_24h(hour12: int, minute: int, period: str) -> tuple[int, i
     return (h, m)
 
 
-def _find_korean_clock_in_text(text: str):
-    """첫 번째 시각 (hour24, minute, phrase) 또는 None."""
-    clocks = _find_all_korean_clocks_in_text(text)
-    if not clocks:
-        return None
-    c = clocks[0]
-    return c[1], c[2], c[3]
+def _infer_bare_korean_hour24(h: int, text: str, match_start: int) -> int:
+    """period 없는 N시 → 앞뒤 맥락·24시 표기(15시)로 24시간 환산."""
+    h = max(0, min(23, int(h)))
+    ctx = (text or "")[max(0, match_start - 24):match_start]
+    if any(k in ctx for k in ("새벽", "오전", "아침")):
+        return 0 if h == 12 else (h if 1 <= h <= 11 else h)
+    if any(k in ctx for k in ("오후", "저녁", "밤")):
+        if h == 12:
+            return 12
+        return h + 12 if 1 <= h <= 11 else h
+    if h >= 13:
+        return h
+    if h == 12:
+        return 12
+    # period 없는 1~11시: 조서·수사 맥락에서는 오후(12h+)가 많음. 새벽/오전 맥락은 위에서 처리.
+    if 1 <= h <= 11:
+        return h + 12
+    return 12
 
 
 def _find_all_korean_clocks_in_text(text: str) -> list:
@@ -561,6 +695,7 @@ def _find_all_korean_clocks_in_text(text: str) -> list:
         return []
     src = str(text)
     hits = []
+    covered = set()
     for pat, period in _KR_CLOCK_PATTERNS:
         for m in pat.finditer(src):
             try:
@@ -568,12 +703,24 @@ def _find_all_korean_clocks_in_text(text: str) -> list:
                 g3 = m.group(3)
                 minute = int(g3) if g3 else 0
                 h24, mi = _korean_period_to_24h(h, minute, period)
-                hits.append((m.start(), h24, mi, m.group(0).strip()))
+                hits.append((m.start(), m.end(), h24, mi, m.group(0).strip()))
+                covered.update(range(m.start(), m.end()))
             except (TypeError, ValueError, IndexError):
                 continue
+    for m in _BARE_KR_CLOCK_RE.finditer(src):
+        if any(i in covered for i in range(m.start(), m.end())):
+            continue
+        try:
+            h = int(m.group(1))
+            g2 = m.group(2)
+            minute = int(g2) if g2 else 0
+            h24 = _infer_bare_korean_hour24(h, src, m.start())
+            hits.append((m.start(), m.end(), h24, minute, m.group(0).strip()))
+        except (TypeError, ValueError, IndexError):
+            continue
     hits.sort(key=lambda x: x[0])
     out = []
-    for _pos, h24, mi, phrase in hits:
+    for _pos, _end, h24, mi, phrase in hits:
         if out and out[-1][0] == h24 and out[-1][1] == mi:
             continue
         out.append((h24, mi, phrase))
@@ -607,17 +754,31 @@ def _event_time_source_text(ev: dict) -> str:
     )
 
 
-def _parse_date_from_event_text(text: str):
+def _parse_date_from_event_text(text: str, reference_date=None):
     if not text:
         return None
     from datetime import date
     m = re.search(r"(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일", text)
-    if not m:
-        return None
-    try:
-        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-    except (TypeError, ValueError):
-        return None
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except (TypeError, ValueError):
+            pass
+    m2 = re.search(r"(\d{1,2})\s*월\s*(\d{1,2})\s*일", text)
+    if m2 and reference_date:
+        try:
+            return date(reference_date.year, int(m2.group(1)), int(m2.group(2)))
+        except (TypeError, ValueError):
+            pass
+    if reference_date:
+        from datetime import timedelta
+        if re.search(r"어제", text):
+            return reference_date - timedelta(days=1)
+        if re.search(r"(?:그제|그저께)", text):
+            return reference_date - timedelta(days=2)
+        if re.search(r"(?:오늘|금일)", text):
+            return reference_date
+    return None
 
 
 def _parse_datetime_from_text_field(text: str):
@@ -645,30 +806,37 @@ def _parse_datetime_from_text_field(text: str):
     return None
 
 
-def _pick_start_clock(time_text: str, label: str, quote: str):
-    for src in (time_text, label, quote):
+def _pick_clock_from_fields(
+    time_text: str,
+    label: str,
+    quote: str,
+    *,
+    end_after: tuple[int, int] | None = None,
+):
+    """
+    quote → time_text → label 순으로 시각 탐색.
+    end_after=(h,m) 이면 마지막 시각(시작과 다른) 반환, 없으면 (None,None,None).
+    """
+    for src in (quote, time_text, label):
         if not src or not str(src).strip():
             continue
         clocks = _find_all_korean_clocks_in_text(str(src).strip())
-        if clocks:
+        if not clocks:
+            continue
+        if end_after is None:
             return clocks[0]
-    return None
-
-
-def _pick_end_clock(time_text: str, label: str, quote: str, start_h: int, start_m: int):
-    for src in (time_text, label, quote):
-        if not src or not str(src).strip():
-            continue
-        clocks = _find_all_korean_clocks_in_text(str(src).strip())
+        start_h, start_m = end_after
         if len(clocks) >= 2:
             end_h, end_m, end_phrase = clocks[-1]
             if (end_h, end_m) != (start_h, start_m):
                 return end_h, end_m, end_phrase
-    return None, None, None
+    if end_after is not None:
+        return None, None, None
+    return None
 
 
-def _reconcile_timeline_event_times(ev: dict) -> dict:
-    """time_text → label → quote 순으로 time_start/end 확정 (AI time_start보다 우선)."""
+def _reconcile_timeline_event_times(ev: dict, reference_date=None) -> dict:
+    """quote에 근거가 있을 때만 time_start/end 확정. 기준일은 전문부·사건 ID."""
     if not isinstance(ev, dict):
         return ev
     tt = (ev.get("time_text") or "").strip()
@@ -680,34 +848,55 @@ def _reconcile_timeline_event_times(ev: dict) -> dict:
 
     from datetime import datetime, timedelta
 
-    iso_start = _parse_datetime_from_text_field(tt) or _parse_datetime_from_text_field(label)
+    if not _event_time_grounded(ev, reference_date):
+        return _sanitize_hallucinated_event_times(ev, reference_date)
+
+    iso_start = None
+    for field in (tt, label):
+        cand = _parse_datetime_from_text_field(field)
+        if not cand:
+            continue
+        iso_s = cand.strftime("%Y-%m-%dT%H:%M:%S")
+        if (
+            iso_s in quote
+            or (field and field in quote)
+            or _text_has_timeline_clock_signal(quote)
+            or (_text_has_timeline_clock_signal(field) and _event_time_grounded(ev, reference_date))
+        ):
+            iso_start = cand
+            break
     if iso_start:
         ev["time_start"] = iso_start.strftime("%Y-%m-%dT%H:%M:%S")
         te = _parse_timeline_iso(ev.get("time_end"))
         if not te or te <= iso_start:
             ev["time_end"] = (iso_start + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
-        prec_src = tt or sources
+        prec_src = tt or quote
         if any(x in prec_src for x in ("경", "쯤", "대략", "무렵")):
             ev["time_precision"] = "approximate"
         else:
             ev["time_precision"] = ev.get("time_precision") or "exact"
         return ev
 
-    picked = _pick_start_clock(tt, label, quote)
+    picked = _pick_clock_from_fields(tt, label, quote)
     if not picked:
-        return ev
+        return _sanitize_hallucinated_event_times(ev, reference_date)
     start_h, start_m, start_phrase = picked
 
-    base_date = _parse_date_from_event_text(tt)
+    base_date = _parse_date_from_event_text(quote, reference_date)
     if not base_date:
-        base_date = _parse_date_from_event_text(label)
+        base_date = _parse_date_from_event_text(tt, reference_date)
     if not base_date:
-        base_date = _parse_date_from_event_text(quote)
-    ts = _parse_timeline_iso(ev.get("time_start"))
-    if not base_date and ts:
-        base_date = ts.date()
+        base_date = _parse_date_from_event_text(label, reference_date)
+    if not base_date and reference_date:
+        if _text_has_timeline_clock_signal(quote, tt, label):
+            base_date = reference_date
     if not base_date:
-        base_date = datetime.now().date()
+        ev["time_start"] = None
+        ev["time_end"] = None
+        ev["time_precision"] = "unknown"
+        if not tt and start_phrase:
+            ev["time_text"] = start_phrase
+        return ev
 
     def _combine(h: int, m: int):
         return datetime(base_date.year, base_date.month, base_date.day, h, m, 0)
@@ -715,7 +904,7 @@ def _reconcile_timeline_event_times(ev: dict) -> dict:
     start_dt = _combine(start_h, start_m)
     ev["time_start"] = start_dt.strftime("%Y-%m-%dT%H:%M:%S")
 
-    end_h, end_m, end_phrase = _pick_end_clock(tt, label, quote, start_h, start_m)
+    end_h, end_m, end_phrase = _pick_clock_from_fields(tt, label, quote, end_after=(start_h, start_m))
     if end_h is not None:
         end_dt = _combine(end_h, end_m)
         if end_dt <= start_dt:
@@ -759,8 +948,8 @@ def _infer_clock_precision_from_quote(quote: str, start_phrase: str, end_phrase:
     return "exact"
 
 
-def _reconcile_timeline_events_from_quotes(events: list) -> list:
-    return [_reconcile_timeline_event_times(ev) for ev in events]
+def _reconcile_timeline_events_from_quotes(events: list, reference_date=None) -> list:
+    return [_reconcile_timeline_event_times(ev, reference_date) for ev in events]
 
 
 _REL_MINUTES_AFTER = re.compile(
@@ -777,8 +966,8 @@ _REL_HOURS_AFTER = re.compile(
 )
 
 
-def _try_parse_relative_offset_minutes(text: str):
-    """'20분 후' 등 상대 분·시간만 추출."""
+def _parse_relative_offset_minutes(text: str):
+    """'20분 후'·'N시간 후' 등 상대 분 오프셋. 없으면 None."""
     if not text or not str(text).strip():
         return None
     src = str(text).strip()
@@ -795,19 +984,6 @@ def _try_parse_relative_offset_minutes(text: str):
             return int(m.group(1)) * 60
         except (TypeError, ValueError):
             pass
-    return None
-
-
-def _parse_relative_offset_minutes(text: str):
-    """상대 표현 우선. 없고 절대 시각만 있으면 None."""
-    if not text or not str(text).strip():
-        return None
-    src = str(text).strip()
-    rel = _try_parse_relative_offset_minutes(src)
-    if rel is not None:
-        return rel
-    if _find_all_korean_clocks_in_text(src):
-        return None
     return None
 
 
@@ -861,11 +1037,10 @@ def _quote_needs_same_time_inherit(quote: str) -> bool:
         return False
     if _find_all_korean_clocks_in_text(q):
         return False
-    if "대신" in q and any(m in q for m in ("봤", "보았", "목격", "내려", "나타", "있었")):
+    if "대신" in q and any(m in q for m in ("봤", "보았", "목격", "내려", "나타", "있었", "보이지")):
         return True
-    return any(c in q for c in _SAME_TIME_CONNECTORS if c != "대신") or any(
-        m in q for m in ("보이지", "목격", "봤", "보았")
-    )
+    # 「그러나/대신」 등 접속으로 앞 시각 문장과 한 덩어리일 때만 상속
+    return any(c in q for c in ("그러나", "그런데", "하지만"))
 
 
 _DUR_HOURS_SPAN = re.compile(r"(\d{1,2})\s*시간\s*동안", re.I)
@@ -1267,33 +1442,187 @@ def _transcript_hint_name_for_role(transcripts: list, role_en: str) -> str | Non
     return None
 
 
-def _extract_json_object(text: str) -> dict | None:
-    if not (text or "").strip():
+def _strip_llm_code_fences(text: str) -> str:
+    src = (text or "").strip()
+    m = re.search(r"```(?:json)?\s*([\s\S]*?)```", src, re.I)
+    if m:
+        return m.group(1).strip()
+    return src
+
+
+def _repair_json_text(chunk: str) -> str:
+    """모델이 흔히 내는 JSON 문법 오류 완화(주석·후행 쉼표 등)."""
+    if not chunk:
+        return chunk
+    out = re.sub(r"//[^\n]*", "", chunk)
+    out = re.sub(r"/\*[\s\S]*?\*/", "", out)
+    out = re.sub(r",\s*([}\]])", r"\1", out)
+    return out
+
+
+def _json_loads_lenient(chunk: str):
+    if not (chunk or "").strip():
         return None
-    start = text.find("{")
+    for candidate in (chunk, _repair_json_text(chunk)):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+def _extract_balanced_json_object(text: str, open_ch: str = "{", close_ch: str = "}") -> str | None:
+    start = text.find(open_ch)
     if start < 0:
         return None
     depth = 0
-    end   = -1
+    in_str = False
+    esc = False
     for i in range(start, len(text)):
-        if text[i] == "{":
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == open_ch:
             depth += 1
-        elif text[i] == "}":
+        elif ch == close_ch:
             depth -= 1
             if depth == 0:
-                end = i
-                break
-    if end < 0:
-        m = re.search(r"\{[\s\S]*\}", text)
-        if not m:
-            return None
-        chunk = m.group(0)
-    else:
-        chunk = text[start: end + 1]
-    try:
-        return json.loads(chunk)
-    except json.JSONDecodeError:
+                return text[start: i + 1]
+    return None
+
+
+def _close_truncated_json_array(arr_text: str) -> str:
+    depth = 0
+    in_str = False
+    esc = False
+    for ch in arr_text:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+    if depth > 0:
+        return arr_text.rstrip().rstrip(",") + ("]" * depth)
+    return arr_text
+
+
+def _extract_json_object(text: str) -> dict | None:
+    if not (text or "").strip():
         return None
+    src = _strip_llm_code_fences(text)
+    chunk = _extract_balanced_json_object(src, "{", "}")
+    if not chunk:
+        m = re.search(r"\{[\s\S]*\}", src)
+        chunk = m.group(0) if m else None
+    if not chunk:
+        return None
+    obj = _json_loads_lenient(chunk)
+    return obj if isinstance(obj, dict) else None
+
+
+def _extract_timeline_payload(text: str) -> dict | None:
+    """
+    타임라인 LLM 응답 → {"events": [...]}.
+    본문 설명·깨진 JSON·잘린 배열 등을 여러 단계로 복구한다.
+    """
+    if not (text or "").strip():
+        return None
+    src = _strip_llm_code_fences(text)
+
+    obj = _extract_json_object(src)
+    if isinstance(obj, dict) and isinstance(obj.get("events"), list):
+        return obj
+
+    search_from = 0
+    while True:
+        pos = src.find('"events"', search_from)
+        if pos < 0:
+            break
+        start = src.rfind("{", 0, pos)
+        if start >= 0:
+            chunk = _extract_balanced_json_object(src[start:], "{", "}")
+            if chunk:
+                cand = _json_loads_lenient(chunk)
+                if isinstance(cand, dict) and isinstance(cand.get("events"), list):
+                    return cand
+        search_from = pos + 8
+
+    m = re.search(r'"events"\s*:\s*(\[[\s\S]*)', src, re.I)
+    if m:
+        arr_part = _close_truncated_json_array(m.group(1))
+        arr = _json_loads_lenient(arr_part)
+        if isinstance(arr, list):
+            return {"events": arr}
+
+    return None
+
+
+def _timeline_json_retry_suffix() -> str:
+    return (
+        "\n\n[재요청] 방금 응답의 JSON이 깨졌다. 설명·마크다운·코드펜스 없이 "
+        '{"events":[]} 또는 events 배열만 포함한 단일 JSON 객체 하나만 다시 출력하라.'
+    )
+
+
+def _timeline_empty_retry_suffix() -> str:
+    return (
+        "\n\n[재요청] [조서]에 시간 표현(어제, 오후 N시, N시간 동안 등)이 있는데 events가 비었다. "
+        "규칙 8·10(알리바이 묶기)에 따라 최소 1개 이벤트를 넣어라. quote는 [조서] 문장을 그대로 복사. "
+        "JSON 객체 하나만 출력."
+    )
+
+
+def _fallback_timeline_events_from_text(
+    stmt_name: str, stmt_type: str, text: str, reference_date=None,
+) -> list:
+    """LLM이 빈 events를 줄 때, 본문에 시각이 있으면 규칙 기반 1건 생성."""
+    if not text or not _text_has_timeline_clock_signal(text):
+        return []
+    quote = ""
+    for part in re.split(r"(?<=[.!?。])\s*|\n+", text):
+        p = part.strip()
+        if len(p) >= 8 and _text_has_timeline_clock_signal(p):
+            quote = p
+            break
+    if not quote:
+        quote = text[:500].strip()
+    clocks = _find_all_korean_clocks_in_text(quote)
+    ev = {
+        "stmt_name": stmt_name or "미입력",
+        "stmt_type": stmt_type or "진술자",
+        "event_type": "alibi",
+        "time_precision": "approximate",
+        "time_start": None,
+        "time_end": None,
+        "time_text": clocks[0][2] if clocks else "",
+        "place": None,
+        "label": _excerpt_label_from_quote(quote, 150) or quote[:150],
+        "quote": quote[:2000],
+        "confidence": "low",
+        "sort_order": 10,
+    }
+    ev = _reconcile_timeline_event_times(ev, reference_date)
+    if _event_time_grounded(ev, reference_date):
+        print("[timeline] fallback event from source text (LLM returned empty)", flush=True)
+        return [ev]
+    return []
 
 
 def transcript_role_hints_by_name(transcripts: list | None) -> dict[str, str]:
@@ -1671,24 +2000,60 @@ def _rewrite_relation_response(raw: str, transcripts: list | None, transcript_co
 
 # ── 인용 검증 ────────────────────────────────────────────────────────────────
 
-def normalize(text: str) -> str:
-    return re.sub(r'\s+', '', text)
+def _ws_compact(text: str) -> str:
+    """인용 대조용: 공백 제거."""
+    return re.sub(r"\s+", "", text or "")
 
 
-def fuzzy_in(quote: str, original: str, min_len: int = 6, chunk: int = 10) -> bool:
-    quote = quote.strip()
+def fuzzy_in(
+    quote: str,
+    original: str,
+    min_len: int = 6,
+    chunk: int = 10,
+    *,
+    match_ratio: float = 0.5,
+    short_pass: bool = True,
+) -> bool:
+    """
+  원문 포함 여부(부분 일치).
+  short_pass=False · match_ratio 높이면 타임라인 quote 검증(환각 차단)에 사용.
+    """
+    quote = (quote or "").strip()
+    original = (original or "").strip()
+    if not quote or not original:
+        return False
     if len(quote) < min_len:
+        return short_pass
+    no = _ws_compact(original)
+    nq = _ws_compact(quote)
+    if nq in no:
         return True
-    norm_original = normalize(original)
-    norm_quote    = normalize(quote)
-    if norm_quote in norm_original:
-        return True
-    chunks  = [norm_quote[i:i+chunk] for i in range(0, len(norm_quote), chunk)
-               if len(norm_quote[i:i+chunk]) >= min_len]
+    chunks = [nq[i : i + chunk] for i in range(0, len(nq), chunk) if len(nq[i : i + chunk]) >= min_len]
     if not chunks:
+        return short_pass
+    matched = sum(1 for c in chunks if c in no)
+    return (matched / len(chunks)) >= match_ratio
+
+
+def quote_grounded_in_source(quote: str, source: str) -> bool:
+    """
+    타임라인 quote가 조서 본문에 근거하는지.
+    완전 일치·연속 10자 부분일치·느슨한 fuzzy 순으로 검사(환각 문장은 차단).
+    """
+    quote = (quote or "").strip()
+    source = (source or "").strip()
+    if not quote or not source or len(quote) < 6:
+        return False
+    nq, ns = _ws_compact(quote), _ws_compact(source)
+    if nq in ns:
         return True
-    matched = sum(1 for c in chunks if c in norm_original)
-    return (matched / len(chunks)) >= 0.5
+    anchor = 10
+    if len(nq) >= anchor:
+        for i in range(0, len(nq) - anchor + 1):
+            if nq[i : i + anchor] in ns:
+                return True
+    ratio = 0.85 if len(quote) < 28 else 0.62
+    return fuzzy_in(quote, source, min_len=8, chunk=6, match_ratio=ratio, short_pass=False)
 
 
 def verify_quotes(contradictions: list, corpus: str) -> list:
@@ -1700,6 +2065,30 @@ def verify_quotes(contradictions: list, corpus: str) -> list:
             item["verified"] = True
             verified.append(item)
     return verified
+
+
+def _filter_timeline_grounded_events(events: list, source: str) -> list:
+    """quote가 [조서]에 없는 이벤트 제거, label·place 정합."""
+    kept: list = []
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        quote = (ev.get("quote") or "").strip()
+        if not quote:
+            continue
+        if not quote_grounded_in_source(quote, source):
+            print(f"[timeline] dropped ungrounded quote: {quote[:100]}", flush=True)
+            continue
+        pl = (ev.get("place") or "").strip()
+        if pl and _ws_compact(pl) not in _ws_compact(source):
+            ev["place"] = None
+        lb = (ev.get("label") or "").strip()
+        if lb and not fuzzy_in(lb, source, min_len=12, chunk=8, match_ratio=0.55):
+            ex = _excerpt_label_from_quote(quote, 150)
+            if ex:
+                ev["label"] = ex
+        kept.append(ev)
+    return kept
 
 
 # ── payload 정규화 ───────────────────────────────────────────────────────────
@@ -1791,7 +2180,10 @@ def _iter_analyze_events(data):
 
         yield {"event": "start", "revision": SERVER_REVISION}
         acc1 = []
-        for piece in iter_ollama_tokens_display(_pass1_prompt(case_num, n, full_body)):
+        for piece in iter_ollama_tokens(_pass1_prompt(case_num, n, full_body)):
+            piece = clean_output(piece)
+            if not piece:
+                continue
             acc1.append(piece)
             yield {"event": "chunk", "text": piece}
         strip_markdown("".join(acc1))
@@ -2196,23 +2588,73 @@ def timeline_extract():
     if not text:
         return jsonify({"success": False, "error": "조서 본문이 비어 있습니다.", "events": []}), 400
 
-    prompt = _timeline_extract_prompt(case_id, stmt_name, stmt_type, text)
+    reference_date = _parse_reference_date_from_request(data)
+    prompt = _timeline_extract_prompt(case_id, stmt_name, stmt_type, text, reference_date)
     try:
         raw = call_ollama_timeline(prompt)
     except Exception as ex:
         return jsonify({"success": False, "error": f"모델 호출 실패: {ex}", "events": []}), 502
 
-    parsed = _extract_json_object(raw or "")
+    if not (raw or "").strip():
+        return jsonify({"success": False, "error": "모델이 빈 응답을 반환했습니다.", "events": []}), 502
+
+    parsed = _extract_timeline_payload(raw)
+    if not parsed:
+        try:
+            raw = call_ollama_timeline(prompt + _timeline_json_retry_suffix())
+        except Exception:
+            raw = ""
+        parsed = _extract_timeline_payload(raw or "")
+
     if not parsed or not isinstance(parsed.get("events"), list):
-        return jsonify({"success": False, "error": "이벤트 JSON 파싱 실패", "events": []}), 502
+        snippet = (raw or "")[:280].replace("\n", " ")
+        return jsonify({
+            "success": False,
+            "error": "이벤트 JSON 파싱 실패",
+            "detail": f"모델 출력을 JSON으로 읽지 못했습니다. {snippet}",
+            "events": [],
+        }), 502
+
+    raw_n = len(parsed.get("events") or [])
+    if raw_n == 0 and _text_has_timeline_clock_signal(text):
+        try:
+            raw2 = call_ollama_timeline(prompt + _timeline_empty_retry_suffix())
+            parsed2 = _extract_timeline_payload(raw2 or "")
+            if parsed2 and isinstance(parsed2.get("events"), list) and parsed2["events"]:
+                parsed, raw = parsed2, raw2
+                raw_n = len(parsed["events"])
+                print(f"[timeline] empty retry got {raw_n} events", flush=True)
+        except Exception as ex:
+            print(f"[timeline] empty retry failed: {ex}", flush=True)
+    if raw_n == 0:
+        fallback = _fallback_timeline_events_from_text(stmt_name, stmt_type, text, reference_date)
+        if fallback:
+            parsed = {"events": fallback}
+            raw_n = len(fallback)
+    if raw_n == 0:
+        snippet = (raw or "")[:320].replace("\n", " ")
+        print(
+            f"[timeline] LLM empty events stmt={stmt_name!r} text_len={len(text)} "
+            f"has_clock={_text_has_timeline_clock_signal(text)} out={snippet!r}",
+            flush=True,
+        )
 
     events = [_normalize_timeline_event_fields(e) for e in parsed["events"] if isinstance(e, dict)]
-    events = _reconcile_timeline_events_from_quotes(events)
+    events = _filter_timeline_grounded_events(events, text)
+    after_ground = len(events)
+    events = _reconcile_timeline_events_from_quotes(events, reference_date)
+    events = _sanitize_all_event_times(events, reference_date)
     events = _resolve_relative_durations_from_text(events)
     events = _apply_activity_duration_end(events)
     events = _merge_same_period_alibi_blocks(events)
     events = _inherit_same_time_context(events)
-    events = _filter_timeline_time_only(events)
+    events = _sanitize_all_event_times(events, reference_date)
+    events = _filter_timeline_time_only(events, reference_date)
+    print(
+        f"[timeline] extract stmt={stmt_name!r} raw={raw_n} grounded={after_ground} "
+        f"time_ok={len(events)} ref={reference_date}",
+        flush=True,
+    )
     return jsonify({"success": True, "events": events, "model": MODEL})
 
 

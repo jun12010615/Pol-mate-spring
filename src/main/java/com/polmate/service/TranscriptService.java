@@ -158,7 +158,6 @@ public class TranscriptService {
         result.put("transcriptId", transcriptId);
         result.put("updated", true);
         result.put("message", "조서가 수정되었습니다.");
-        timelineService.scheduleExtractForTranscript(transcriptId);
         return result;
     }
 

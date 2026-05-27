@@ -32,4 +32,9 @@ public interface TranscriptRepository extends JpaRepository<Transcript, Integer>
     @Modifying @Transactional
     @Query("UPDATE Transcript t SET t.hasContradiction = :flag WHERE t.transcriptId = :id")
     int updateHasContradiction(@Param("id") Integer id, @Param("flag") int flag);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("UPDATE Transcript t SET t.timelineSourceHash = :hash WHERE t.transcriptId = :id")
+    int updateTimelineSourceHash(@Param("id") Integer id, @Param("hash") String hash);
 }

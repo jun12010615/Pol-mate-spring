@@ -35,6 +35,9 @@ public class TimelineController {
                 payload = timelineService.getTimelineForCase(caseId, userId);
             } else if ("rebuild".equals(action)) {
                 payload = timelineService.startRebuildForCase(caseId, userId);
+            } else if ("rebuildDev".equals(action)) {
+                // DEV-ONLY: 배포 전 삭제
+                payload = timelineService.startDevRebuildForCase(caseId, userId);
             } else {
                 res.getWriter().write("{\"success\":false,\"error\":\"알 수 없는 action\"}");
                 return;
