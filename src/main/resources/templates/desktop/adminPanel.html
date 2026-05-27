@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POL-MATE | 권한 관리</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f4f6fb; color: #1a1a2e; -webkit-font-smoothing: antialiased; }
+
+.pm-page { padding: 28px 32px 48px; }
+
+/* 헤더 */
+.page-header { margin-bottom: 22px; }
+.page-title  { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+.page-desc   { font-size: 13px; color: #6b7280; margin-top: 4px; }
+
+/* 검색 바 */
+.search-wrap {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid #e2e5ee; border-radius: 14px;
+    padding: 12px 18px; margin-bottom: 16px;
+}
+.search-icon { color: #9ca3af; flex-shrink: 0; }
+.search-input {
+    border: none; outline: none; font-size: 13px;
+    font-family: 'Noto Sans KR', sans-serif; color: #1a1a2e;
+    background: transparent; flex: 1;
+}
+.search-input::placeholder { color: #bdc3cf; }
+
+/* 사용자 테이블 */
+.user-table { background: #fff; border: 1px solid #e2e5ee; border-radius: 16px; overflow: hidden; }
+.user-head {
+    display: grid;
+    grid-template-columns: 1fr 100px 130px 110px;
+    padding: 10px 20px; border-bottom: 1px solid #e2e5ee; background: #f9fafb;
+}
+.th { font-size: 10px; font-weight: 500; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.6px; display: flex; align-items: center; }
+.user-row {
+    display: grid;
+    grid-template-columns: 1fr 100px 130px 110px;
+    padding: 14px 20px; border-bottom: 1px solid #f0f2f8; align-items: center;
+    transition: background 0.1s;
+}
+.user-row:last-child { border-bottom: none; }
+.user-row:hover { background: #f9fafb; }
+
+.cell-name  { font-size: 13px; font-weight: 500; color: #1a1a2e; }
+.cell-id    { font-size: 11px; color: #9ca3af; font-family: 'Space Grotesk', sans-serif; margin-top: 2px; }
+.cell-rank  { font-size: 12px; color: #374151; }
+.cell-badge { display: flex; align-items: center; }
+
+/* 권한 배지 */
+.badge-admin {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10px; font-weight: 600; padding: 4px 10px;
+    border-radius: 20px; background: #fef3c7; color: #92400e;
+    border: 1px solid #fcd34d;
+}
+.badge-admin svg { flex-shrink: 0; }
+.badge-normal {
+    display: inline-flex; align-items: center;
+    font-size: 10px; font-weight: 500; padding: 4px 10px;
+    border-radius: 20px; background: #f3f4f6; color: #6b7280;
+    border: 1px solid #e5e7eb;
+}
+
+/* 액션 버튼 */
+.btn-grant {
+    padding: 7px 16px; border-radius: 8px; font-size: 12px;
+    font-family: 'Noto Sans KR', sans-serif; font-weight: 500; cursor: pointer;
+    border: none; transition: background 0.13s;
+    background: #0d1a33; color: #fff;
+}
+.btn-grant:hover { background: #1a2744; }
+.btn-revoke {
+    padding: 7px 16px; border-radius: 8px; font-size: 12px;
+    font-family: 'Noto Sans KR', sans-serif; font-weight: 500; cursor: pointer;
+    border: 1px solid #e5e7eb; transition: background 0.13s, color 0.13s;
+    background: #fff; color: #dc2626;
+}
+.btn-revoke:hover { background: #fef2f2; border-color: #fca5a5; }
+.btn-self {
+    padding: 7px 16px; border-radius: 8px; font-size: 12px;
+    font-family: 'Noto Sans KR', sans-serif; font-weight: 500;
+    background: #f3f4f6; color: #9ca3af; border: none; cursor: default;
+}
+
+.empty-state { padding: 60px 20px; text-align: center; color: #9ca3af; font-size: 13px; }
+
+/* 확인 모달 */
+.modal-backdrop {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45); z-index: 600;
+    align-items: center; justify-content: center;
+}
+.modal-backdrop.open { display: flex; }
+.modal-card {
+    background: #fff; border-radius: 18px; padding: 32px 28px 24px;
+    width: 340px; text-align: center; box-shadow: 0 24px 64px rgba(0,0,0,0.22);
+}
+.modal-icon {
+    width: 52px; height: 52px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;
+}
+.modal-icon.grant  { background: #fef3c7; }
+.modal-icon.revoke { background: #fef2f2; }
+.modal-title { font-size: 16px; font-weight: 600; color: #1a1a2e; margin-bottom: 8px; }
+.modal-desc  { font-size: 12px; color: #6b7280; margin-bottom: 22px; line-height: 1.6; }
+.modal-actions { display: flex; gap: 8px; }
+.modal-cancel  {
+    flex: 1; padding: 10px; background: #f4f6fb; border: none;
+    border-radius: 10px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
+    color: #6b7280; cursor: pointer;
+}
+.modal-cancel:hover { background: #e8eaf0; }
+.modal-confirm-grant {
+    flex: 1; padding: 10px; background: #0d1a33; border: none;
+    border-radius: 10px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
+    color: #fff; font-weight: 500; cursor: pointer;
+}
+.modal-confirm-grant:hover { background: #1a2744; }
+.modal-confirm-revoke {
+    flex: 1; padding: 10px; background: #dc2626; border: none;
+    border-radius: 10px; font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
+    color: #fff; font-weight: 500; cursor: pointer;
+}
+.modal-confirm-revoke:hover { background: #b91c1c; }
+
+/* 토스트 */
+.toast {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+    background: #1a1a2e; color: #fff; font-size: 13px; font-weight: 500;
+    padding: 12px 24px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    opacity: 0; transition: opacity 0.25s; pointer-events: none; z-index: 700;
+    white-space: nowrap;
+}
+.toast.show { opacity: 1; }
+.toast.error { background: #dc2626; }
+</style>
+</head>
+<body>
+<div class="pm-layout" th:with="currentPage='adminPanel'">
+    <div th:replace="~{desktop/fragments/sidebar :: sidebar(${currentPage})}"></div>
+    <div class="pm-content">
+        <div th:replace="~{desktop/fragments/appbar :: appbar('POL-MATE,권한 관리')}"></div>
+        <main class="pm-page">
+
+            <div class="page-header">
+                <div class="page-title">권한 관리</div>
+                <div class="page-desc">부서 내 수사관의 관리자 권한을 부여하거나 해제합니다. 관리자는 부서 전체 접근 로그를 열람할 수 있습니다.</div>
+            </div>
+
+            <!-- 검색 -->
+            <div class="search-wrap">
+                <span class="search-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                </span>
+                <input type="text" id="searchInput" class="search-input"
+                       placeholder="이름·계급·아이디로 검색..." oninput="filterUsers()">
+            </div>
+
+            <!-- 사용자 테이블 -->
+            <div class="user-table">
+                <div class="user-head">
+                    <div class="th">수사관</div>
+                    <div class="th">계급</div>
+                    <div class="th">권한 상태</div>
+                    <div class="th">액션</div>
+                </div>
+                <div id="userBody">
+                    <div class="empty-state">불러오는 중...</div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+</div>
+
+<!-- 확인 모달 -->
+<div class="modal-backdrop" id="confirmModal" onclick="if(event.target===this) closeModal();">
+    <div class="modal-card">
+        <div class="modal-icon" id="modalIcon">
+            <svg id="modalIconSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"></svg>
+        </div>
+        <div class="modal-title" id="modalTitle"></div>
+        <div class="modal-desc"  id="modalDesc"></div>
+        <div class="modal-actions">
+            <button class="modal-cancel" onclick="closeModal()">취소</button>
+            <button id="modalConfirmBtn" onclick="doConfirm()"></button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var _allUsers   = [];
+var _pendingId  = null;
+var _pendingGrant = false;
+
+/* ── 초기 로드 ─────────────────────────────── */
+(function() { loadUsers(); })();
+
+function loadUsers() {
+    fetch('/adminApi?action=userList', {credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!Array.isArray(data)) {
+                showError((data && data.error) ? data.error : '사용자 목록 조회에 실패했습니다.');
+                return;
+            }
+            _allUsers = data;
+            filterUsers();
+        })
+        .catch(function(e) { showError('서버 통신 오류: ' + e); });
+}
+
+/* ── 검색 필터 ─────────────────────────────── */
+function filterUsers() {
+    var q = document.getElementById('searchInput').value.trim().toLowerCase();
+    var filtered = q
+        ? _allUsers.filter(function(u) {
+            return (u.userName || '').toLowerCase().includes(q)
+                || (u.userRank || '').toLowerCase().includes(q)
+                || (u.userId   || '').toLowerCase().includes(q);
+          })
+        : _allUsers;
+    renderUsers(filtered);
+}
+
+/* ── 렌더링 ────────────────────────────────── */
+function renderUsers(list) {
+    var body = document.getElementById('userBody');
+    if (list.length === 0) {
+        body.innerHTML = '<div class="empty-state">검색 결과가 없습니다.</div>';
+        return;
+    }
+
+    var html = '';
+    list.forEach(function(u) {
+        var badge = u.isAdmin
+            ? '<span class="badge-admin">' +
+              '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' +
+              '관리자</span>'
+            : '<span class="badge-normal">일반 수사관</span>';
+
+        var actionBtn;
+        if (u.isSelf) {
+            actionBtn = '<button class="btn-self" disabled>본인</button>';
+        } else if (u.isAdmin) {
+            actionBtn = '<button class="btn-revoke" onclick="askConfirm(\'' + esc(u.userId) + '\',\'' + esc(u.userName) + '\',false)">권한 해제</button>';
+        } else {
+            actionBtn = '<button class="btn-grant" onclick="askConfirm(\'' + esc(u.userId) + '\',\'' + esc(u.userName) + '\',true)">권한 부여</button>';
+        }
+
+        html +=
+            '<div class="user-row">' +
+              '<div>' +
+                '<div class="cell-name">' + esc(u.userName) + '</div>' +
+                '<div class="cell-id">' + esc(u.userId) + '</div>' +
+              '</div>' +
+              '<div class="cell-rank">' + esc(u.userRank || '-') + '</div>' +
+              '<div class="cell-badge">' + badge + '</div>' +
+              '<div>' + actionBtn + '</div>' +
+            '</div>';
+    });
+    body.innerHTML = html;
+}
+
+/* ── 확인 모달 ─────────────────────────────── */
+function askConfirm(userId, userName, grant) {
+    _pendingId    = userId;
+    _pendingGrant = grant;
+
+    var icon     = document.getElementById('modalIcon');
+    var iconSvg  = document.getElementById('modalIconSvg');
+    var title    = document.getElementById('modalTitle');
+    var desc     = document.getElementById('modalDesc');
+    var btn      = document.getElementById('modalConfirmBtn');
+
+    if (grant) {
+        icon.className = 'modal-icon grant';
+        iconSvg.setAttribute('stroke', '#92400e');
+        iconSvg.innerHTML = '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>';
+        title.textContent = '관리자 권한 부여';
+        desc.innerHTML    = '<strong>' + esc(userName) + '</strong> 수사관에게<br>관리자 권한을 부여하시겠습니까?<br><br>관리자는 부서 전체의 접근 로그를 열람할 수 있습니다.';
+        btn.textContent   = '권한 부여';
+        btn.className     = 'modal-confirm-grant';
+    } else {
+        icon.className = 'modal-icon revoke';
+        iconSvg.setAttribute('stroke', '#dc2626');
+        iconSvg.innerHTML = '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>';
+        title.textContent = '관리자 권한 해제';
+        desc.innerHTML    = '<strong>' + esc(userName) + '</strong> 수사관의<br>관리자 권한을 해제하시겠습니까?';
+        btn.textContent   = '권한 해제';
+        btn.className     = 'modal-confirm-revoke';
+    }
+
+    document.getElementById('confirmModal').classList.add('open');
+}
+
+function closeModal() {
+    document.getElementById('confirmModal').classList.remove('open');
+    _pendingId = null;
+}
+
+function doConfirm() {
+    if (!_pendingId) return;
+
+    // closeModal()이 _pendingId를 null로 초기화하므로 먼저 저장
+    var targetId = _pendingId;
+    var grant    = _pendingGrant;
+    closeModal();
+
+    var fd = new FormData();
+    fd.append('action',   'setAdmin');
+    fd.append('targetId', targetId);
+    fd.append('grant',    grant ? 'true' : 'false');
+
+    fetch('/adminApi', {method: 'POST', body: fd, credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.ok) {
+                showToast(_pendingGrant ? '관리자 권한을 부여했습니다.' : '관리자 권한을 해제했습니다.', false);
+                loadUsers();
+            } else {
+                showToast(d.error || '처리에 실패했습니다.', true);
+            }
+        })
+        .catch(function() { showToast('서버 통신 오류가 발생했습니다.', true); });
+}
+
+/* ── 토스트 ────────────────────────────────── */
+function showToast(msg, isError) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className   = 'toast' + (isError ? ' error' : '') + ' show';
+    setTimeout(function() { t.className = 'toast' + (isError ? ' error' : ''); }, 3000);
+}
+
+function showError(msg) {
+    document.getElementById('userBody').innerHTML = '<div class="empty-state">' + esc(msg) + '</div>';
+}
+
+/* ── XSS 방지 ──────────────────────────────── */
+function esc(s) {
+    return String(s || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+</script>
+</body>
+</html>
