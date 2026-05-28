@@ -2,7 +2,9 @@ package com.polmate.controller;
 
 import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  * JSP 페이지 매핑 컨트롤러
@@ -23,7 +25,11 @@ public class PageController {
     @GetMapping("/mobile/caseList")    public String mobileCaseList()    { return "mobile/caseList"; }
     @GetMapping("/mobile/board")       public String mobileBoard()       { return "mobile/board"; }
     @GetMapping("/mobile/boardView")   public String mobileBoardView()   { return "mobile/boardView"; }
-    @GetMapping("/mobile/boardEdit")   public String mobileBoardEdit()   { return "mobile/boardEdit"; }
+    @GetMapping("/mobile/boardEdit")
+    public String mobileBoardEdit(@RequestParam(required = false, defaultValue = "") String caseId, Model model) {
+        model.addAttribute("caseId", caseId);
+        return "mobile/boardEdit";
+    }
     @GetMapping("/mobile/mypage")      public String mobileMypage()      { return "mobile/mypage"; }
     @GetMapping("/mobile/notifications") public String mobileNotifications() { return "mobile/notifications"; }
     @GetMapping("/mobile/contradictionList") public String mobileContradictionList() { return "mobile/contradictionList"; }
