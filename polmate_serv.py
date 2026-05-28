@@ -55,7 +55,7 @@ CORS(app, resources={r"/*": {"origins": "*"}},
 # [섹션 1] 진술 분석 / 관계망 — 설정 및 전역 변수
 # ════════════════════════════════════════════════════════════════════════════
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
-MODEL      = os.environ.get("OLLAMA_MODEL", "exaone3.5:2.4b")
+MODEL      = os.environ.get("OLLAMA_MODEL", "ingu627/exaone4.0:1.2b")
 
 _ANALYZE_JOBS: dict      = {}
 _ANALYZE_JOBS_LOCK       = threading.Lock()
@@ -414,10 +414,36 @@ def _relation_map_prompt(case_id: str, case_name: str, persons_meta: str, transc
 [조서]
 {transcript_block}
 
-필드: persons(name, role 영문 suspect|victim|witness|reference, memo""), edges(src·dst=persons.name 동일, relType accomplice|harm|witness|acquaint|family, status match|mismatch|unknown, context "").
-동일인: 역할당 노드 1개. 거래처 대표·A거래처 대표는 직함만 다르면 한 사람(reference든 witness든). 직함+실명 노드가 같이 있으면 실명으로 합침. 본문에서 성명이 갈리면 분리.
-진술자 메타(요청의 transcripts name·type)와 같은 실명이면 role은 반드시 그 type에 맞춘다(피해자 조서인데 참고인으로 두지 말 것). 피의자·피해자가 목격·참고보다 우선.
-relType: accomplice=공동범행·공모·방조 등이 나올 때만. 업무·접대·카드·식사만이면 acquaint. 진술 충돌은 witness+mismatch. 피의자↔피해자는 harm(피해관계). persons에 피의자와 피해자가 모두 있으면 **모든 피의자–피해자 쌍**에 harm edge가 있어야 한다(누락 금지). edge 1개 이상, 임의 인물 남발 금지.
+## 출력 필드
+persons: name, role(영문 suspect|victim|witness|reference), memo(빈 문자열 가능)
+edges: src·dst=persons.name 동일, relType(accomplice|harm|witness|acquaint|family), status(match|mismatch|unknown), context(근거 원문 인용, 없으면 빈 문자열)
+
+## 인물(persons) 규칙
+- 동일인: 역할당 노드 1개. 직함만 다르면 한 사람으로 합침. 직함+실명이 같이 있으면 실명으로 합침. 본문에서 성명이 갈리면 분리.
+- 진술자 메타(transcripts name·type)와 같은 실명이면 role은 반드시 해당 type에 맞춤(피해자 조서면 victim). 피의자·피해자가 목격자·참고인보다 우선.
+- 임의로 인물을 추가하지 말 것. [조서]에 등장한 인물만.
+
+## 관계(edges) relType 정의 — 반드시 아래 기준을 엄격히 따를 것
+
+[accomplice] 공동범행·공모·방조·함께 저질렀다는 표현이 원문에 있을 때만.
+
+[harm] 피의자↔피해자 사이의 피해 관계. persons에 피의자와 피해자가 모두 있으면 **모든 피의자–피해자 쌍**에 harm edge 필수(누락 금지).
+
+[witness] ★핵심 주의★
+  - A가 B의 특정 행동을 직접 눈으로 목격했다는 표현이 원문에 명시된 경우에만 생성.
+  - 인정 표현 예: "A가 B를 봤다", "A가 B의 행동을 목격했다", "A는 현장에서 B가 ~하는 것을 보았다".
+  - 금지: 노드 role이 witness(목격자)·reference(참고인)라는 이유만으로 witness 엣지 자동 생성 금지.
+  - 금지: "같은 장소에 있었다", "A와 B가 함께 있었다"는 표현만으로는 witness 엣지 생성 금지.
+  - 금지: 원문에 없는 목격 관계를 추론하거나 가정해서 생성 금지.
+
+[acquaint] 같은 장소에 있었거나 아는 사이인 경우. 관계가 불명확하거나 어느 relType에도 해당하지 않는 경우 acquaint로 처리.
+
+[family] 가족·친족 관계임이 원문에 명시된 경우.
+
+## 기타 규칙
+- [조서] 원문에 근거 없는 관계는 절대 생성 금지.
+- status: 진술 내용이 다른 진술과 충돌하면 mismatch, 일치하면 match, 불명확하면 unknown.
+- edge는 1개 이상 필수.
 
 예: {{"persons":[{{"name":"홍길동","role":"suspect","memo":""}},{{"name":"김철수","role":"victim","memo":""}}],"edges":[{{"src":"홍길동","dst":"김철수","relType":"harm","status":"unknown","context":""}}]}}"""
 
@@ -1568,11 +1594,11 @@ def sanitize_relation_accomplice_edges(parsed: dict, corpus: str) -> dict:
         elif pair == {"suspect", "suspect"}:
             new_rel = "accomplice"
         elif pair == {"suspect", "reference"} or pair == {"victim", "reference"}:
-            new_rel = "witness" if st_low == "mismatch" else ("acquaint" if not corpus_ok else "accomplice")
+            new_rel = "acquaint" if not corpus_ok else "accomplice"
         elif pair == {"reference", "reference"}:
             new_rel = "acquaint" if not corpus_ok else "accomplice"
         elif "witness" in pair:
-            new_rel = "witness" if not corpus_ok else "accomplice"
+            new_rel = "acquaint" if not corpus_ok else "accomplice"
         else:
             new_rel = "acquaint" if not corpus_ok else "accomplice"
         ne = dict(e)

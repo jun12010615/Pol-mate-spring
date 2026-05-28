@@ -18,6 +18,9 @@ public class AiChatController {
     @Value("${ollama.url}")
     private String ollamaUrl;
 
+    @Value("${ollama.model:ingu627/exaone4.0:1.2b}")
+    private String ollamaModel;
+
     @Value("${law.api.oc}")
     private String lawOc;
 
@@ -75,7 +78,7 @@ public class AiChatController {
             conn.setDoOutput(true);
 
             JsonObject jsonInput = new JsonObject();
-            jsonInput.addProperty("model",  "gemma3:1b");
+            jsonInput.addProperty("model",  ollamaModel);
             jsonInput.addProperty("prompt", prompt);
             jsonInput.addProperty("stream", true);
 
