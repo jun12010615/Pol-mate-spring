@@ -2140,7 +2140,9 @@
         editor.addEventListener('input', guardMemoInput);
         editor.addEventListener('compositionend', guardMemoInput);
     })();
-    
+
+    function updateRoleIndicator() {}
+
     // 편집 모드 진입 시 기존 값 반영
     (function() {
         var sel = document.getElementById('selStmtType');
