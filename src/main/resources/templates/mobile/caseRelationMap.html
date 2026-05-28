@@ -718,7 +718,6 @@ function analyzeWithAI() {
   if (checkedTranscripts.length < 1) {
     showToast('조서를 1개 이상 선택해 주세요.'); return;
   }
-
   document.getElementById('btnAnalyze').disabled  = true;
   document.getElementById('aiLoading').classList.add('show');
   document.getElementById('aiResultBox').classList.remove('show');

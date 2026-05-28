@@ -353,7 +353,7 @@ html,body { height:100%; font-family:'Noto Sans KR',sans-serif; background:var(-
 </div>
 
 <div id="toast"></div>
-<div id="_boardEditPageBoot" hidden th:attr="data-case-id=${param.caseId ?:''}" data-case-name=""></div>
+<div id="_boardEditPageBoot" hidden th:attr="data-case-id=${caseId}" data-case-name=""></div>
 
 <script>
 // ── 상태: data-* 에서 사건 ID·이름 로드 (스크립트 안에 퍼센트+등호 조합을 쓰면 JSP가 표현식으로 오인식함) ──
