@@ -349,12 +349,12 @@
                 </div>
                 <div class="meta-field">
                     <label>진술 유형</label>
-                    <select class="meta-select" id="selStmtType">
+                    <select class="meta-select" id="selStmtType" onchange="updateRoleIndicator(this.value)">
                         <option value="">-- 선택 --</option>
-                        <option>피의자 진술</option>
-                        <option>피해자 진술</option>
-                        <option>목격자 진술</option>
-                        <option>참고인 진술</option>
+                        <option value="피의자">피의자 진술</option>
+                        <option value="피해자">피해자 진술</option>
+                        <option value="목격자">목격자 진술</option>
+                        <option value="참고인">참고인 진술</option>
                     </select>
                 </div>
                 <div class="meta-field">
@@ -644,6 +644,7 @@
         // 2) 사건 선택 드롭다운 동기화 (전문부는 안 건드림)
         if (d.caseId) setDesiredCaseId(d.caseId);
         setSelectValueIfPresent(document.getElementById('selStmtType'), d.type);
+        updateRoleIndicator(document.getElementById('selStmtType').value);
 
         // 3) 진술인 성명
         if (d.name) {
@@ -2138,6 +2139,12 @@
         }
         editor.addEventListener('input', guardMemoInput);
         editor.addEventListener('compositionend', guardMemoInput);
+    })();
+    
+    // 편집 모드 진입 시 기존 값 반영
+    (function() {
+        var sel = document.getElementById('selStmtType');
+        if (sel && sel.value) updateRoleIndicator(sel.value);
     })();
 </script>
 </body>
