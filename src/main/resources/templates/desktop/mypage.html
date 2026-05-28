@@ -1,260 +1,260 @@
 <!DOCTYPE html>
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>POL-MATE | 마이페이지</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" th:href="@{/css/polmate.css}">
-<script th:inline="javascript">var _ctx = '';</script>
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f4f6fb; color: #1a1a2e; -webkit-font-smoothing: antialiased; }
-.pm-page { padding: 28px 32px 48px; max-width: 1100px; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POL-MATE | 마이페이지</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/polmate.css}">
+    <script th:inline="javascript">var _ctx = '';</script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: #f4f6fb; color: #1a1a2e; -webkit-font-smoothing: antialiased; }
+        .pm-page { padding: 28px 32px 48px; }
 
-.profile-card {
-    background: #0d1a33; border-radius: 18px; padding: 28px 32px;
-    display: flex; align-items: center; gap: 24px; margin-bottom: 24px;
-    position: relative; overflow: hidden;
-}
-.profile-card::after { content:''; position:absolute; top:-60px; right:-60px; width:200px; height:200px; border-radius:50%; border:1px solid rgba(240,192,64,0.1); }
-.avatar-lg {
-    width: 72px; height: 72px; border-radius: 16px;
-    background: rgba(255,255,255,0.12); border: 2px solid rgba(240,192,64,0.35);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 26px; font-weight: 700; color: #fff; flex-shrink: 0;
-}
-.profile-info { flex: 1; min-width: 0; }
-.profile-name { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 4px; }
-.profile-rank { font-size: 12px; color: rgba(255,255,255,0.6); margin-bottom: 10px; }
-.profile-badges { display: flex; gap: 8px; flex-wrap: wrap; }
-.pbadge { display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.18); border-radius:20px; padding:4px 12px; font-size:10px; color:rgba(255,255,255,0.75); }
-.pbadge-dot { width:5px; height:5px; border-radius:50%; background:#4ade80; }
+        .profile-card {
+            background: #0d1a33; border-radius: 18px; padding: 28px 32px;
+            display: flex; align-items: center; gap: 24px; margin-bottom: 24px;
+            position: relative; overflow: hidden;
+        }
+        .profile-card::after { content:''; position:absolute; top:-60px; right:-60px; width:200px; height:200px; border-radius:50%; border:1px solid rgba(240,192,64,0.1); }
+        .avatar-lg {
+            width: 72px; height: 72px; border-radius: 16px;
+            background: rgba(255,255,255,0.12); border: 2px solid rgba(240,192,64,0.35);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 26px; font-weight: 700; color: #fff; flex-shrink: 0;
+        }
+        .profile-info { flex: 1; min-width: 0; }
+        .profile-name { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+        .profile-rank { font-size: 12px; color: rgba(255,255,255,0.6); margin-bottom: 10px; }
+        .profile-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+        .pbadge { display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.18); border-radius:20px; padding:4px 12px; font-size:10px; color:rgba(255,255,255,0.75); }
+        .pbadge-dot { width:5px; height:5px; border-radius:50%; background:#4ade80; }
 
-.stat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:24px; }
-.stat-card { background:#fff; border:1px solid #e2e5ee; border-radius:14px; padding:18px; text-align:center; }
-.stat-val { font-family:'Space Grotesk',sans-serif; font-size:30px; font-weight:700; color:#0d1a33; line-height:1.1; }
-.stat-lbl { font-size:11px; color:#9ca3af; margin-top:5px; }
+        .stat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:24px; }
+        .stat-card { background:#fff; border:1px solid #e2e5ee; border-radius:14px; padding:18px; text-align:center; }
+        .stat-val { font-family:'Space Grotesk',sans-serif; font-size:30px; font-weight:700; color:#0d1a33; line-height:1.1; }
+        .stat-lbl { font-size:11px; color:#9ca3af; margin-top:5px; }
 
-.content-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-.section-card { background:#fff; border:1px solid #e2e5ee; border-radius:16px; overflow:hidden; }
-.section-head { padding:16px 20px; border-bottom:1px solid #e2e5ee; display:flex; align-items:center; justify-content:space-between; }
-.section-title { font-size:13px; font-weight:500; }
-.section-body  { padding:20px; }
+        .content-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+        .section-card { background:#fff; border:1px solid #e2e5ee; border-radius:16px; overflow:hidden; }
+        .section-head { padding:16px 20px; border-bottom:1px solid #e2e5ee; display:flex; align-items:center; justify-content:space-between; }
+        .section-title { font-size:13px; font-weight:500; }
+        .section-body  { padding:20px; }
 
-.info-row { display:flex; align-items:center; padding:11px 0; border-bottom:1px solid #f0f2f8; }
-.info-row:last-child { border-bottom:none; }
-.info-label { font-size:11px; color:#9ca3af; width:90px; flex-shrink:0; }
-.info-value { font-size:13px; color:#1a1a2e; flex:1; }
-.info-edit  { font-size:11px; color:#4a7cdc; cursor:pointer; }
-.info-edit:hover { text-decoration:underline; }
+        .info-row { display:flex; align-items:center; padding:11px 0; border-bottom:1px solid #f0f2f8; }
+        .info-row:last-child { border-bottom:none; }
+        .info-label { font-size:11px; color:#9ca3af; width:90px; flex-shrink:0; }
+        .info-value { font-size:13px; color:#1a1a2e; flex:1; }
+        .info-edit  { font-size:11px; color:#4a7cdc; cursor:pointer; }
+        .info-edit:hover { text-decoration:underline; }
 
-.menu-item { display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid #f0f2f8; cursor:pointer; text-decoration:none; color:inherit; transition:background 0.12s; }
-.menu-item:last-child { border-bottom:none; }
-.menu-item:hover { color:#0d1a33; }
-.menu-icon { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.menu-text { flex:1; }
-.menu-label { font-size:13px; font-weight:500; }
-.menu-sub   { font-size:10px; color:#9ca3af; margin-top:1px; }
-.menu-arrow { color:#9ca3af; }
+        .menu-item { display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid #f0f2f8; cursor:pointer; text-decoration:none; color:inherit; transition:background 0.12s; }
+        .menu-item:last-child { border-bottom:none; }
+        .menu-item:hover { color:#0d1a33; }
+        .menu-icon { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+        .menu-text { flex:1; }
+        .menu-label { font-size:13px; font-weight:500; }
+        .menu-sub   { font-size:10px; color:#9ca3af; margin-top:1px; }
+        .menu-arrow { color:#9ca3af; }
 
-.danger-zone { background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
-.btn-logout { padding:8px 18px; background:#dc2626; color:#fff; border:none; border-radius:10px; font-size:12px; font-family:'Noto Sans KR',sans-serif; cursor:pointer; }
-.btn-logout:hover { background:#b91c1c; }
+        .danger-zone { background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
+        .btn-logout { padding:8px 18px; background:#dc2626; color:#fff; border:none; border-radius:10px; font-size:12px; font-family:'Noto Sans KR',sans-serif; cursor:pointer; }
+        .btn-logout:hover { background:#b91c1c; }
 
-/* 비밀번호 변경 모달 */
-.modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:300; align-items:center; justify-content:center; }
-.modal-backdrop.open { display:flex; }
-.modal { background:#fff; border-radius:16px; padding:28px; width:420px; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
-.modal-title { font-size:16px; font-weight:500; margin-bottom:20px; }
-.form-field { margin-bottom:14px; }
-.form-label { display:block; font-size:10px; font-weight:500; color:#6b7280; text-transform:uppercase; letter-spacing:0.7px; margin-bottom:6px; }
-.form-input { width:100%; padding:10px 12px; border:1.5px solid #e2e5ee; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; color:#1a1a2e; background:#f4f6fb; outline:none; transition:border-color 0.15s; }
-.form-input:focus { border-color:#0d1a33; background:#fff; box-shadow:0 0 0 3px rgba(13,26,51,0.07); }
-.modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
-.btn-cancel  { padding:9px 18px; background:transparent; border:1px solid #e2e5ee; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; cursor:pointer; color:#6b7280; }
-.btn-confirm { padding:9px 18px; background:#0d1a33; color:#fff; border:none; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; cursor:pointer; }
+        /* 비밀번호 변경 모달 */
+        .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:300; align-items:center; justify-content:center; }
+        .modal-backdrop.open { display:flex; }
+        .modal { background:#fff; border-radius:16px; padding:28px; width:420px; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
+        .modal-title { font-size:16px; font-weight:500; margin-bottom:20px; }
+        .form-field { margin-bottom:14px; }
+        .form-label { display:block; font-size:10px; font-weight:500; color:#6b7280; text-transform:uppercase; letter-spacing:0.7px; margin-bottom:6px; }
+        .form-input { width:100%; padding:10px 12px; border:1.5px solid #e2e5ee; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; color:#1a1a2e; background:#f4f6fb; outline:none; transition:border-color 0.15s; }
+        .form-input:focus { border-color:#0d1a33; background:#fff; box-shadow:0 0 0 3px rgba(13,26,51,0.07); }
+        .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
+        .btn-cancel  { padding:9px 18px; background:transparent; border:1px solid #e2e5ee; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; cursor:pointer; color:#6b7280; }
+        .btn-confirm { padding:9px 18px; background:#0d1a33; color:#fff; border:none; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; cursor:pointer; }
 
-.toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(80px); background:#1a2744; color:#fff; padding:10px 20px; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; opacity:0; transition:all 0.25s; z-index:500; white-space:nowrap; }
-.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+        .toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(80px); background:#1a2744; color:#fff; padding:10px 20px; border-radius:10px; font-size:13px; font-family:'Noto Sans KR',sans-serif; opacity:0; transition:all 0.25s; z-index:500; white-space:nowrap; }
+        .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
-@media (max-width:1000px) { .content-grid { grid-template-columns:1fr; } }
+        @media (max-width:1000px) { .content-grid { grid-template-columns:1fr; } }
 
-.hist-section { margin-top: 20px; }
-.hist-item { display:flex; align-items:center; gap:14px; padding:13px 0; border-bottom:1px solid #f0f2f8; cursor:pointer; }
-.hist-item:last-child { border-bottom:none; }
-.hist-item:hover .hist-title { color:#4a7cdc; }
-.hist-dot { width:7px; height:7px; border-radius:50%; background:#4a7cdc; flex-shrink:0; margin-top:2px; }
-.hist-main { flex:1; min-width:0; }
-.hist-title { font-size:13px; font-weight:500; color:#1a1a2e; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:color 0.12s; }
-.hist-meta  { font-size:11px; color:#9ca3af; }
-.hist-badge { font-size:10px; padding:3px 10px; border-radius:20px; white-space:nowrap; flex-shrink:0; }
-.hist-badge-ok   { background:#f0fdf4; color:#15803d; }
-.hist-badge-warn { background:#fffbeb; color:#92400e; }
-.hist-badge-done { background:#eff6ff; color:#1e40af; }
-.hist-empty { font-size:13px; color:#9ca3af; text-align:center; padding:24px 0; }
-</style>
+        .hist-section { margin-top: 20px; }
+        .hist-item { display:flex; align-items:center; gap:14px; padding:13px 0; border-bottom:1px solid #f0f2f8; cursor:pointer; }
+        .hist-item:last-child { border-bottom:none; }
+        .hist-item:hover .hist-title { color:#4a7cdc; }
+        .hist-dot { width:7px; height:7px; border-radius:50%; background:#4a7cdc; flex-shrink:0; margin-top:2px; }
+        .hist-main { flex:1; min-width:0; }
+        .hist-title { font-size:13px; font-weight:500; color:#1a1a2e; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:color 0.12s; }
+        .hist-meta  { font-size:11px; color:#9ca3af; }
+        .hist-badge { font-size:10px; padding:3px 10px; border-radius:20px; white-space:nowrap; flex-shrink:0; }
+        .hist-badge-ok   { background:#f0fdf4; color:#15803d; }
+        .hist-badge-warn { background:#fffbeb; color:#92400e; }
+        .hist-badge-done { background:#eff6ff; color:#1e40af; }
+        .hist-empty { font-size:13px; color:#9ca3af; text-align:center; padding:24px 0; }
+    </style>
 </head>
 <body>
 <div class="pm-layout">
 
-<th:block th:replace="~{desktop/fragments/sidebar :: sidebar('mypage')}"></th:block>
-<div class="pm-content">
-<th:block th:replace="~{desktop/fragments/appbar :: appbar('POL-MATE,마이페이지')}"></th:block>
+    <th:block th:replace="~{desktop/fragments/sidebar :: sidebar('mypage')}"></th:block>
+    <div class="pm-content">
+        <th:block th:replace="~{desktop/fragments/appbar :: appbar('POL-MATE,마이페이지')}"></th:block>
 
-<main class="pm-page">
+        <main class="pm-page">
 
-    <div class="profile-card">
-        <div class="avatar-lg"
-             th:text="${(session.userName != null and !#strings.isEmpty(session.userName)) ? #strings.substring(session.userName, 0, 1) : '경'}"></div>
-        <div class="profile-info">
-            <div class="profile-name"
-                 th:text="${(session.userRank != null and !#strings.isEmpty(session.userRank)) ? session.userRank + ' ' + (session.userName ?: '') : (session.userName ?: '')}"></div>
-            <div class="profile-rank"
-                 th:text="${(session.userOrg != null and !#strings.isEmpty(session.userOrg)) ? session.userOrg : 'POL-MATE 수사관'}"></div>
-            <div class="profile-badges">
-                <span class="pbadge"><span class="pbadge-dot"></span>활성 계정</span>
-                <span class="pbadge" th:text="'ID: ' + ${session.loginUser ?: ''}"></span>
-            </div>
-        </div>
-    </div>
-
-    <div class="stat-grid">
-        <div class="stat-card"><div class="stat-val" id="statCase">-</div><div class="stat-lbl">전체 담당 사건 수</div></div>
-        <div class="stat-card"><div class="stat-val" id="statTranscript">-</div><div class="stat-lbl">작성 진술 조서</div></div>
-        <div class="stat-card"><div class="stat-val" id="statBoard">-</div><div class="stat-lbl">커뮤니티 게시글</div></div>
-    </div>
-
-    <div class="content-grid">
-
-        <div class="section-card">
-            <div class="section-head">
-                <span class="section-title">계정 정보</span>
-            </div>
-            <div class="section-body">
-                <div class="info-row">
-                    <span class="info-label">아이디</span>
-                    <span class="info-value" th:text="${session.loginUser ?: ''}"></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">이름</span>
-                    <span class="info-value" th:text="${session.userName ?: ''}"></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">계급</span>
-                    <span class="info-value"
-                          th:text="${(session.userRank != null and !#strings.isEmpty(session.userRank)) ? session.userRank : '-'}"></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">소속 기관</span>
-                    <span class="info-value"
-                          th:text="${(session.userOrg != null and !#strings.isEmpty(session.userOrg)) ? session.userOrg : '-'}"></span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">연락처</span>
-                    <span class="info-value" id="infoPhone">-</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">이메일</span>
-                    <span class="info-value" id="infoEmail">-</span>
-                </div>
-            </div>
-        </div>
-
-        <div>
-            <div class="section-card" style="margin-bottom:16px;">
-                <div class="section-head"><span class="section-title">빠른 이동</span></div>
-                <div class="section-body">
-                    <a th:href="@{/desktop/myCase}" class="menu-item">
-                        <div class="menu-icon" style="background:#eff6ff;">
-                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="1.8" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                        </div>
-                        <div class="menu-text">
-                            <div class="menu-label">내 사건 관리</div>
-                            <div class="menu-sub">담당 사건 목록 조회 및 수정</div>
-                        </div>
-                        <svg class="menu-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-                    </a>
-                    <a th:href="@{/desktop/writeTranscript}" class="menu-item">
-                        <div class="menu-icon" style="background:#f0fdf4;">
-                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
-                        </div>
-                        <div class="menu-text">
-                            <div class="menu-label">진술 조서 작성</div>
-                            <div class="menu-sub">STT 기반 자동 조서화</div>
-                        </div>
-                        <svg class="menu-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-                    </a>
-                    <a th:href="@{/desktop/contradictionList}" class="menu-item">
-                        <div class="menu-icon" style="background:#fef2f2;">
-                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                        </div>
-                        <div class="menu-text">
-                            <div class="menu-label">모순탐지 목록</div>
-                            <div class="menu-sub">저장된 AI 모순탐지 결과 조회</div>
-                        </div>
-                        <svg class="menu-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-                    </a>
-                    <a th:href="@{/desktop/board}" class="menu-item">
-                        <div class="menu-icon" style="background:#fffbeb;">
-                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="1.8" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                        </div>
-                        <div class="menu-text">
-                            <div class="menu-label">커뮤니티 게시판</div>
-                            <div class="menu-sub">수사관 정보 공유</div>
-                        </div>
-                        <svg class="menu-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-                    </a>
-                </div>
-            </div>
-
-            <div class="section-card">
-                <div class="section-head"><span class="section-title">계정 설정</span></div>
-                <div class="section-body">
-                    <div class="menu-item" onclick="openPwModal()">
-                        <div class="menu-icon" style="background:#f4f6fb;">
-                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                        </div>
-                        <div class="menu-text">
-                            <div class="menu-label">비밀번호 변경</div>
-                            <div class="menu-sub">현재 비밀번호 확인 후 변경</div>
-                        </div>
-                        <svg class="menu-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-                    </div>
-                    <div class="danger-zone" style="flex-direction:column; gap:10px; align-items:stretch;">
-                        <div style="display:flex; align-items:center; justify-content:space-between;">
-                            <div>
-                                <div style="font-size:13px; font-weight:500; color:#dc2626;">로그아웃</div>
-                                <div style="font-size:11px; color:#9ca3af; margin-top:2px;">현재 세션을 종료합니다.</div>
-                            </div>
-                            <button class="btn-logout" onclick="confirmLogout()">로그아웃</button>
-                        </div>
-                        <div style="border-top:1px solid #fecaca; padding-top:10px; display:flex; align-items:center; justify-content:space-between;">
-                            <div>
-                                <div style="font-size:13px; font-weight:500; color:#dc2626;">회원탈퇴</div>
-                                <div style="font-size:11px; color:#9ca3af; margin-top:2px;">계정 및 모든 데이터를 영구 삭제합니다.</div>
-                            </div>
-                            <button class="btn-logout" onclick="confirmWithdraw()">탈퇴하기</button>
-                        </div>
+            <div class="profile-card">
+                <div class="avatar-lg"
+                     th:text="${(session.userName != null and !#strings.isEmpty(session.userName)) ? #strings.substring(session.userName, 0, 1) : '경'}"></div>
+                <div class="profile-info">
+                    <div class="profile-name"
+                         th:text="${(session.userRank != null and !#strings.isEmpty(session.userRank)) ? session.userRank + ' ' + (session.userName ?: '') : (session.userName ?: '')}"></div>
+                    <div class="profile-rank"
+                         th:text="${(session.userOrg != null and !#strings.isEmpty(session.userOrg)) ? session.userOrg : 'POL-MATE 수사관'}"></div>
+                    <div class="profile-badges">
+                        <span class="pbadge"><span class="pbadge-dot"></span>활성 계정</span>
+                        <span class="pbadge" th:text="'ID: ' + ${session.loginUser ?: ''}"></span>
                     </div>
                 </div>
             </div>
-        </div>
 
+            <div class="stat-grid">
+                <div class="stat-card"><div class="stat-val" id="statCase">-</div><div class="stat-lbl">전체 담당 사건 수</div></div>
+                <div class="stat-card"><div class="stat-val" id="statTranscript">-</div><div class="stat-lbl">작성 진술 조서</div></div>
+                <div class="stat-card"><div class="stat-val" id="statBoard">-</div><div class="stat-lbl">커뮤니티 게시글</div></div>
+            </div>
+
+            <div class="content-grid">
+
+                <div class="section-card">
+                    <div class="section-head">
+                        <span class="section-title">계정 정보</span>
+                    </div>
+                    <div class="section-body">
+                        <div class="info-row">
+                            <span class="info-label">아이디</span>
+                            <span class="info-value" th:text="${session.loginUser ?: ''}"></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">이름</span>
+                            <span class="info-value" th:text="${session.userName ?: ''}"></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">계급</span>
+                            <span class="info-value"
+                                  th:text="${(session.userRank != null and !#strings.isEmpty(session.userRank)) ? session.userRank : '-'}"></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">소속 기관</span>
+                            <span class="info-value"
+                                  th:text="${(session.userOrg != null and !#strings.isEmpty(session.userOrg)) ? session.userOrg : '-'}"></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">연락처</span>
+                            <span class="info-value" id="infoPhone">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">이메일</span>
+                            <span class="info-value" id="infoEmail">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="section-card" style="margin-bottom:16px;">
+                        <div class="section-head"><span class="section-title">빠른 이동</span></div>
+                        <div class="section-body">
+                            <a th:href="@{/desktop/myCase}" class="menu-item">
+                                <div class="menu-icon" style="background:#eff6ff;">
+                                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="1.8" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                </div>
+                                <div class="menu-text">
+                                    <div class="menu-label">내 사건 관리</div>
+                                    <div class="menu-sub">담당 사건 목록 조회 및 수정</div>
+                                </div>
+                                <svg class="menu-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                            </a>
+                            <a th:href="@{/desktop/writeTranscript}" class="menu-item">
+                                <div class="menu-icon" style="background:#f0fdf4;">
+                                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+                                </div>
+                                <div class="menu-text">
+                                    <div class="menu-label">진술 조서 작성</div>
+                                    <div class="menu-sub">STT 기반 자동 조서화</div>
+                                </div>
+                                <svg class="menu-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                            </a>
+                            <a th:href="@{/desktop/contradictionList}" class="menu-item">
+                                <div class="menu-icon" style="background:#fef2f2;">
+                                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                                </div>
+                                <div class="menu-text">
+                                    <div class="menu-label">모순탐지 목록</div>
+                                    <div class="menu-sub">저장된 AI 모순탐지 결과 조회</div>
+                                </div>
+                                <svg class="menu-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                            </a>
+                            <a th:href="@{/desktop/board}" class="menu-item">
+                                <div class="menu-icon" style="background:#fffbeb;">
+                                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="1.8" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                </div>
+                                <div class="menu-text">
+                                    <div class="menu-label">커뮤니티 게시판</div>
+                                    <div class="menu-sub">수사관 정보 공유</div>
+                                </div>
+                                <svg class="menu-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="section-card">
+                        <div class="section-head"><span class="section-title">계정 설정</span></div>
+                        <div class="section-body">
+                            <div class="menu-item" onclick="openPwModal()">
+                                <div class="menu-icon" style="background:#f4f6fb;">
+                                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                </div>
+                                <div class="menu-text">
+                                    <div class="menu-label">비밀번호 변경</div>
+                                    <div class="menu-sub">현재 비밀번호 확인 후 변경</div>
+                                </div>
+                                <svg class="menu-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                            </div>
+                            <div class="danger-zone" style="flex-direction:column; gap:10px; align-items:stretch;">
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <div>
+                                        <div style="font-size:13px; font-weight:500; color:#dc2626;">로그아웃</div>
+                                        <div style="font-size:11px; color:#9ca3af; margin-top:2px;">현재 세션을 종료합니다.</div>
+                                    </div>
+                                    <button class="btn-logout" onclick="confirmLogout()">로그아웃</button>
+                                </div>
+                                <div style="border-top:1px solid #fecaca; padding-top:10px; display:flex; align-items:center; justify-content:space-between;">
+                                    <div>
+                                        <div style="font-size:13px; font-weight:500; color:#dc2626;">회원탈퇴</div>
+                                        <div style="font-size:11px; color:#9ca3af; margin-top:2px;">계정 및 모든 데이터를 영구 삭제합니다.</div>
+                                    </div>
+                                    <button class="btn-logout" onclick="confirmWithdraw()">탈퇴하기</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="section-card hist-section" id="histSection" style="display:none;">
+                <div class="section-head">
+                    <span class="section-title">최근 활동 이력</span>
+                    <span id="histCount" style="font-size:11px;color:#9ca3af;"></span>
+                </div>
+                <div class="section-body" id="histList">
+                    <div class="hist-empty">불러오는 중...</div>
+                </div>
+            </div>
+
+        </main>
     </div>
-
-    <div class="section-card hist-section" id="histSection" style="display:none;">
-        <div class="section-head">
-            <span class="section-title">최근 활동 이력</span>
-            <span id="histCount" style="font-size:11px;color:#9ca3af;"></span>
-        </div>
-        <div class="section-body" id="histList">
-            <div class="hist-empty">불러오는 중...</div>
-        </div>
-    </div>
-
-</main>
-</div>
 </div>
 
 <div class="modal-backdrop" id="pwModal">
@@ -302,131 +302,131 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
 <div class="toast" id="toast"></div>
 
 <script>
-(function() {
-    fetch('/mypage?action=load', {credentials: 'same-origin'})
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            var u = d.user || {};
-            if (document.getElementById('infoPhone')) document.getElementById('infoPhone').textContent = u.user_phone || '-';
-            if (document.getElementById('infoEmail')) document.getElementById('infoEmail').textContent = u.user_email || '-';
-            var s = d.stats || {};
-            if (document.getElementById('statCase'))       document.getElementById('statCase').textContent       = s.totalCases        != null ? s.totalCases        : '-';
-            if (document.getElementById('statTranscript')) document.getElementById('statTranscript').textContent = s.totalTranscripts   != null ? s.totalTranscripts   : '-';
-            if (document.getElementById('statBoard'))      document.getElementById('statBoard').textContent      = s.totalBoardPosts    != null ? s.totalBoardPosts    : '-';
-        }).catch(function() {});
-    loadHistory();
-})();
+    (function() {
+        fetch('/mypage?action=load', {credentials: 'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                var u = d.user || {};
+                if (document.getElementById('infoPhone')) document.getElementById('infoPhone').textContent = u.user_phone || '-';
+                if (document.getElementById('infoEmail')) document.getElementById('infoEmail').textContent = u.user_email || '-';
+                var s = d.stats || {};
+                if (document.getElementById('statCase'))       document.getElementById('statCase').textContent       = s.totalCases        != null ? s.totalCases        : '-';
+                if (document.getElementById('statTranscript')) document.getElementById('statTranscript').textContent = s.totalTranscripts   != null ? s.totalTranscripts   : '-';
+                if (document.getElementById('statBoard'))      document.getElementById('statBoard').textContent      = s.totalBoardPosts    != null ? s.totalBoardPosts    : '-';
+            }).catch(function() {});
+        loadHistory();
+    })();
 
-function escHtml(s) {
-    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+    function escHtml(s) {
+        return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
 
-function loadHistory() {
-    fetch('/mypage?action=history', {credentials: 'same-origin'})
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var list = data.history || [];
-            var sec  = document.getElementById('histSection');
-            var cont = document.getElementById('histList');
-            var cnt  = document.getElementById('histCount');
-            if (sec)  sec.style.display = '';
-            if (cnt)  cnt.textContent = list.length + '건';
-            if (!cont) return;
-            if (!list.length) {
-                cont.innerHTML = '<div class="hist-empty">조서 이력이 없습니다.</div>';
-                return;
-            }
-            var BADGE = {'진행중':'hist-badge-ok','검토필요':'hist-badge-warn','모순탐지':'hist-badge-warn','완료':'hist-badge-done'};
-            cont.innerHTML = list.map(function(t) {
-                var date  = t.createdAt
-                    ? new Date(t.createdAt).toLocaleDateString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Seoul'}).replace(/\. /g,'.').replace(/\.$/,'')
-                    : '';
-                var badge = BADGE[t.caseStatus] || 'hist-badge-done';
-                var caseIdEsc = (t.caseId || '').replace(/'/g,"\\'");
-                return '<div class="hist-item" onclick="location.href=\'/desktop/myCase?caseId=' + caseIdEsc + '\'">' +
-                    '<div class="hist-dot"></div>' +
-                    '<div class="hist-main">' +
+    function loadHistory() {
+        fetch('/mypage?action=history', {credentials: 'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var list = data.history || [];
+                var sec  = document.getElementById('histSection');
+                var cont = document.getElementById('histList');
+                var cnt  = document.getElementById('histCount');
+                if (sec)  sec.style.display = '';
+                if (cnt)  cnt.textContent = list.length + '건';
+                if (!cont) return;
+                if (!list.length) {
+                    cont.innerHTML = '<div class="hist-empty">조서 이력이 없습니다.</div>';
+                    return;
+                }
+                var BADGE = {'진행중':'hist-badge-ok','검토필요':'hist-badge-warn','모순탐지':'hist-badge-warn','완료':'hist-badge-done'};
+                cont.innerHTML = list.map(function(t) {
+                    var date  = t.createdAt
+                        ? new Date(t.createdAt).toLocaleDateString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Seoul'}).replace(/\. /g,'.').replace(/\.$/,'')
+                        : '';
+                    var badge = BADGE[t.caseStatus] || 'hist-badge-done';
+                    var caseIdEsc = (t.caseId || '').replace(/'/g,"\\'");
+                    return '<div class="hist-item" onclick="location.href=\'/desktop/myCase?caseId=' + caseIdEsc + '\'">' +
+                        '<div class="hist-dot"></div>' +
+                        '<div class="hist-main">' +
                         '<div class="hist-title">' + escHtml(t.caseId) + ' ' + escHtml(t.caseName || '') + '</div>' +
                         '<div class="hist-meta">' + date + (t.stmtName ? ' · ' + escHtml(t.stmtType || '') + ' ' + escHtml(t.stmtName) + ' 진술' : '') + '</div>' +
-                    '</div>' +
-                    '<span class="hist-badge ' + badge + '">' + escHtml(t.caseStatus || '') + '</span>' +
-                '</div>';
-            }).join('');
-        }).catch(function() {
+                        '</div>' +
+                        '<span class="hist-badge ' + badge + '">' + escHtml(t.caseStatus || '') + '</span>' +
+                        '</div>';
+                }).join('');
+            }).catch(function() {
             var cont = document.getElementById('histList');
             if (cont) cont.innerHTML = '<div class="hist-empty">불러오기에 실패했습니다.</div>';
         });
-}
+    }
 
-function openPwModal()  { document.getElementById('pwModal').classList.add('open'); }
-function closePwModal() { document.getElementById('pwModal').classList.remove('open'); ['curPw','newPw','newPwCf'].forEach(function(id){document.getElementById(id).value='';}); }
+    function openPwModal()  { document.getElementById('pwModal').classList.add('open'); }
+    function closePwModal() { document.getElementById('pwModal').classList.remove('open'); ['curPw','newPw','newPwCf'].forEach(function(id){document.getElementById(id).value='';}); }
 
-function submitPwChange() {
-    var cur  = document.getElementById('curPw').value;
-    var np   = document.getElementById('newPw').value;
-    var npcf = document.getElementById('newPwCf').value;
-    if (!cur) { showToast('현재 비밀번호를 입력해 주세요.'); return; }
-    if (!np || np.length < 8) { showToast('새 비밀번호를 8자 이상 입력해 주세요.'); return; }
-    if (np !== npcf) { showToast('새 비밀번호가 일치하지 않습니다.'); return; }
-    var fd = new FormData();
-    fd.append('action', 'changePassword');
-    fd.append('curPw', cur); fd.append('newPw', np); fd.append('newPwCf', npcf);
-    fetch('/mypage', {method:'POST', body:fd, credentials:'same-origin'})
-        .then(function(r){return r.json();})
-        .then(function(d){
-            if (d.success) { closePwModal(); showToast('비밀번호가 변경되었습니다.'); }
-            else { showToast(d.message || '변경에 실패했습니다.'); }
-        }).catch(function(){ showToast('서버 통신 오류가 발생했습니다.'); });
-}
+    function submitPwChange() {
+        var cur  = document.getElementById('curPw').value;
+        var np   = document.getElementById('newPw').value;
+        var npcf = document.getElementById('newPwCf').value;
+        if (!cur) { showToast('현재 비밀번호를 입력해 주세요.'); return; }
+        if (!np || np.length < 8) { showToast('새 비밀번호를 8자 이상 입력해 주세요.'); return; }
+        if (np !== npcf) { showToast('새 비밀번호가 일치하지 않습니다.'); return; }
+        var fd = new FormData();
+        fd.append('action', 'changePassword');
+        fd.append('curPw', cur); fd.append('newPw', np); fd.append('newPwCf', npcf);
+        fetch('/mypage', {method:'POST', body:fd, credentials:'same-origin'})
+            .then(function(r){return r.json();})
+            .then(function(d){
+                if (d.success) { closePwModal(); showToast('비밀번호가 변경되었습니다.'); }
+                else { showToast(d.message || '변경에 실패했습니다.'); }
+            }).catch(function(){ showToast('서버 통신 오류가 발생했습니다.'); });
+    }
 
-function confirmLogout() {
-    pmShowLogoutModal();
-}
+    function confirmLogout() {
+        pmShowLogoutModal();
+    }
 
-function confirmWithdraw() {
-    document.getElementById('withdrawPw').value = '';
-    document.getElementById('withdrawMsg').style.display = 'none';
-    document.getElementById('withdrawModal').classList.add('open');
-}
+    function confirmWithdraw() {
+        document.getElementById('withdrawPw').value = '';
+        document.getElementById('withdrawMsg').style.display = 'none';
+        document.getElementById('withdrawModal').classList.add('open');
+    }
 
-function closeWithdrawModal() {
-    document.getElementById('withdrawModal').classList.remove('open');
-}
+    function closeWithdrawModal() {
+        document.getElementById('withdrawModal').classList.remove('open');
+    }
 
-function submitWithdraw() {
-    var pw  = document.getElementById('withdrawPw').value;
-    var msg = document.getElementById('withdrawMsg');
-    var btn = document.getElementById('withdrawBtn');
-    msg.style.display = 'none';
-    if (!pw) { msg.textContent = '비밀번호를 입력해 주세요.'; msg.style.display = 'block'; return; }
-    btn.disabled = true; btn.textContent = '처리 중...';
-    var fd = new FormData();
-    fd.append('action', 'withdraw'); fd.append('userPw', pw);
-    fetch('/mypage', {method:'POST', body:fd, credentials:'same-origin'})
-        .then(function(r){return r.json();})
-        .then(function(d){
-            if (d.success) {
-                alert('탈퇴가 완료되었습니다.');
-                location.href = '/desktop/login';
-            } else {
-                msg.textContent = d.message || '탈퇴 처리에 실패했습니다.';
-                msg.style.display = 'block';
-                btn.disabled = false; btn.textContent = '탈퇴하기';
-            }
-        }).catch(function(){
+    function submitWithdraw() {
+        var pw  = document.getElementById('withdrawPw').value;
+        var msg = document.getElementById('withdrawMsg');
+        var btn = document.getElementById('withdrawBtn');
+        msg.style.display = 'none';
+        if (!pw) { msg.textContent = '비밀번호를 입력해 주세요.'; msg.style.display = 'block'; return; }
+        btn.disabled = true; btn.textContent = '처리 중...';
+        var fd = new FormData();
+        fd.append('action', 'withdraw'); fd.append('userPw', pw);
+        fetch('/mypage', {method:'POST', body:fd, credentials:'same-origin'})
+            .then(function(r){return r.json();})
+            .then(function(d){
+                if (d.success) {
+                    alert('탈퇴가 완료되었습니다.');
+                    location.href = '/desktop/login';
+                } else {
+                    msg.textContent = d.message || '탈퇴 처리에 실패했습니다.';
+                    msg.style.display = 'block';
+                    btn.disabled = false; btn.textContent = '탈퇴하기';
+                }
+            }).catch(function(){
             msg.textContent = '오류가 발생했습니다. 다시 시도해 주세요.';
             msg.style.display = 'block';
             btn.disabled = false; btn.textContent = '탈퇴하기';
         });
-}
+    }
 
-function showToast(msg) {
-    var t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
-    setTimeout(function(){ t.classList.remove('show'); }, 2500);
-}
+    function showToast(msg) {
+        var t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+        setTimeout(function(){ t.classList.remove('show'); }, 2500);
+    }
 
-document.getElementById('pwModal').addEventListener('click', function(e){ if(e.target===this) closePwModal(); });
-document.getElementById('withdrawModal').addEventListener('click', function(e){ if(e.target===this) closeWithdrawModal(); });
+    document.getElementById('pwModal').addEventListener('click', function(e){ if(e.target===this) closePwModal(); });
+    document.getElementById('withdrawModal').addEventListener('click', function(e){ if(e.target===this) closeWithdrawModal(); });
 </script>
 </body>
 </html>
