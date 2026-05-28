@@ -658,51 +658,72 @@ function initCanvasEvents() {
 function initForce(w, h) {
     var n = persons.length;
     if (!n) return;
-    var cx = w/2, cy = h/2;
-    if (n === 1) { persons[0]._x = cx; persons[0]._y = cy; persons[0]._vx = 0; persons[0]._vy = 0; return; }
+    var cx = w / 2, cy = h / 2;
+    if (n === 1) {
+        persons[0]._x = cx; persons[0]._y = cy;
+        persons[0]._vx = 0; persons[0]._vy = 0;
+        return;
+    }
+    // 초기 위치: 더 큰 반경 + 랜덤 jitter → 대칭 local minima(두 줄 배치) 방지
+    var r = Math.min(w, h) * 0.38;
     persons.forEach(function(p, i) {
-        var a = (2 * Math.PI * i / n) - Math.PI/2;
-        var r = Math.min(w, h) * 0.3;
-        p._x = cx + Math.cos(a) * r;
-        p._y = cy + Math.sin(a) * r;
+        var a = (2 * Math.PI * i / n) - Math.PI / 2;
+        p._x = cx + Math.cos(a) * r + (Math.random() - 0.5) * 80;
+        p._y = cy + Math.sin(a) * r + (Math.random() - 0.5) * 80;
         p._vx = 0; p._vy = 0;
     });
-    for (var i = 0; i < 200; i++) runForce(w, h);
+    // 충분한 반복으로 안정적 수렴
+    for (var i = 0; i < 500; i++) runForce(w, h);
 }
+
 function runForce(w, h) {
     var n = persons.length; if (n < 2) return;
     var area = Math.max(w * h, 1);
-    var k = Math.sqrt(area / n) * 0.82;
-    var repK = k * k, attract = 0.05, pad = 60, damping = 0.85, grav = 0.018, vmax = k * 0.4;
+    var k       = Math.sqrt(area / n) * 1.2;   // 목표 거리 확대 (0.82 → 1.2)
+    var repK    = k * k * 1.5;                  // 반발력 강화 (1.0 → 1.5배)
+    var attract = 0.08;                          // 엣지 인력 강화 (0.05 → 0.08)
+    var pad     = 80;                            // 경계 여백 확대 (60 → 80)
+    var damping = 0.78;                          // 감쇠 완화 → local minima 탈출 (0.85 → 0.78)
+    var grav    = 0.04;                          // 중력 강화 → 한쪽 쏠림 방지 (0.018 → 0.04)
+    var vmax    = k * 0.5;                       // 최대 속도 소폭 증가
+
     persons.forEach(function(p) { p._fx = 0; p._fy = 0; });
+
+    // 노드 간 반발력
     for (var i = 0; i < n; i++) {
-        for (var j = i+1; j < n; j++) {
+        for (var j = i + 1; j < n; j++) {
             var pi = persons[i], pj = persons[j];
             var dx = pi._x - pj._x, dy = pi._y - pj._y;
-            var dist = Math.sqrt(dx*dx + dy*dy); if (dist < 0.01) dist = 0.01;
+            var dist = Math.sqrt(dx * dx + dy * dy); if (dist < 0.01) dist = 0.01;
             var f = repK / dist;
-            pi._fx += dx/dist*f; pi._fy += dy/dist*f;
-            pj._fx -= dx/dist*f; pj._fy -= dy/dist*f;
+            pi._fx += dx / dist * f; pi._fy += dy / dist * f;
+            pj._fx -= dx / dist * f; pj._fy -= dy / dist * f;
         }
     }
+
+    // 엣지 인력 (연결된 노드를 목표 거리 k로 당김)
     edges.forEach(function(e) {
         var sp = persons.find(function(p) { return p.id === e.src; });
         var dp = persons.find(function(p) { return p.id === e.dst; });
         if (!sp || !dp) return;
         var dx = dp._x - sp._x, dy = dp._y - sp._y;
-        var dist = Math.sqrt(dx*dx + dy*dy); if (dist < 0.01) dist = 0.01;
+        var dist = Math.sqrt(dx * dx + dy * dy); if (dist < 0.01) dist = 0.01;
         var f = attract * (dist - k);
-        sp._fx += dx/dist*f; sp._fy += dy/dist*f;
-        dp._fx -= dx/dist*f; dp._fy -= dy/dist*f;
+        sp._fx += dx / dist * f; sp._fy += dy / dist * f;
+        dp._fx -= dx / dist * f; dp._fy -= dy / dist * f;
     });
-    var cx = w/2, cy = h/2;
+
+    // 중앙 중력 (한쪽 쏠림 방지)
+    var cx = w / 2, cy = h / 2;
     persons.forEach(function(p) {
-        p._fx += (cx - p._x) * grav; p._fy += (cy - p._y) * grav;
-        p._vx = (p._vx + p._fx) * damping; p._vy = (p._vy + p._fy) * damping;
-        var v = Math.sqrt(p._vx*p._vx + p._vy*p._vy);
-        if (v > vmax) { p._vx *= vmax/v; p._vy *= vmax/v; }
-        p._x = Math.max(pad, Math.min(w-pad, p._x + p._vx));
-        p._y = Math.max(pad, Math.min(h-pad, p._y + p._vy));
+        p._fx += (cx - p._x) * grav;
+        p._fy += (cy - p._y) * grav;
+        p._vx = (p._vx + p._fx) * damping;
+        p._vy = (p._vy + p._fy) * damping;
+        var v = Math.sqrt(p._vx * p._vx + p._vy * p._vy);
+        if (v > vmax) { p._vx *= vmax / v; p._vy *= vmax / v; }
+        p._x = Math.max(pad, Math.min(w - pad, p._x + p._vx));
+        p._y = Math.max(pad, Math.min(h - pad, p._y + p._vy));
     });
 }
 
