@@ -1,0 +1,31 @@
+package com.polmate.entity.relation;
+
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import lombok.*;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "relation_history")
+@Data @Builder @NoArgsConstructor @AllArgsConstructor
+public class RelationHistory {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "history_id")
+    private Integer historyId;
+
+    @Column(name = "case_id")
+    private String caseId;
+
+    @Column(name = "user_id")
+    private String userId;
+
+    @Column(name = "action")
+    private String action;
+
+    @CreationTimestamp
+
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+}

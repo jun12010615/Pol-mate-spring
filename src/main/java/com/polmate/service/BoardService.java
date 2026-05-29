@@ -2,7 +2,9 @@ package com.polmate.service;
 
 import com.polmate.annotation.LogAccess;
 import com.polmate.entity.*;
+import com.polmate.entity.board.*;
 import com.polmate.repository.*;
+import com.polmate.repository.board.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
