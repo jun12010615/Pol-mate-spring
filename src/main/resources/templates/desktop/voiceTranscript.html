@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POL-MATE | 모순 탐지</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" th:href="@{/css/polmate.css}">
     <script>var _ctx = '';</script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -681,7 +680,11 @@ function readStream(reader) {
                     if (data.done) return;
                 } catch(e) {}
             });
+            return pump();
+        });
     }
+    return pump();
+}
 
     function buildPrompt(docs, caseName) {
         var p =
