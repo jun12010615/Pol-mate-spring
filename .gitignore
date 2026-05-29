@@ -25,6 +25,7 @@ __pycache__/
 
 # ── 시크릿 / 자격증명 ────────────────────────────────────────────
 src/main/resources/application-local.properties
+scripts/fetch_transcripts.py
 
 # ── 기타 ────────────────────────────────────────────────────────
 *.log

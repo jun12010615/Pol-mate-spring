@@ -4,7 +4,7 @@ import com.polmate.entity.Case;
 import com.polmate.entity.TimelineEvent;
 import com.polmate.entity.Transcript;
 import com.polmate.repository.CaseRepository;
-import com.polmate.repository.RelationPersonRepository;
+import com.polmate.repository.relation.RelationPersonRepository;
 import com.polmate.repository.TimelineEventRepository;
 import com.polmate.repository.TranscriptRepository;
 import lombok.RequiredArgsConstructor;

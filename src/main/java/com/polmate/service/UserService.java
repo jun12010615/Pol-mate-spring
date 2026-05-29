@@ -3,6 +3,8 @@ package com.polmate.service;
 import com.polmate.entity.OfficerBadge;
 import com.polmate.entity.User;
 import com.polmate.repository.*;
+import com.polmate.repository.board.*;
+import com.polmate.repository.relation.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;

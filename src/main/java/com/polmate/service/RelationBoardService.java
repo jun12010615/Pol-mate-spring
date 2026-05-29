@@ -1,7 +1,9 @@
 package com.polmate.service;
 
 import com.polmate.entity.*;
+import com.polmate.entity.relation.*;
 import com.polmate.repository.*;
+import com.polmate.repository.relation.*;
 import lombok.RequiredArgsConstructor;
 import org.json.JSONArray;
 import org.json.JSONObject;
