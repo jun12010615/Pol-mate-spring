@@ -1,7 +1,7 @@
 # POL-MATE 수사 보조 시스템 (Spring Boot)
 
 대한민국 경찰청 형사 수사관을 위한 AI 기반 수사 보조 플랫폼입니다.
-진술 모순 탐지, 사건 관계망 시각화, CCTV 번호판 분석, AI 수사 챗봇 기능을 제공합니다.
+진술 모순 탐지, 감정 분석, 사건 관계망 시각화, CCTV 번호판 분석, AI 수사 챗봇 기능을 제공합니다.
 
 **Spring Boot 3.3.5 + JPA + Thymeleaf** 기반 웹 애플리케이션. 데스크탑/모바일 UI 분리 제공.
 
@@ -33,7 +33,7 @@ POL-MATE는 세 개의 독립 서버가 함께 동작합니다.
         ↕  HTTP :8080
 [Spring Boot 서버]  ← 페이지 라우팅, DB 처리, 세션 관리
         ↕  HTTP :5001
-[Python Flask 서버]  ← 진술 AI 분석, 관계망 추출, CCTV 번호판 탐지
+[Python Flask 서버]  ← 진술 AI 분석, 관계망 추출, CCTV 번호판 탐지, 감정 분석
         ↕  HTTP :11434
 [Ollama LLM 서버]  ← 진술 분석 / AI 챗봇 추론
 ```
@@ -41,8 +41,8 @@ POL-MATE는 세 개의 독립 서버가 함께 동작합니다.
 | 서버 | 포트 | 역할 |
 |------|------|------|
 | Spring Boot (Java) | 8080 | 웹 페이지, REST API, DB 연동, 세션 관리 |
-| Flask (Python) | 5001 | 진술 분석, 관계망 추출, CCTV 번호판 분석 |
-| Ollama | 11434 | LLM 추론 (`exaone3.5:2.4b`, `gemma3:1b`) |
+| Flask (Python) | 5001 | 진술 분석, 관계망 추출, CCTV 번호판 분석, 감정 분석 |
+| Ollama | 11434 | LLM 추론 (`ingu627/exaone4.0:1.2b`, `gemma3:1b`) |
 
 ---
 
@@ -92,14 +92,16 @@ cd Pol-mate-spring
 Ollama 설치 후 터미널(CMD/PowerShell)에서 실행합니다.
 
 ```cmd
-ollama pull exaone3.5:2.4b
+ollama pull ingu627/exaone4.0:1.2b
 ollama pull gemma3:1b
 ```
 
 | 모델 | 용도 | 크기 |
 |------|------|------|
-| `exaone3.5:2.4b` | 진술 모순 분석, 관계망 추출 (Flask 서버 사용) | 약 2GB |
+| `ingu627/exaone4.0:1.2b` | 진술 모순 분석, 관계망 추출, 타임라인 (Flask 서버 사용) | 약 1.3GB |
 | `gemma3:1b` | AI 수사 챗봇 (Spring Boot 직접 호출) | 약 1GB |
+
+> 사용 모델은 `application.properties`의 `ollama.model` 값을 수정해 변경할 수 있습니다.
 
 ---
 
@@ -108,10 +110,11 @@ ollama pull gemma3:1b
 프로젝트 루트(`polmate_serv.py`가 있는 폴더)에서 실행합니다.
 
 ```cmd
-python -m pip install flask flask-cors requests
-python -m pip install opencv-python numpy
-python -m pip install torch torchvision
-python -m pip install ultralytics easyocr
+pip install flask flask-cors requests
+pip install opencv-python numpy
+pip install torch torchvision
+pip install ultralytics easyocr
+pip install transformers
 ```
 
 가상환경을 사용하는 경우:
@@ -119,28 +122,35 @@ python -m pip install ultralytics easyocr
 ```cmd
 python -m venv venv
 venv\Scripts\activate
-pip install flask flask-cors requests opencv-python numpy torch torchvision ultralytics easyocr
+pip install flask flask-cors requests opencv-python numpy torch torchvision ultralytics easyocr transformers
 ```
 
 ### 모델 파일 준비
 
-> **주의**: `ocr_engine/saved_models/` 폴더의 `.pth` 모델 파일(각 190MB)은 파일 크기 제한으로 저장소에 포함되지 않습니다.
+> **주의**: 일부 대용량 모델 파일은 파일 크기 제한으로 저장소에 포함되지 않습니다.
 > 팀 내 공유 경로 또는 별도 전달 방법으로 수령한 뒤 아래 위치에 배치하세요.
 
-프로젝트 루트에 다음 파일이 있어야 Flask 서버가 정상 실행됩니다.
+프로젝트 루트에 다음 구조로 파일이 있어야 Flask 서버가 정상 실행됩니다.
 
 ```
 Pol-mate-spring/
 ├── polmate_serv.py
+├── emotion_model_loader.py
 ├── license_plate_detector.pt                        ← 저장소 포함 (6MB)
+├── emotion_model/                                   ← 저장소 미포함, 별도 수령
+│   ├── emotion_model.pt                             ← KoELECTRA 학습 가중치 (~450MB)
+│   └── encoder/                                     ← tokenizer + config
+│       ├── config.json
+│       ├── tokenizer_config.json
+│       └── vocab.txt
 └── ocr_engine/
     ├── model.py
     ├── utils.py
     ├── modules/
     └── saved_models/
         └── korean_plate/
-            ├── best_accuracy.pth      ← 저장소 미포함, 별도 수령 필요 (약 190MB)
-            └── best_norm_ED.pth       ← 저장소 미포함, 별도 수령 필요 (약 190MB)
+            ├── best_accuracy.pth                    ← 저장소 미포함, 별도 수령 (~190MB)
+            └── best_norm_ED.pth                     ← 저장소 미포함, 별도 수령 (~190MB)
 ```
 
 ---
@@ -157,17 +167,15 @@ spring.datasource.password=DB비밀번호
 spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
 
 # ── Flask 서버 URL ───────────────────────────────────────────────
-# 로컬에서 polmate_serv.py를 직접 실행하는 경우:
 polmate.serv.base-url=http://localhost:5001
-# 원격 서버에서 실행하는 경우:
-# polmate.serv.base-url=http://서버IP주소:5001
 
 # ── CLOVA Speech STT (음성 조서 기능) ────────────────────────────
 clova.speech.invoke-url=https://clovaspeech-gw.ncloud.com/recog/v1/stt
 clova.speech.secret-key=발급받은_시크릿_키
 
-# ── Ollama AI 챗봇 ───────────────────────────────────────────────
+# ── Ollama AI ────────────────────────────────────────────────────
 ollama.url=http://localhost:11434/api/generate
+ollama.model=ingu627/exaone4.0:1.2b
 
 # ── 국가법령정보 API (AI 챗봇 법령 검색) ─────────────────────────
 law.api.oc=발급받은_OC_ID
@@ -236,7 +244,7 @@ Spring Boot가 정상 실행되면 콘솔에 아래 메시지가 출력됩니다
 Started PolmateApplication in X.XXX seconds (process running for X.XXX)
 ```
 
-> Gradle로 빌드만 하려면: `gradlew build -x test`
+> 빌드만 하려면: `gradlew build -x test`
 
 ---
 
@@ -255,8 +263,17 @@ http://localhost:8080
 
 1. 로그인 화면에서 **회원가입** 클릭
 2. **공무원증 번호(4자리)** 입력이 필요합니다 — DB의 `officer_badges` 테이블에 등록된 번호만 허용
-   - 기본 등록 번호: `0000` ~ `9999`
 3. 가입 완료 후 로그인하면 메인 화면으로 이동
+
+### 관리자 계정 설정
+
+최초 가입 후 DB에서 직접 `is_admin = 1`로 설정합니다.
+
+```sql
+UPDATE users SET is_admin = 1 WHERE user_id = '관리자_아이디';
+```
+
+관리자는 사이드바에 **접근 로그**, **관리 패널** 메뉴가 추가로 표시됩니다.
 
 ---
 
@@ -267,29 +284,57 @@ http://localhost:8080
 - 조서(진술서) 등록 — 텍스트 직접 입력 또는 음성 녹음(STT)
 - 진술 AI 분석 — Ollama LLM이 시간순 정리 및 모순 탐지
 - 모순 탐지 결과 저장 및 목록 조회
+- 조서 신뢰도 점수 산출 (일관성·구체성·감정·시간 4개 항목)
+- 유사 사건 자동 검색 (캐시 결과 재사용)
+
+### 진술 감정 분석
+- 조서 텍스트를 문장 단위로 분리 후 4감정(불안·확신·회피·분노) 점수 산출
+- KoELECTRA fine-tuned 회귀 모델 사용 (Flask `/emotion/analyze`)
+- 모델 미로드 시 키워드 기반 fallback으로 자동 대체
+- 분석 결과는 `emotion_analyses` 테이블에 저장, 데스크탑/모바일 감정분석 페이지에서 열람
+
+### 사건 타임라인
+- 조서 저장 시 Flask `/timeline/extract` 비동기 호출로 타임라인 이벤트 자동 추출
+- 이벤트 유형: action / alibi / movement / other
+- 시간 정밀도: exact / approximate / relative
+- 상태 추적: `empty → pending → extracting → ready → failed`
+- 데스크탑 타임라인 페이지에서 시각화
 
 ### 관계망 시각화
-- 조서에서 인물/관계 자동 추출 (Flask → Ollama `exaone3.5:2.4b`)
-- D3.js 기반 인터랙티브 관계망 캔버스
+- 조서에서 인물/관계 자동 추출 (Flask → Ollama)
+- Canvas 기반 인터랙티브 관계망 에디터
 - 피의자·피해자·목격자·참고인 역할 구분 시각화
+- 관계망 수정 이력 자동 저장 (`relation_history`)
 
 ### CCTV 영상 분석
-- MP4/MOV/AVI/MKV 영상 업로드 (최대 100MB)
+- MP4/MOV/AVI/MKV 영상 업로드
 - YOLO + 한국어 번호판 OCR 모델로 번호판 자동 탐지
 - 번호판 일부 입력 후 검색, 탐지 시점(타임스탬프) 표시
 
 ### AI 수사 챗봇
 - 형사소송법, 경찰관직무집행법 등 법령 기반 답변
-- 국가법령정보 API 연동 실시간 법령/판례 검색 후 LLM 컨텍스트 주입
+- 국가법령정보 API 연동 실시간 법령 검색 후 LLM 컨텍스트 주입
 - `gemma3:1b` 모델 사용, SSE 스트리밍으로 실시간 출력
 
 ### 음성 조서 작성
-- CLOVA Speech API 연동 음성→텍스트 실시간 변환
+- CLOVA Speech API 연동 음성→텍스트 변환
 - 변환된 텍스트 즉시 AI 분석 연동 가능
+
+### 전체 통합 검색
+- appbar 검색창에서 사건·조서·게시글 통합 검색
+- 280ms 디바운스, 키워드 하이라이팅 지원
 
 ### 커뮤니티 게시판
 - 부서 내 정보 공유, 게시글/댓글/좋아요
 - 핫게시물 자동 분류, 태그 기반 검색
+
+### 접근 로그 (관리자 전용)
+- 사건 상세·조서 원문·게시글 열람 시 자동 기록 (AOP 방식)
+- 관리자만 `/desktop/accessLog`에서 부서 전체 열람 이력 조회 가능
+
+### 관리 패널 (관리자 전용)
+- 부서 내 사용자 목록 조회
+- 관리자 권한 부여·해제
 
 ---
 
@@ -300,100 +345,49 @@ Pol-mate-spring/
 ├── src/
 │   └── main/
 │       ├── java/com/polmate/
-│       │   ├── PolmateApplication.java            ← Spring Boot 진입점 (JAR)
-│       │   ├── config/
-│       │   │   └── WebConfig.java                 ← AuthInterceptor (로그인 검사)
-│       │   ├── controller/                        ← REST 컨트롤러 (JSON 반환)
-│       │   │   ├── PageController.java            ← 페이지 URL → 뷰 이름 매핑
-│       │   │   ├── LoginController.java           ← /login
-│       │   │   ├── RegisterController.java        ← /register
-│       │   │   ├── FindAccountController.java     ← /findAccount
-│       │   │   ├── BoardController.java           ← /board
-│       │   │   ├── CaseController.java            ← /caseApi
-│       │   │   ├── ContradictionController.java   ← /contradictionApi
-│       │   │   ├── NotificationController.java    ← /notifApi
-│       │   │   ├── MypageController.java          ← /mypage
-│       │   │   ├── RelationBoardController.java   ← /boardApi
-│       │   │   ├── SttController.java             ← /stt (CLOVA Speech)
-│       │   │   └── AiChatController.java          ← /askAI (Ollama SSE)
-│       │   ├── service/                           ← 비즈니스 로직
-│       │   │   ├── UserService.java
-│       │   │   ├── DepartmentService.java
-│       │   │   ├── NotificationService.java
-│       │   │   ├── CaseService.java
-│       │   │   ├── TranscriptService.java
-│       │   │   ├── BoardService.java
-│       │   │   ├── ContradictionService.java
-│       │   │   └── RelationBoardService.java
-│       │   ├── repository/                        ← JPA Repository 인터페이스 (17개)
-│       │   │   ├── UserRepository.java
-│       │   │   ├── CaseRepository.java
-│       │   │   ├── TranscriptRepository.java
-│       │   │   ├── BoardPostRepository.java
-│       │   │   ├── BoardCommentRepository.java
-│       │   │   ├── NotificationRepository.java
-│       │   │   └── ... 외 11개
-│       │   └── entity/                            ← JPA Entity (DB 테이블 1:1 매핑, 17개)
-│       │       ├── User.java                      → users
-│       │       ├── Case.java                      → cases
-│       │       ├── Transcript.java                → transcripts
-│       │       ├── TranscriptScore.java           → transcript_scores
-│       │       ├── BoardPost.java                 → board_posts
-│       │       ├── BoardComment.java              → board_comments
-│       │       ├── Notification.java              → notifications
-│       │       ├── ContradictionResult.java       → contradiction_results
-│       │       ├── RelationBoard.java             → relation_boards
-│       │       └── ... 외 8개
+│       │   ├── PolmateApplication.java
+│       │   ├── config/WebConfig.java                 ← AuthInterceptor 등록
+│       │   ├── annotation/LogAccess.java             ← AOP 마킹 어노테이션
+│       │   ├── aspect/AccessLogAspect.java           ← 접근 로그 AOP 구현
+│       │   ├── controller/
+│       │   │   ├── auth/       LoginController, RegisterController, FindAccountController
+│       │   │   ├── cases/      CaseController, TimelineController, ContradictionController
+│       │   │   ├── ai/         AiChatController, SttController, AnalyzeProxyController
+│       │   │   ├── board/      BoardController, RelationBoardController
+│       │   │   └── system/     PageController, SearchController, NotificationController,
+│       │   │                   MypageController, AdminController, AccessLogController
+│       │   ├── service/        (12개 — UserService, CaseService, TranscriptService,
+│       │   │                    TimelineService, BoardService, RelationBoardService,
+│       │   │                    ContradictionService, NotificationService,
+│       │   │                    AccessLogService, SearchService, DepartmentService,
+│       │   │                    LoginAttemptService)
+│       │   ├── repository/
+│       │   │   ├── (flat 12개)  UserRepository, CaseRepository, TranscriptRepository ...
+│       │   │   ├── board/       BoardPost/Comment/Like/Link/TagRepository
+│       │   │   └── relation/    RelationBoard/Person/Edge/HistoryRepository
+│       │   └── entity/
+│       │       ├── (flat 12개)  User, Case, Transcript, TranscriptScore,
+│       │       │                ContradictionResult, Notification, OfficerBadge,
+│       │       │                Department, CaseSimilarCache, TimelineEvent,
+│       │       │                AccessLog, EmotionAnalysis
+│       │       ├── board/       BoardPost, BoardComment, BoardLike, BoardLikeId,
+│       │       │                BoardLink, BoardTag
+│       │       └── relation/    RelationBoard, RelationPerson, RelationEdge, RelationHistory
 │       └── resources/
-│           ├── application.properties             ← DB, JPA, 인코딩, 외부서비스 설정
-│           └── templates/                         ← Thymeleaf HTML (모든 뷰)
-│               ├── desktop/                       ← 데스크탑 페이지
-│               │   ├── fragments/
-│               │   │   ├── sidebar.html           ← 공통 사이드바
-│               │   │   └── appbar.html            ← 공통 상단바
-│               │   ├── login.html
-│               │   ├── register.html
-│               │   ├── findAccount.html
-│               │   ├── main.html
-│               │   ├── myCase.html                ← 사건 관리
-│               │   ├── board.html                 ← 커뮤니티 게시판
-│               │   ├── boardView.html             ← 게시글 상세
-│               │   ├── mypage.html
-│               │   ├── notifications.html
-│               │   ├── aiChat.html
-│               │   ├── voiceTranscript.html
-│               │   ├── writeTranscript.html
-│               │   ├── caseRelationMap.html       ← 관계망 시각화
-│               │   └── cctvAnalysis.html
-│               └── mobile/                        ← 모바일 페이지
-│                   ├── login.html
-│                   ├── register.html
-│                   ├── findAccount.html
-│                   ├── main.html
-│                   ├── myCase.html
-│                   ├── caseList.html
-│                   ├── board.html
-│                   ├── boardView.html
-│                   ├── boardEdit.html
-│                   ├── mypage.html
-│                   ├── notifications.html
-│                   ├── contradictionList.html
-│                   ├── aiChat.html
-│                   ├── voiceTranscript.html
-│                   ├── writeTranscript.html
-│                   ├── caseRelationMap.html
-│                   └── cctvAnalysis.html
-├── build.gradle                                   ← JAR 빌드, Gradle 의존성
-├── polmate_serv.py                                ← Flask 통합 서버 (AI/CCTV)
-├── license_plate_detector.pt                     ← YOLO 번호판 감지 모델
-└── ocr_engine/                                   ← 한국 번호판 OCR 모델
-    ├── model.py
-    ├── utils.py
-    ├── modules/
-    └── saved_models/
-        └── korean_plate/
-            ├── best_accuracy.pth
-            └── best_norm_ED.pth
+│           ├── application.properties
+│           └── templates/
+│               ├── desktop/    (19개 페이지 + fragments/appbar.html, sidebar.html)
+│               └── mobile/     (18개 페이지)
+├── build.gradle
+├── polmate_serv.py                      ← Flask 통합 서버
+├── emotion_model_loader.py              ← KoELECTRA 감정 모델 로더
+├── license_plate_detector.pt            ← YOLO 번호판 감지 모델
+├── emotion_model/                       ← KoELECTRA fine-tuned 가중치
+├── ocr_engine/                          ← 한국 번호판 OCR 모델
+└── scripts/                             ← 개발·학습·테스트 스크립트
+    ├── train_emotion.py                 ← 감정 모델 fine-tuning
+    ├── call_relation_map.py             ← 관계망 API 테스트
+    └── transcripts_2026_0528.json       ← 테스트 데이터
 ```
 
 ### 아키텍처 개요
@@ -402,25 +396,25 @@ Pol-mate-spring/
 [브라우저]
     │ GET /desktop/myCase
     ▼
-[AuthInterceptor]  ← 세션 검사 (loginUser 없으면 로그인 페이지로 리다이렉트)
+[AuthInterceptor]  ← 세션 검사 (loginUser 없으면 로그인 리다이렉트)
     │
     ▼
-[PageController]   ← URL → 뷰 이름 매핑 ("desktop/myCase")
+[PageController]   ← URL → 뷰 이름 매핑
     │
     ▼
-[Thymeleaf]        ← templates/desktop/myCase.html 렌더링 (세션 변수 주입)
+[Thymeleaf]        ← HTML 렌더링
     │
     ▼
-[브라우저 JS]      ← fetch('/caseApi?action=caseList') 등 AJAX 호출
+[브라우저 JS]      ← fetch('/caseApi?action=caseList') AJAX 호출
     │
     ▼
-[CaseController]   ← @RestController, JSON 반환
+[@RestController]  ← JSON 반환
     │
     ▼
-[CaseService]      ← 비즈니스 로직
+[Service]          ← 비즈니스 로직
     │
     ▼
-[JPA Repository / JdbcTemplate]  ← DB 처리
+[JPA / JdbcTemplate]  ← DB 처리
 ```
 
 **인증**: 모든 `/mobile/**`, `/desktop/**` 요청은 `AuthInterceptor`를 통과합니다.
@@ -447,15 +441,16 @@ Pol-mate-spring/
 | `ModuleNotFoundError` | Python 패키지 미설치 | `pip install 패키지명` |
 | `license_plate_detector.pt` 없음 | YOLO 모델 파일 누락 | 프로젝트 루트에 파일 배치 |
 | `best_accuracy.pth` 로드 실패 | OCR 모델 경로 오류 | `ocr_engine/saved_models/korean_plate/` 경로 확인 |
-| Flask 포트 5001 충돌 | 다른 프로세스가 사용 중 | `polmate_serv.py` 내 포트 번호 변경 후 `application.properties`도 동일하게 수정 |
+| `emotion_model.pt` 로드 실패 | 감정 모델 미배치 | `emotion_model/` 폴더에 파일 배치 후 서버 재시작 |
+| Flask 포트 5001 충돌 | 다른 프로세스가 사용 중 | `polmate_serv.py` 내 포트 변경 후 `application.properties`도 동일하게 수정 |
 
 ### Ollama 관련
 
 | 증상 | 원인 | 해결 |
 |------|------|------|
 | AI 챗봇 응답 없음 | Ollama 미실행 | `ollama serve` 실행 |
-| 진술 분석 오류 | `exaone3.5:2.4b` 모델 미설치 | `ollama pull exaone3.5:2.4b` |
-| 응답이 매우 느림 | GPU 미사용 | CUDA 지원 PyTorch 설치 또는 GPU가 있는 서버에서 실행 |
+| 진술 분석 오류 | 모델 미설치 | `ollama pull ingu627/exaone4.0:1.2b` |
+| 응답이 매우 느림 | GPU 미사용 | CUDA 지원 PyTorch 설치 또는 GPU 서버에서 실행 |
 
 ### CCTV / 번호판 분석 관련
 
@@ -464,6 +459,13 @@ Pol-mate-spring/
 | 서버 연결 실패 | `polmate.serv.base-url` 오류 | `application.properties`에서 URL 확인 |
 | 번호판 0건 탐지 | 영상 화질 또는 각도 문제 | `polmate_serv.py`에서 프레임 샘플링 간격 조정 |
 | OCR 인식 오류 | 신뢰도 임계값 문제 | `OCR_CONFIDENCE_THRESHOLD` 값을 낮춤 (기본 0.85) |
+
+### 감정 분석 관련
+
+| 증상 | 원인 | 해결 |
+|------|------|------|
+| 감정 분석 결과가 모두 동일 | KoELECTRA 모델 미로드 | `emotion_model/` 배치 확인, Flask 서버 재시작 |
+| `transformers` 패키지 오류 | 미설치 | `pip install transformers` |
 
 ---
 
