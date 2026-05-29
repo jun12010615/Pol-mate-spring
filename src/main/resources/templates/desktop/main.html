@@ -181,6 +181,47 @@ html, body { height: 100%; font-family: 'Noto Sans KR', sans-serif; background: 
             <div class="pm-tool-desc">CCTV에서 번호판 &middot; 행적 추출</div>
             <div class="pm-tool-meta">&nbsp;</div>
         </a>
+        <a th:href="@{/desktop/contradictionList}" class="pm-tool-card">
+            <div class="pm-tool-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+            </div>
+            <div class="pm-tool-title">모순탐지 목록</div>
+            <div class="pm-tool-desc">저장된 AI 모순 분석 결과 열람</div>
+            <div class="pm-tool-meta">&nbsp;</div>
+        </a>
+        <a th:href="@{/desktop/caseTimeline}" class="pm-tool-card">
+            <div class="pm-tool-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+                    <circle cx="12" cy="12" r="4"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+                </svg>
+            </div>
+            <div class="pm-tool-title">사건 타임라인</div>
+            <div class="pm-tool-desc">조서 기반 사건 흐름 자동 구성</div>
+            <div class="pm-tool-meta">&nbsp;</div>
+        </a>
+        <a th:href="@{/desktop/emotionAnalysis}" class="pm-tool-card">
+            <div class="pm-tool-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+            </div>
+            <div class="pm-tool-title">감정 흐름 분석</div>
+            <div class="pm-tool-desc">진술자 불안·확신·회피·분노 감지</div>
+            <div class="pm-tool-meta">&nbsp;</div>
+        </a>
+        <a th:href="@{/desktop/aiChat}" class="pm-tool-card">
+            <div class="pm-tool-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+            </div>
+            <div class="pm-tool-title">AI 수사 보조</div>
+            <div class="pm-tool-desc">법령 기반 AI 챗봇 실시간 질의응답</div>
+            <div class="pm-tool-meta">&nbsp;</div>
+        </a>
     </div>
 
     <div class="pm-lower-grid">
