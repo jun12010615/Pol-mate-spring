@@ -292,12 +292,16 @@ function readItem(id, link) {
   // 4. 헤더 뱃지 갱신
   updateBadge();
 
-  // 5. 링크 이동 (caseRelationMap → boardView 자동 변환)
+  // 5. 링크 이동
   if (link) {
-    var dest = link.replace(
-      /caseRelationMap(\?caseId=)/,
-      'boardView$1'
-    );
+    var dest = link.trim()
+      .replace(/^myCase\.jsp(\?caseId=)/, '/mobile/myCase$1')
+      .replace(/^boardView\.jsp(\?caseId=)/, '/mobile/boardView$1')
+      .replace(/caseRelationMap(\?caseId=)/, 'boardView$1');
+    // 절대 경로도 http도 아닌 상대 경로면 /mobile/ 앞에 붙임
+    if (dest && !dest.startsWith('/') && !dest.startsWith('http')) {
+      dest = '/mobile/' + dest;
+    }
     setTimeout(function() { location.href = dest; }, 120);
   }
 }

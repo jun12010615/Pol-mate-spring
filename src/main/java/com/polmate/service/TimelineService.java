@@ -14,7 +14,6 @@ import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.*;
@@ -1348,11 +1347,6 @@ public class TimelineService {
         return Optional.of(new LocalDateTime[]{start.minusMinutes(15), end.plusMinutes(15)});
     }
 
-    @Transactional
-    public TimelineEvent saveEvent(TimelineEvent event) {
-        return eventRepo.save(event);
-    }
-
     public void scheduleExtractForTranscript(Integer transcriptId) {
         if (transcriptId == null) return;
         Thread t = new Thread(() -> {
@@ -1576,12 +1570,6 @@ public class TimelineService {
     private static String optString(JSONObject ev, String snake, String camel) {
         String v = ev.optString(snake, ev.optString(camel, ""));
         return v.isBlank() ? null : v.trim();
-    }
-
-    private static Integer optInteger(JSONObject ev, String snake, String camel) {
-        if (ev.has(snake) && !ev.isNull(snake)) return ev.optInt(snake);
-        if (ev.has(camel) && !ev.isNull(camel)) return ev.optInt(camel);
-        return null;
     }
 
     private boolean jsonEventHasTimeSignal(JSONObject ev) {

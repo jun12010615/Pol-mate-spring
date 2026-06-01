@@ -49,8 +49,4 @@ public class NotificationService {
     public int countRecentByTypeAndTag(String userId, String type, String tag) {
         return notifRepo.countRecentByTypeAndTag(userId, type, tag);
     }
-
-    public Integer getDaysSincePasswordChange(String userId) {
-        return notifRepo.countRecentByTypeAndTag(userId, "sys", "보안");
-    }
 }

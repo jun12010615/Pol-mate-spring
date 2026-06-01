@@ -87,7 +87,7 @@ public class RelationBoardService {
             try {
                 notifRepo.save(Notification.builder()
                     .userId(tm).type("case").tag(tag).title(title).description(desc)
-                    .link("boardView.jsp?caseId=" + caseId)
+                    .link("/mobile/boardView?caseId=" + caseId)
                     .isUnread(true).isCritical(false).createdAt(LocalDateTime.now()).build());
             } catch (Exception ignored) {}
         }

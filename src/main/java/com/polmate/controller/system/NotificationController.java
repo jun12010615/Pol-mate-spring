@@ -69,14 +69,14 @@ public class NotificationController {
                     notifService.insert(loginUser, "sys", "보안",
                         "비밀번호 변경 권고",
                         daysSince + "일째 비밀번호를 변경하지 않으셨습니다. 보안을 위해 변경을 권장합니다.",
-                        "mypage", true);
+                        "/mobile/mypage", true);
                 }
             }
             List<Notification> list = notifService.list(loginUser, typeFilter);
             JSONArray arr = new JSONArray();
             for (Notification n : list) {
                 JSONObject obj = new JSONObject();
-                obj.put("id",          n.getNotifId());
+                obj.put("notifId",     n.getNotifId());
                 obj.put("type",        nvl(n.getType(), ""));
                 obj.put("tag",         nvl(n.getTag(),  ""));
                 obj.put("title",       nvl(n.getTitle(), ""));
@@ -84,7 +84,7 @@ public class NotificationController {
                 obj.put("link",        nvl(n.getLink(), ""));
                 obj.put("isUnread",    n.isUnread());
                 obj.put("isCritical",  n.isCritical());
-                obj.put("time",        n.getCreatedAt() != null ? DATE_FMT.format(
+                obj.put("timeLabel",   n.getCreatedAt() != null ? DATE_FMT.format(
                     java.sql.Timestamp.valueOf(n.getCreatedAt())) : "");
                 arr.put(obj);
             }
@@ -106,7 +106,7 @@ public class NotificationController {
 
     private void handleMarkRead(HttpServletRequest req, HttpServletResponse res, String loginUser) throws IOException {
         try {
-            String idStr = req.getParameter("id");
+            String idStr = req.getParameter("notifId");
             if (idStr == null) { res.getWriter().write("{\"success\":false}"); return; }
             boolean ok = notifService.markRead(loginUser, Integer.parseInt(idStr));
             res.getWriter().write("{\"success\":" + ok + "}");
