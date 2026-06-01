@@ -146,7 +146,8 @@ function renderNotifs() {
     filtered.forEach(function(n) {
         var unreadCls = n.isUnread ? 'unread' : '';
         var critCls   = n.isCritical ? 'critical' : '';
-        html += '<div class="notif-item ' + unreadCls + ' ' + critCls + '" onclick="markRead(' + n.notifId + ', this)">'
+        var safeLink  = (n.link || '').replace(/'/g, "\\'");
+        html += '<div class="notif-item ' + unreadCls + ' ' + critCls + '" onclick="markRead(' + n.notifId + ', this, \'' + safeLink + '\')">'
               + getIcon(n.type)
               + '<div class="notif-body">'
               + (n.tag ? '<span class="notif-tag">' + n.tag + '</span><br>' : '')
@@ -172,7 +173,7 @@ function switchTab(tab) {
     renderNotifs();
 }
 
-function markRead(id, el) {
+function markRead(id, el, link) {
     if (el.classList.contains('unread')) {
         el.classList.remove('unread');
         var dot = el.querySelector('.unread-dot');
@@ -181,6 +182,16 @@ function markRead(id, el) {
         if (found) found.isUnread = false;
         var fd = new FormData(); fd.append('action','markRead'); fd.append('notifId', id);
         fetch('/notifApi', {method:'POST', body:fd, credentials:'same-origin'}).catch(function(){});
+    }
+    if (link) {
+        var dest = link.trim()
+            .replace(/^myCase\.jsp(\?caseId=)/, '/desktop/myCase$1')
+            .replace(/^boardView\.jsp(\?caseId=)/, '/desktop/boardView$1')
+            .replace(/^\/mobile\//, '/desktop/');
+        if (dest && !dest.startsWith('/') && !dest.startsWith('http')) {
+            dest = '/desktop/' + dest;
+        }
+        setTimeout(function() { location.href = dest; }, 120);
     }
 }
 

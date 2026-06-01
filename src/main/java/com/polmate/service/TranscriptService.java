@@ -99,7 +99,7 @@ public class TranscriptService {
         for (String tm : teammates) {
             notifRepo.save(Notification.builder()
                     .userId(tm).type("case").tag("조서").title("새 조서 등록: " + caseId)
-                    .description(tDesc).link("myCase.jsp?caseId=" + caseId)
+                    .description(tDesc).link("/mobile/myCase?caseId=" + caseId)
                     .isUnread(true).isCritical(false).createdAt(LocalDateTime.now()).build());
         }
         result.put("success", true); result.put("transcriptId", saved.getTranscriptId());

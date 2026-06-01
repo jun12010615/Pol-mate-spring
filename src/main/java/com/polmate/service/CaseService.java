@@ -170,7 +170,7 @@ public class CaseService {
             for (String tm : teammates) {
                 notifRepo.save(Notification.builder()
                         .userId(tm).type("case").tag("새 사건").title(title).description(desc)
-                        .link("myCase.jsp?caseId=" + caseId).isUnread(true).isCritical(false)
+                        .link("/mobile/myCase?caseId=" + caseId).isUnread(true).isCritical(false)
                         .createdAt(LocalDateTime.now()).build());
             }
         }
@@ -217,7 +217,7 @@ public class CaseService {
             notifRepo.save(Notification.builder()
                     .userId(tm).type("case").tag(isCritical ? "경고" : "새 사건")
                     .title(title).description(desc)
-                    .link("myCase.jsp?caseId=" + caseId)
+                    .link("/mobile/myCase?caseId=" + caseId)
                     .isUnread(true).isCritical(isCritical).createdAt(LocalDateTime.now()).build());
         }
         result.put("success", true); result.put("message", "수정됐습니다.");

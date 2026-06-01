@@ -19,13 +19,6 @@ public interface UserRepository extends JpaRepository<User, String> {
     Integer getDaysSincePasswordChange(@Param("userId") String userId);
 
     @Query(value =
-        "SELECT u2.* FROM users u2 JOIN users me ON me.user_id = :userId " +
-        "WHERE u2.dept_id = me.dept_id AND me.dept_id IS NOT NULL " +
-        "AND u2.user_id != :userId AND u2.notif_relation = 1",
-        nativeQuery = true)
-    List<User> findTeammatesForNotification(@Param("userId") String userId);
-
-    @Query(value =
         "SELECT u2.user_id FROM users u2 JOIN users me ON me.user_id = :userId " +
         "WHERE u2.dept_id = me.dept_id AND me.dept_id IS NOT NULL AND u2.user_id != :userId",
         nativeQuery = true)
