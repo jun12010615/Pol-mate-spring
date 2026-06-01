@@ -103,10 +103,6 @@ public class TimelineService {
 
     private static final Pattern KR_MONTH_DAY = Pattern.compile("(\\d{1,2})\\s*월\\s*(\\d{1,2})\\s*일");
 
-    private static final Pattern CASE_ID_DATE = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})");
-
-    private static final Pattern CASE_ID_COMPACT = Pattern.compile("(\\d{4})[-_](\\d{2})(\\d{2})\\b");
-
     private static final boolean[] KR_CLOCK_IS_PM = {false, true, true, true, false, false, false};
 
     private final TimelineEventRepository eventRepo;
@@ -144,9 +140,10 @@ public class TimelineService {
         String caseName = caseRepo.findById(caseId).map(Case::getCaseName).orElse("");
         long transcriptCount = transcriptRepo.findByCaseIdOrderByCreatedAtDesc(caseId).size();
         List<TimelineEvent> rows = eventRepo.findByCaseIdOrderBySortOrderAscTimeStartAscEventIdAsc(caseId);
-        persistTimelineTimeNormalization(rows);
+        Map<Integer, LocalDate> refCache = buildTranscriptReferenceCache(caseId);
+        persistTimelineTimeNormalization(rows, refCache);
         List<TimelineEvent> resolved = rows.stream()
-            .filter(this::hasTimeSignal)
+            .filter(e -> hasTimeSignal(e, refCache))
             .filter(e -> e.getTimeStart() != null)
             .toList();
         long eventCount = resolved.size();
@@ -187,11 +184,12 @@ public class TimelineService {
 
         out.put("status", "ready");
         out.put("message", job != null && "completed".equals(job.status) ? job.message : "");
-        out.put("timeline", buildTimelineView(caseId, resolved));
+        out.put("timeline", buildTimelineView(caseId, resolved, refCache));
         return out;
     }
 
-    private Map<String, Object> buildTimelineView(String caseId, List<TimelineEvent> rows) {
+    private Map<String, Object> buildTimelineView(String caseId, List<TimelineEvent> rows,
+                                                  Map<Integer, LocalDate> refCache) {
         Map<String, Object> timeline = new LinkedHashMap<>();
         timeline.put("caseId", caseId);
 
@@ -205,7 +203,7 @@ public class TimelineService {
         LocalDateTime max = null;
 
         for (TimelineEvent e : rows) {
-            if (!hasTimeSignal(e) || e.getTimeStart() == null) continue;
+            if (!hasTimeSignal(e, refCache) || e.getTimeStart() == null) continue;
             String personName = nvl(e.getStmtName(), "미상");
             String roleKey = resolvePersonRoleKey(personName, e.getStmtType(), personRoles);
             laneMap.compute(personName, (k, lane) -> {
@@ -469,42 +467,42 @@ public class TimelineService {
         return null;
     }
 
-    private static LocalDate inferCaseReferenceDate(String caseId) {
-        if (caseId == null || caseId.isBlank()) {
-            return null;
-        }
-        Matcher m = CASE_ID_DATE.matcher(caseId.trim());
-        if (m.find()) {
-            try {
-                return LocalDate.of(
-                    Integer.parseInt(m.group(1)),
-                    Integer.parseInt(m.group(2)),
-                    Integer.parseInt(m.group(3)));
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-        Matcher c = CASE_ID_COMPACT.matcher(caseId.trim());
-        if (c.find()) {
-            try {
-                return LocalDate.of(
-                    Integer.parseInt(c.group(1)),
-                    Integer.parseInt(c.group(2)),
-                    Integer.parseInt(c.group(3)));
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-        return null;
-    }
-
+    /** 조서 전문부 날짜 → 본문 상단 'YYYY년 M월 D일'. 사건번호는 사용하지 않음. */
     private LocalDate resolveTranscriptReferenceDate(Transcript tr) {
         if (tr.getPreambleYear() != null && tr.getPreambleYear() > 0
             && tr.getPreambleMonth() != null && tr.getPreambleMonth() > 0
             && tr.getPreambleDay() != null && tr.getPreambleDay() > 0) {
             return LocalDate.of(tr.getPreambleYear(), tr.getPreambleMonth(), tr.getPreambleDay());
         }
-        return inferCaseReferenceDate(tr.getCaseId());
+        return parseReferenceDateFromTranscriptBody(resolveTranscriptBody(tr));
+    }
+
+    private static LocalDate parseReferenceDateFromTranscriptBody(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        String head = body.length() > 2500 ? body.substring(0, 2500) : body;
+        return parseDateFromEventText(head, null);
+    }
+
+    private Map<Integer, LocalDate> buildTranscriptReferenceCache(String caseId) {
+        Map<Integer, LocalDate> cache = new HashMap<>();
+        for (Transcript tr : transcriptRepo.findByCaseIdOrderByCreatedAtDesc(caseId)) {
+            if (tr.getTranscriptId() != null) {
+                cache.put(tr.getTranscriptId(), resolveTranscriptReferenceDate(tr));
+            }
+        }
+        return cache;
+    }
+
+    private LocalDate referenceDateForEvent(TimelineEvent e, Map<Integer, LocalDate> refCache) {
+        if (e.getTranscriptId() != null && refCache != null) {
+            LocalDate ref = refCache.get(e.getTranscriptId());
+            if (ref != null) {
+                return ref;
+            }
+        }
+        return null;
     }
 
     private static final Pattern ISO_DATETIME_IN_TEXT = Pattern.compile(
@@ -992,7 +990,7 @@ public class TimelineService {
     }
 
 
-    private void persistTimelineTimeNormalization(List<TimelineEvent> rows) {
+    private void persistTimelineTimeNormalization(List<TimelineEvent> rows, Map<Integer, LocalDate> refCache) {
         if (rows.isEmpty()) {
             return;
         }
@@ -1002,9 +1000,15 @@ public class TimelineService {
                 before.put(row.getEventId(), TimelineTimeSnapshot.of(row));
             }
         }
-        LocalDate ref = rows.isEmpty() ? null : inferCaseReferenceDate(rows.get(0).getCaseId());
+        Map<Integer, List<TimelineEvent>> byTranscript = rows.stream()
+            .collect(Collectors.groupingBy(e -> e.getTranscriptId() != null ? e.getTranscriptId() : 0));
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            normalizeTimelineEventTimes(rows, true, ref);
+            for (Map.Entry<Integer, List<TimelineEvent>> entry : byTranscript.entrySet()) {
+                LocalDate ref = entry.getKey() != 0
+                    ? referenceDateForEvent(entry.getValue().get(0), refCache)
+                    : null;
+                normalizeTimelineEventTimes(entry.getValue(), true, ref);
+            }
             for (TimelineEvent row : rows) {
                 if (row.getEventId() == null) {
                     continue;
@@ -1053,8 +1057,8 @@ public class TimelineService {
     }
 
     /** 타임라인 저장·표시 대상: quote(원문)에 시간 근거가 있는 이벤트만 */
-    private boolean hasTimeSignal(TimelineEvent e) {
-        return eventTimeGrounded(e, inferCaseReferenceDate(e.getCaseId()));
+    private boolean hasTimeSignal(TimelineEvent e, Map<Integer, LocalDate> refCache) {
+        return eventTimeGrounded(e, referenceDateForEvent(e, refCache));
     }
 
     private static boolean eventTimeGrounded(TimelineEvent e, LocalDate referenceDate) {
@@ -1791,7 +1795,7 @@ public class TimelineService {
             .orElse("");
         String meta = nvl(tr.getStmtName(), "") + "|" + nvl(tr.getStmtType(), "")
             + "|" + tr.getPreambleYear() + "|" + tr.getPreambleMonth() + "|" + tr.getPreambleDay()
-            + "|" + timelineMaxTextChars + "|extract-v4";
+            + "|" + timelineMaxTextChars + "|extract-v5";
         return sha256Hex(body + "\n" + ref + "\n" + meta);
     }
 

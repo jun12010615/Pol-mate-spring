@@ -389,17 +389,14 @@ _REL_TIME_OFFSET_RE = re.compile(
 )
 
 
-def _infer_case_reference_date(case_id: str):
-    """사건 ID에서 기준일 추론."""
+def _parse_reference_date_from_text(text: str):
+    """조서 본문(전문부 등)에 있는 'YYYY년 M월 D일'을 기준일로 — 사건번호는 사용하지 않음."""
     from datetime import date
-    cid = (case_id or "").strip()
-    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", cid)
-    if m:
-        try:
-            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-        except (TypeError, ValueError):
-            pass
-    m = re.search(r"(\d{4})[-_](\d{2})(\d{2})\b", cid)
+    src = (text or "").strip()
+    if not src:
+        return None
+    head = src[:2500]
+    m = re.search(r"(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일", head)
     if m:
         try:
             return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
@@ -409,7 +406,7 @@ def _infer_case_reference_date(case_id: str):
 
 
 def _parse_reference_date_from_request(data: dict):
-    """조서 전문부 날짜·요청 referenceDate·사건 ID 순으로 기준일."""
+    """조서 전문부 날짜·요청 referenceDate·조서 본문 순으로 기준일(사건번호 제외)."""
     from datetime import date
     if not isinstance(data, dict):
         return None
@@ -434,7 +431,7 @@ def _parse_reference_date_from_request(data: dict):
             return date(y, mo, d)
     except (TypeError, ValueError):
         pass
-    return _infer_case_reference_date(data.get("caseId") or data.get("case_id") or "")
+    return _parse_reference_date_from_text(data.get("text") or "")
 
 
 def _text_has_timeline_clock_signal(*parts: str) -> bool:
@@ -572,7 +569,7 @@ def _filter_timeline_time_only(events: list, reference_date=None) -> list:
 def _timeline_extract_prompt(case_id: str, stmt_name: str, stmt_type: str, text: str, reference_date=None) -> str:
     ref_line = ""
     if reference_date:
-        ref_line = f"\n사건·조서 기준일(날짜 없는 'N월 N일'·'오후 N시'는 이 날짜에 붙임): {reference_date.isoformat()}\n"
+        ref_line = f"\n조서 기준일(전문부·본문 날짜. 'N월 N일'·'어제'·'오후 N시'는 이 날짜 기준): {reference_date.isoformat()}\n"
     return f"""{NO_MARKDOWN}
 조서 원문에서 시간·시각·순서와 직접 관련된 행적·행위만 뽑아 JSON 객체 하나만 출력한다. 설명·마크다운·코드펜스 금지. JSON 밖 문장은 쓰지 마라.
 모순·진술 대조·관계망 인물 추출은 하지 않는다.
@@ -836,7 +833,7 @@ def _pick_clock_from_fields(
 
 
 def _reconcile_timeline_event_times(ev: dict, reference_date=None) -> dict:
-    """quote에 근거가 있을 때만 time_start/end 확정. 기준일은 전문부·사건 ID."""
+    """quote에 근거가 있을 때만 time_start/end 확정. 기준일은 전문부·조서 본문."""
     if not isinstance(ev, dict):
         return ev
     tt = (ev.get("time_text") or "").strip()
