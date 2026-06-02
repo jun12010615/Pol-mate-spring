@@ -2277,7 +2277,8 @@ def similar_cases():
 
     cand_block = "\n".join(cand_lines)
 
-    prompt = f"""당신은 형사사건 수사 AI 어시스턴트입니다. {NO_MARKDOWN}
+    prompt = f"""당신은 형사사건 수사 AI 어시스턴트입니다.
+JSON만 출력하라. 다른 설명·마크다운·코드펜스 금지. JSON 밖 문장은 쓰지 마라.
 
 [현재 사건]
 사건명: {case_name}
@@ -2301,11 +2302,8 @@ def similar_cases():
     if not raw:
         return jsonify({"success": True, "similar": []})
 
-    try:
-        parsed = json.loads(raw) if isinstance(raw, str) else raw
-        similar = parsed.get("similar", []) if isinstance(parsed, dict) else []
-    except Exception:
-        similar = []
+    parsed = _extract_json_object(raw)
+    similar = parsed.get("similar", []) if isinstance(parsed, dict) else []
 
     return jsonify({"success": True, "similar": similar, "model": MODEL})
 
