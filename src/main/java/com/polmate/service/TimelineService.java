@@ -121,7 +121,7 @@ public class TimelineService {
         }
 
         String caseName = caseRepo.findById(caseId).map(Case::getCaseName).orElse("");
-        long transcriptCount = transcriptRepo.findByCaseIdOrderByCreatedAtDesc(caseId).size();
+        long transcriptCount = transcriptRepo.countByCaseId(caseId);
         List<TimelineEvent> rows = eventRepo.findByCaseIdOrderBySortOrderAscTimeStartAscEventIdAsc(caseId);
         persistTimelineTimeNormalization(rows);
         List<TimelineEvent> resolved = rows.stream()
@@ -831,9 +831,12 @@ public class TimelineService {
     }
 
     private void persistTimelineTimeNormalization(List<TimelineEvent> rows) {
-        if (rows.isEmpty()) {
-            return;
-        }
+        if (rows.isEmpty()) return;
+
+        // 모두 이미 정규화된 경우 → 계산·DB 접근 전부 스킵
+        boolean hasUnnormalized = rows.stream().anyMatch(e -> !e.isNormalized());
+        if (!hasUnnormalized) return;
+
         Map<Long, TimelineTimeSnapshot> before = new HashMap<>();
         for (TimelineEvent row : rows) {
             if (row.getEventId() != null) {
@@ -843,11 +846,11 @@ public class TimelineService {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             normalizeTimelineEventTimes(rows, true);
             for (TimelineEvent row : rows) {
-                if (row.getEventId() == null) {
-                    continue;
-                }
+                if (row.getEventId() == null) continue;
                 TimelineTimeSnapshot snap = before.get(row.getEventId());
-                if (snap != null && !snap.matches(row)) {
+                boolean changed = snap != null && !snap.matches(row);
+                if (changed || !row.isNormalized()) {
+                    row.setNormalized(true);
                     eventRepo.save(row);
                 }
             }

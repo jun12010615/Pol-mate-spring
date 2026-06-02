@@ -61,6 +61,10 @@ public class TimelineEvent {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
 
+    @Builder.Default
+    @Column(name = "normalized", nullable = false)
+    private boolean normalized = false;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

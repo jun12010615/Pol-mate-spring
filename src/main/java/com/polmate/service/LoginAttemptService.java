@@ -1,42 +1,66 @@
 package com.polmate.service;
 
+import com.polmate.entity.LoginAttempt;
+import com.polmate.repository.LoginAttemptRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 @Service
+@RequiredArgsConstructor
 public class LoginAttemptService {
 
     private static final int MAX_ATTEMPTS = 5;
-    private static final long LOCK_MS = 30_000;
+    private static final int LOCK_SECONDS = 30;
 
-    // value: long[0]=연속실패횟수, long[1]=잠금해제시각(epoch ms, 0=미잠금)
-    private final ConcurrentHashMap<String, long[]> state = new ConcurrentHashMap<>();
+    private final LoginAttemptRepository attemptRepo;
 
+    @Transactional(readOnly = true)
     public boolean isBlocked(String ip) {
-        long[] s = state.get(ip);
-        if (s == null) return false;
-        if (s[1] > 0 && System.currentTimeMillis() < s[1]) return true;
-        if (s[1] > 0) state.remove(ip); // 잠금 만료 → 초기화
-        return false;
+        return attemptRepo.findById(ip)
+            .filter(a -> a.getLockedUntil() != null && a.getLockedUntil().isAfter(LocalDateTime.now()))
+            .isPresent();
     }
 
+    @Transactional(readOnly = true)
     public long remainingSeconds(String ip) {
-        long[] s = state.get(ip);
-        if (s == null || s[1] == 0) return 0;
-        return Math.max(0, (s[1] - System.currentTimeMillis()) / 1000);
+        return attemptRepo.findById(ip)
+            .filter(a -> a.getLockedUntil() != null && a.getLockedUntil().isAfter(LocalDateTime.now()))
+            .map(a -> ChronoUnit.SECONDS.between(LocalDateTime.now(), a.getLockedUntil()))
+            .map(s -> Math.max(0L, s))
+            .orElse(0L);
     }
 
+    @Transactional
     public void loginFailed(String ip) {
-        state.compute(ip, (k, s) -> {
-            if (s == null) s = new long[]{0, 0};
-            s[0]++;
-            if (s[0] >= MAX_ATTEMPTS) s[1] = System.currentTimeMillis() + LOCK_MS;
-            return s;
-        });
+        LoginAttempt attempt = attemptRepo.findById(ip)
+            .orElseGet(() -> new LoginAttempt(ip, 0, null));
+
+        // 이미 잠금 중이면 카운트 증가 안 함
+        if (attempt.getLockedUntil() != null && attempt.getLockedUntil().isAfter(LocalDateTime.now())) {
+            return;
+        }
+
+        attempt.setAttempts(attempt.getAttempts() + 1);
+        if (attempt.getAttempts() >= MAX_ATTEMPTS) {
+            attempt.setLockedUntil(LocalDateTime.now().plusSeconds(LOCK_SECONDS));
+        }
+        attemptRepo.save(attempt);
     }
 
+    @Transactional
     public void loginSucceeded(String ip) {
-        state.remove(ip);
+        attemptRepo.deleteById(ip);
+    }
+
+    // 만료된 잠금 레코드를 1시간마다 정리
+    @Scheduled(fixedDelay = 3_600_000)
+    @Transactional
+    public void cleanExpiredLocks() {
+        attemptRepo.deleteExpiredLocks();
     }
 }
