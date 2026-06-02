@@ -206,7 +206,7 @@ def call_ollama(prompt: str, expect_json: bool = False) -> str:
 
 
 TIMELINE_MAX_TEXT = int(os.environ.get("TIMELINE_MAX_TEXT", "9000"))
-TIMELINE_NUM_PREDICT = int(os.environ.get("TIMELINE_NUM_PREDICT", "3072"))
+TIMELINE_NUM_PREDICT = int(os.environ.get("TIMELINE_NUM_PREDICT", "2048"))
 TIMELINE_OLLAMA_TIMEOUT = int(os.environ.get("TIMELINE_OLLAMA_TIMEOUT", "180"))
 
 

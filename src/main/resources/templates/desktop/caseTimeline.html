@@ -448,13 +448,14 @@ function rebuildTimeline() {
 
 function pollTimelineAfterRebuild(attempt) {
     if (rebuildPollTimer) clearTimeout(rebuildPollTimer);
-    if (attempt > 60) {
+    // 조서 N건 × 최대 2분/건 기준으로 최대 20분(400회 × 3초) 대기
+    if (attempt > 400) {
         setRebuildButtonsEnabled(!!currentCaseId);
-        showToast('추출 시간이 길어지고 있습니다. 잠시 후 다시 조회합니다.');
         loadTimeline(currentCaseId);
         return;
     }
-    var delay = attempt === 0 ? 2000 : 3000;
+    // 초반 빠르게 → 10회 이후 5초 간격으로 전환해 서버 부하 완화
+    var delay = attempt === 0 ? 2000 : (attempt < 10 ? 3000 : 5000);
     rebuildPollTimer = setTimeout(function() {
         fetch('/timelineApi?action=get&caseId=' + encodeURIComponent(currentCaseId), { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
