@@ -13,6 +13,8 @@ public interface TranscriptRepository extends JpaRepository<Transcript, Integer>
 
     List<Transcript> findByCaseIdOrderByCreatedAtDesc(String caseId);
 
+    long countByCaseId(String caseId);
+
     List<Transcript> findByUserIdOrderByCreatedAtDesc(String userId);
 
     @Query(value =
