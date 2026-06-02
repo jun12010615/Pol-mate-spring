@@ -180,6 +180,9 @@ ollama.model=ingu627/exaone4.0:1.2b
 # ── 국가법령정보 API (AI 챗봇 법령 검색) ─────────────────────────
 law.api.oc=발급받은_OC_ID
 
+# ── Thymeleaf (개발 중 캐시 비활성화) ────────────────────────────
+spring.thymeleaf.cache=false
+
 # ── Gmail SMTP (비밀번호 찾기 인증코드) ──────────────────────────
 spring.mail.host=smtp.gmail.com
 spring.mail.port=587
@@ -433,6 +436,7 @@ Pol-mate-spring/
 | DB 연결 오류 | `application.properties` 설정 오류 | datasource URL/계정 확인 |
 | 포트 8080 충돌 | 다른 프로그램이 사용 중 | `server.port=8081` 로 변경하거나 충돌 프로세스 종료 |
 | 한글 깨짐 | 인코딩 설정 누락 | `application.properties`에 `server.servlet.encoding.force=true` 확인 |
+| HTML 수정이 반영되지 않음 | Thymeleaf 캐시 활성화 상태 | `spring.thymeleaf.cache=false` 설정 후 앱 재시작 |
 
 ### Flask 서버 관련
 
