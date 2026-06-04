@@ -162,6 +162,33 @@ public class TranscriptService {
         return result;
     }
 
+    // ── 조서 삭제 ────────────────────────────────────────────────
+    @Transactional
+    public Map<String, Object> delete(String userId, Integer transcriptId) {
+        Map<String, Object> result = new HashMap<>();
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT t.transcript_id, t.user_id FROM transcripts t WHERE t.transcript_id=?",
+                transcriptId);
+        if (rows.isEmpty()) {
+            result.put("success", false);
+            result.put("message", "조서를 찾을 수 없습니다.");
+            return result;
+        }
+        Object ownerId = rows.get(0).get("user_id");
+        if (!userId.equals(String.valueOf(ownerId))) {
+            result.put("success", false);
+            result.put("message", "본인이 작성한 조서만 삭제할 수 있습니다.");
+            return result;
+        }
+        jdbc.update("DELETE FROM timeline_events WHERE transcript_id=?", transcriptId);
+        scoreRepo.findByTranscriptId(transcriptId).ifPresent(scoreRepo::delete);
+        emotionRepo.findByTranscriptId(transcriptId).ifPresent(emotionRepo::delete);
+        transcriptRepo.deleteById(transcriptId);
+        result.put("success", true);
+        result.put("message", "조서가 삭제되었습니다.");
+        return result;
+    }
+
     // ── 조서 AI 요약 ─────────────────────────────────────────────
     @Transactional
     public Map<String, Object> summarize(Integer transcriptId, String userId) {

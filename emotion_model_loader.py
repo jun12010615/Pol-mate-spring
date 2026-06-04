@@ -64,7 +64,7 @@ def load_finetuned_emotion_model(model_dir: str = MODEL_DIR) -> bool:
     try:
         _FT_TOKENIZER = AutoTokenizer.from_pretrained(encoder_path)
         model         = EmotionRegressor(encoder_path)
-        model.load_state_dict(torch.load(weights_path, map_location=_FT_DEVICE))
+        model.load_state_dict(torch.load(weights_path, map_location=_FT_DEVICE, weights_only=False))
         model.to(_FT_DEVICE).eval()
         _FT_MODEL = model
         print(f"[감정분석] fine-tuned 모델 로드 성공: {model_dir}")

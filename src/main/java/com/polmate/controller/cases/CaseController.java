@@ -98,6 +98,9 @@ public class CaseController {
             case "emotionAnalyze":
                 handleEmotionAnalyze(res, loginUser, transcriptId);
                 break;
+            case "transcriptDelete":
+                writeMap(res, transcriptService.delete(loginUser, parseIntOrNull(transcriptId)));
+                break;
             default: res.getWriter().write("{\"error\":\"알 수 없는 action\"}");
         }
     }

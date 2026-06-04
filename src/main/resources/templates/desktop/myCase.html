@@ -642,6 +642,9 @@
                             + '<button class="score-btn" title="신뢰도 분석" onclick="event.preventDefault();event.stopPropagation();openScoreModal(' + (doc.id||0) + ',\'' + safeTitle + '\')">'
                             + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>'
                             + '</button>'
+                            + '<button class="score-btn" title="조서 삭제" style="color:#dc2626" onclick="event.preventDefault();event.stopPropagation();confirmDeleteTranscript(' + (doc.id||0) + ',\'' + safeTitle + '\')">'
+                            + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>'
+                            + '</button>'
                             + '</a>';
                     }).join('');
                 }
@@ -650,6 +653,21 @@
                 document.getElementById('btnCaseRelation').href = '/desktop/caseRelationMap?caseId=' + encodeURIComponent(caseId);
             })
             .catch(function() { showToast('사건 상세를 불러올 수 없습니다.'); });
+    }
+
+    function confirmDeleteTranscript(transcriptId, title) {
+        if (!confirm('「' + title + '」 조서를 삭제하시겠습니까?\n관련 신뢰도·감정분석·타임라인 데이터도 함께 삭제됩니다.')) return;
+        fetch('/caseApi?action=transcriptDelete&transcriptId=' + transcriptId, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) {
+                    showToast('조서가 삭제되었습니다.');
+                    openDetail(_currentCaseId);
+                } else {
+                    showToast(d.message || '삭제 실패');
+                }
+            })
+            .catch(function() { showToast('삭제 중 오류가 발생했습니다.'); });
     }
 
     function closeDetail() {

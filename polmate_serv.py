@@ -206,7 +206,7 @@ def call_ollama(prompt: str, expect_json: bool = False) -> str:
 
 
 TIMELINE_MAX_TEXT = int(os.environ.get("TIMELINE_MAX_TEXT", "9000"))
-TIMELINE_NUM_PREDICT = int(os.environ.get("TIMELINE_NUM_PREDICT", "2048"))
+TIMELINE_NUM_PREDICT = int(os.environ.get("TIMELINE_NUM_PREDICT", "4096"))
 TIMELINE_OLLAMA_TIMEOUT = int(os.environ.get("TIMELINE_OLLAMA_TIMEOUT", "180"))
 
 
@@ -240,9 +240,11 @@ def call_ollama_timeline(prompt: str) -> str:
             }, timeout=TIMELINE_OLLAMA_TIMEOUT)
             res.raise_for_status()
             text = res.json().get("response", "")
-            match = re.search(r'\{[\s\S]*\}', text)
-            if match:
-                return match.group(0)
+            # 사고(thinking) 블록 제거: </think>, </thought> 이전 내용 모두 삭제
+            text = re.sub(r'[\s\S]*?</(?:think|thought)>', '', text, flags=re.IGNORECASE).strip()
+            text = re.sub(r'</?(?:think|thought)>', '', text, flags=re.IGNORECASE).strip()
+            if text:
+                return text
         except Exception as e:
             if attempt == 1:
                 raise e
@@ -1293,6 +1295,40 @@ def _transcript_hint_name_for_role(transcripts: list, role_en: str) -> str | Non
     return None
 
 
+def _repair_truncated_timeline_json(text: str) -> dict | None:
+    """잘린 {"events":[...]} JSON을 마지막 완전한 이벤트까지 잘라 복구."""
+    start = (text or "").find("{")
+    if start < 0:
+        return None
+    text = text[start:]
+    depth, in_str, esc = 0, False, False
+    last_event_end = -1
+    for i, ch in enumerate(text):
+        if esc:
+            esc = False
+            continue
+        if ch == "\\" and in_str:
+            esc = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if ch in "{[":
+            depth += 1
+        elif ch in "]}":
+            depth -= 1
+            if depth == 1 and ch == "}":
+                last_event_end = i
+    if last_event_end < 0:
+        return None
+    try:
+        return json.loads(text[: last_event_end + 1] + "\n]}")
+    except Exception:
+        return None
+
+
 def _extract_json_object(text: str) -> dict | None:
     if not (text or "").strip():
         return None
@@ -2229,6 +2265,19 @@ def timeline_extract():
         return jsonify({"success": False, "error": f"모델 호출 실패: {ex}", "events": []}), 502
 
     parsed = _extract_json_object(raw or "")
+    # 모델이 {"events":[...]} 대신 ['events':[...]] 등 비표준 형식을 출력할 때 복구
+    if not parsed or not isinstance(parsed.get("events"), list):
+        m = re.search(r'"events"\s*[:\s]+(\[[\s\S]*?\])', raw or "")
+        if m:
+            try:
+                events_list = json.loads(m.group(1))
+                if isinstance(events_list, list):
+                    parsed = {"events": events_list}
+            except Exception:
+                pass
+    # 3순위: 잘린 JSON 복구 (num_predict 초과로 닫는 괄호가 없는 경우)
+    if not parsed or not isinstance(parsed.get("events"), list):
+        parsed = _repair_truncated_timeline_json(raw or "")
     if not parsed or not isinstance(parsed.get("events"), list):
         return jsonify({"success": False, "error": "이벤트 JSON 파싱 실패", "events": []}), 502
 
