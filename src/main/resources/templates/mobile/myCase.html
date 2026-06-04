@@ -730,10 +730,28 @@
               '<div class="drawer-doc-badge" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">' +
               '<span class="badge '+bc+'">'+bt+'</span>' +
               scElem +
+              '<button onclick="event.stopPropagation();confirmDeleteTranscript('+d.id+',\''+escStr(d.name)+'\')" style="background:none;border:none;padding:2px;cursor:pointer;color:#dc2626;line-height:1;" title="삭제">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="width:14px;height:14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>' +
+              '</button>' +
               '</div>' +
               '</div>';
     });
     document.getElementById('drawerDocList').innerHTML=html+'</div>';
+  }
+
+  function confirmDeleteTranscript(transcriptId, name) {
+    if (!confirm('「' + name + '」 조서를 삭제하시겠습니까?\n관련 신뢰도·감정분석·타임라인 데이터도 함께 삭제됩니다.')) return;
+    fetch('/caseApi?action=transcriptDelete&transcriptId=' + transcriptId, { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) {
+          showToast('조서가 삭제되었습니다.');
+          if (currentCaseId) openCase(currentCaseId);
+        } else {
+          showToast(d.message || '삭제 실패');
+        }
+      })
+      .catch(function() { showToast('삭제 중 오류가 발생했습니다.'); });
   }
 
   function toggleDocCheck(docId,idx){
