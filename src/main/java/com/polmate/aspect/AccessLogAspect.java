@@ -8,12 +8,16 @@ import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Aspect
 @Component
@@ -21,6 +25,9 @@ import java.util.Optional;
 public class AccessLogAspect {
 
     private final AccessLogService accessLogService;
+
+    @Value("${trusted.proxy.ips:}")
+    private String trustedProxyIpsRaw;
 
     @Around("@annotation(logAccess)")
     public Object logAccess(ProceedingJoinPoint pjp, LogAccess logAccess) throws Throwable {
@@ -70,12 +77,19 @@ public class AccessLogAspect {
     }
 
     private String resolveIp(HttpServletRequest req) {
-        for (String header : new String[]{"X-Forwarded-For", "X-Real-IP", "Proxy-Client-IP"}) {
-            String ip = req.getHeader(header);
-            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-                return ip.contains(",") ? ip.split(",")[0].trim() : ip;
+        String remoteAddr = req.getRemoteAddr();
+        Set<String> trustedProxies = Arrays.stream(trustedProxyIpsRaw.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+        if (trustedProxies.contains(remoteAddr)) {
+            for (String header : new String[]{"X-Forwarded-For", "X-Real-IP", "Proxy-Client-IP"}) {
+                String ip = req.getHeader(header);
+                if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+                    return ip.contains(",") ? ip.split(",")[0].trim() : ip;
+                }
             }
         }
-        return req.getRemoteAddr();
+        return remoteAddr;
     }
 }

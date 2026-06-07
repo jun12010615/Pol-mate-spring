@@ -4,13 +4,17 @@ import com.polmate.entity.User;
 import com.polmate.service.LoginAttemptService;
 import com.polmate.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import java.util.Arrays;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Controller
 @RequestMapping("/login")
@@ -19,6 +23,9 @@ public class LoginController {
 
     private final UserService userService;
     private final LoginAttemptService loginAttemptService;
+
+    @Value("${trusted.proxy.ips:}")
+    private String trustedProxyIpsRaw;
 
     @GetMapping
     public String loginPage() {
@@ -76,10 +83,18 @@ public class LoginController {
     }
 
     private String resolveClientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+        String remoteAddr = request.getRemoteAddr();
+        Set<String> trustedProxies = Arrays.stream(trustedProxyIpsRaw.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+        // X-Forwarded-For는 직접 연결 IP가 신뢰 프록시일 때만 수락
+        if (trustedProxies.contains(remoteAddr)) {
+            String forwarded = request.getHeader("X-Forwarded-For");
+            if (forwarded != null && !forwarded.isBlank()) {
+                return forwarded.split(",")[0].trim();
+            }
         }
-        return request.getRemoteAddr();
+        return remoteAddr;
     }
 }

@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.polmate.service.LoginAttemptService;
 import com.polmate.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Controller;
@@ -13,6 +14,9 @@ import jakarta.mail.internet.MimeMessage;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.security.SecureRandom;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Controller
 @RequestMapping("/findAccount")
@@ -31,6 +35,9 @@ public class FindAccountController {
     private final UserService        userService;
     private final LoginAttemptService loginAttemptService;
     private final JavaMailSender     mailSender;
+
+    @Value("${trusted.proxy.ips:}")
+    private String trustedProxyIpsRaw;
 
     @PostMapping
     @ResponseBody
@@ -185,9 +192,16 @@ public class FindAccountController {
     }
 
     private String resolveClientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) return forwarded.split(",")[0].trim();
-        return request.getRemoteAddr();
+        String remoteAddr = request.getRemoteAddr();
+        Set<String> trustedProxies = Arrays.stream(trustedProxyIpsRaw.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+        if (trustedProxies.contains(remoteAddr)) {
+            String forwarded = request.getHeader("X-Forwarded-For");
+            if (forwarded != null && !forwarded.isBlank()) return forwarded.split(",")[0].trim();
+        }
+        return remoteAddr;
     }
 
     private boolean isValidEmail(String e) { return e.matches("^[\\w.+\\-]+@[\\w\\-]+\\.[\\w.]+$"); }

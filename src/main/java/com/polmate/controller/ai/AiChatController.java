@@ -18,7 +18,7 @@ public class AiChatController {
     @Value("${ollama.url}")
     private String ollamaUrl;
 
-    @Value("${ollama.model:ingu627/exaone4.0:1.2b}")
+    @Value("${ollama.model:exaone3.5:2.4b}")
     private String ollamaModel;
 
     @Value("${law.api.oc}")

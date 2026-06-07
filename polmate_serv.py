@@ -47,7 +47,15 @@ from utils import AttnLabelConverter
 # Flask 앱 초기화
 # ════════════════════════════════════════════════════════════════════════════
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}},
+
+# 허용할 Spring Boot 서버 오리진 (환경변수로 추가 가능)
+_CORS_ORIGINS_RAW = os.environ.get(
+    "ALLOWED_ORIGINS",
+    "http://localhost:8080,http://127.0.0.1:8080"
+)
+_CORS_ORIGINS = [o.strip() for o in _CORS_ORIGINS_RAW.split(",") if o.strip()]
+
+CORS(app, resources={r"/*": {"origins": _CORS_ORIGINS}},
      methods=["GET", "POST", "OPTIONS"],
      allow_headers=["Content-Type", "Authorization"])
 
@@ -55,7 +63,7 @@ CORS(app, resources={r"/*": {"origins": "*"}},
 # [섹션 1] 진술 분석 / 관계망 — 설정 및 전역 변수
 # ════════════════════════════════════════════════════════════════════════════
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
-MODEL      = os.environ.get("OLLAMA_MODEL", "ingu627/exaone4.0:1.2b")
+MODEL      = os.environ.get("OLLAMA_MODEL", "exaone3.5:2.4b")
 
 _ANALYZE_JOBS: dict      = {}
 _ANALYZE_JOBS_LOCK       = threading.Lock()
