@@ -12,7 +12,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.sql.Timestamp;
-import java.text.SimpleDateFormat;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @RestController
@@ -20,8 +21,9 @@ import java.util.*;
 @RequiredArgsConstructor
 public class CaseController {
 
-    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("yyyy.MM.dd");
-    static { DATE_FMT.setTimeZone(TimeZone.getTimeZone("Asia/Seoul")); }
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter
+            .ofPattern("yyyy.MM.dd")
+            .withZone(ZoneId.of("Asia/Seoul"));
 
     private final CaseService caseService;
     private final TranscriptService transcriptService;
@@ -124,7 +126,7 @@ public class CaseController {
                 c.put("urgent",         contr > 0);
                 c.put("isMine",         loginUser.equals(row.get("user_id")));
                 Object ts = row.get("created_at");
-                c.put("date", ts instanceof Timestamp ? DATE_FMT.format((Timestamp) ts) : "");
+                c.put("date", ts instanceof Timestamp ? DATE_FMT.format(((Timestamp) ts).toInstant()) : "");
                 arr.put(c);
             }
             res.getWriter().write(arr.toString());
@@ -169,7 +171,7 @@ public class CaseController {
                 detail.put("orgName", loginUserOrg);
             }
             Object ts = row.get("created_at");
-            detail.put("date", ts instanceof Timestamp ? DATE_FMT.format((Timestamp) ts) : "");
+            detail.put("date", ts instanceof Timestamp ? DATE_FMT.format(((Timestamp) ts).toInstant()) : "");
 
             JSONArray docs = new JSONArray();
             for (Map<String, Object> d : caseService.transcriptList(caseId)) {
@@ -184,7 +186,7 @@ public class CaseController {
                 obj.put("writerName",   nvl((String) d.get("user_name"), "알 수 없음"));
                 obj.put("writerRank",   nvl((String) d.get("user_rank"), ""));
                 Object dts = d.get("created_at");
-                obj.put("date", dts instanceof Timestamp ? DATE_FMT.format((Timestamp) dts) : "");
+                obj.put("date", dts instanceof Timestamp ? DATE_FMT.format(((Timestamp) dts).toInstant()) : "");
                 Object totalObj = d.get("total_score");
                 boolean scored = totalObj != null;
                 obj.put("scored", scored);
@@ -226,7 +228,7 @@ public class CaseController {
                 obj.put("words",        num(d.get("text_len")));
                 obj.put("contradiction", hasCont);
                 Object ts = d.get("created_at");
-                obj.put("date", ts instanceof Timestamp ? DATE_FMT.format((Timestamp) ts) : "");
+                obj.put("date", ts instanceof Timestamp ? DATE_FMT.format(((Timestamp) ts).toInstant()) : "");
                 arr.put(obj);
             }
             res.getWriter().write(arr.toString());

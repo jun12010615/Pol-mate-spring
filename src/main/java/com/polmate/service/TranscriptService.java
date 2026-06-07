@@ -368,7 +368,7 @@ public class TranscriptService {
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
             conn.setDoOutput(true);
-            conn.setConnectTimeout(5000); conn.setReadTimeout(120000);
+            conn.setConnectTimeout(5000); conn.setReadTimeout(200_000);
             try (OutputStream os = conn.getOutputStream()) {
                 os.write(body.toString().getBytes(StandardCharsets.UTF_8));
             }

@@ -11,7 +11,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.sql.Timestamp;
-import java.text.SimpleDateFormat;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @RestController
@@ -19,8 +20,9 @@ import java.util.*;
 @RequiredArgsConstructor
 public class BoardController {
 
-    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("yyyy.MM.dd");
-    static { DATE_FMT.setTimeZone(TimeZone.getTimeZone("Asia/Seoul")); }
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter
+            .ofPattern("yyyy.MM.dd")
+            .withZone(ZoneId.of("Asia/Seoul"));
 
     private final BoardService boardService;
 
@@ -82,7 +84,7 @@ public class BoardController {
                 p.put("authorRank", anon ? "" : nvl((String) row.get("user_rank")));
                 p.put("isMine", loginUser.equals(row.get("user_id")));
                 Object ts = row.get("created_at");
-                p.put("date", ts instanceof Timestamp ? DATE_FMT.format((Timestamp) ts) : "");
+                p.put("date", ts instanceof Timestamp ? DATE_FMT.format(((Timestamp) ts).toInstant()) : "");
                 arr.put(p);
             }
             res.getWriter().write(arr.toString());
@@ -113,7 +115,7 @@ public class BoardController {
             p.put("authorOrg",  anon ? "" : nvl((String) row.get("user_org")));
             p.put("isMine", loginUser.equals(row.get("user_id")));
             Object ts = row.get("created_at");
-            p.put("date", ts instanceof Timestamp ? DATE_FMT.format((Timestamp) ts) : "");
+            p.put("date", ts instanceof Timestamp ? DATE_FMT.format(((Timestamp) ts).toInstant()) : "");
             p.put("liked", Boolean.TRUE.equals(row.get("liked")));
 
             // tags
@@ -250,7 +252,7 @@ public class BoardController {
         if (diff < 60000)    return "방금";
         if (diff < 3600000)  return (diff / 60000) + "분 전";
         if (diff < 86400000) return (diff / 3600000) + "시간 전";
-        return DATE_FMT.format(ts);
+        return DATE_FMT.format(ts.toInstant());
     }
 
     private String nvl(String s) { return s == null ? "" : s; }
