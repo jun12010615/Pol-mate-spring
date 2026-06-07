@@ -39,6 +39,9 @@ public class FindAccountController {
     @Value("${trusted.proxy.ips:}")
     private String trustedProxyIpsRaw;
 
+    @Value("${spring.mail.username}")
+    private String mailFrom;
+
     @PostMapping
     @ResponseBody
     public String doPost(@RequestParam(defaultValue = "") String action,
@@ -79,8 +82,7 @@ public class FindAccountController {
     private String handleSendCode(HttpServletRequest req) {
         String clientIp = resolveClientIp(req);
         if (loginAttemptService.isBlocked(clientIp)) {
-            long remaining = loginAttemptService.remainingSeconds(clientIp);
-            return fail("요청이 너무 많습니다. " + remaining + "초 후 다시 시도해 주세요.");
+            return fail("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.");
         }
 
         String userId = nvl(req.getParameter("userId"));
@@ -166,7 +168,7 @@ public class FindAccountController {
     private void sendHtmlMail(String to, String subject, String html) throws Exception {
         MimeMessage msg = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
-        helper.setFrom("a01077202445@gmail.com", "POLMATE");
+        helper.setFrom(mailFrom, "POLMATE");
         helper.setTo(to);
         helper.setSubject(subject);
         helper.setText(html, true);

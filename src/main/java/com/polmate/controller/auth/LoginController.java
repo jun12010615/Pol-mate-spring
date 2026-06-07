@@ -43,8 +43,7 @@ public class LoginController {
         String clientIp = resolveClientIp(request);
 
         if (loginAttemptService.isBlocked(clientIp)) {
-            long remaining = loginAttemptService.remainingSeconds(clientIp);
-            model.addAttribute("loginError", "로그인 시도가 너무 많습니다. " + remaining + "초 후 다시 시도해 주세요.");
+            model.addAttribute("loginError", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.");
             return errorView;
         }
 

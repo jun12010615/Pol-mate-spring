@@ -248,32 +248,36 @@ public class UserService {
     }
 
     public Map<String, Object> getStats(String userId) {
-        Map<String, Object> stats = new HashMap<>();
         Map<String, Object> row = jdbc.queryForMap(
-            "SELECT COUNT(*) AS total_transcripts, SUM(t.has_contradiction) AS contradiction_count, " +
-            "  SUM(CASE WHEN c.status='완료' THEN 1 ELSE 0 END) AS completed_transcripts " +
-            "FROM transcripts t JOIN cases c ON t.case_id = c.case_id " +
-            "WHERE t.user_id = ? AND ((SELECT me.dept_id FROM users me WHERE me.user_id=?) IS NULL " +
-            "  OR c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?))",
-            userId, userId, userId);
-        stats.put("totalTranscripts",   ((Number) row.getOrDefault("total_transcripts",   0)).intValue());
-        stats.put("contradictionCount", ((Number) row.getOrDefault("contradiction_count", 0)).intValue());
-        stats.put("completedTranscripts",((Number)row.getOrDefault("completed_transcripts",0)).intValue());
+            "SELECT " +
+            "  t_s.total_transcripts, t_s.contradiction_count, t_s.completed_transcripts, " +
+            "  c_s.total_cases, c_s.active_cases, " +
+            "  COALESCE(r_s.relation_edges, 0) AS relation_edges, " +
+            "  COALESCE(b_s.total_board_posts, 0) AS total_board_posts " +
+            "FROM " +
+            "  (SELECT COUNT(*) AS total_transcripts, " +
+            "          COALESCE(SUM(t.has_contradiction), 0) AS contradiction_count, " +
+            "          SUM(CASE WHEN c.status='완료' THEN 1 ELSE 0 END) AS completed_transcripts " +
+            "   FROM transcripts t JOIN cases c ON t.case_id = c.case_id " +
+            "   WHERE t.user_id = ? " +
+            "     AND ((SELECT me.dept_id FROM users me WHERE me.user_id=?) IS NULL " +
+            "          OR c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?))) t_s, " +
+            "  (SELECT COUNT(*) AS total_cases, " +
+            "          SUM(CASE WHEN c.status!='완료' THEN 1 ELSE 0 END) AS active_cases " +
+            "   FROM cases c " +
+            "   WHERE c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?)) c_s, " +
+            "  (SELECT COUNT(*) AS relation_edges FROM relation_history WHERE user_id=?) r_s, " +
+            "  (SELECT COUNT(*) AS total_board_posts FROM board_posts WHERE user_id=?) b_s",
+            userId, userId, userId, userId, userId, userId);
 
-        Map<String, Object> caseRow = jdbc.queryForMap(
-            "SELECT COUNT(*) AS total_cases, SUM(CASE WHEN c.status!='완료' THEN 1 ELSE 0 END) AS active_cases " +
-            "FROM cases c WHERE c.dept_id=(SELECT me.dept_id FROM users me WHERE me.user_id=?)", userId);
-        stats.put("totalCases",  ((Number) caseRow.getOrDefault("total_cases",  0)).intValue());
-        stats.put("activeCases", ((Number) caseRow.getOrDefault("active_cases", 0)).intValue());
-
-        int relEdges = historyRepo.countByUserId(userId);
-        stats.put("relationEdges", relEdges);
-
-        // 커뮤니티 게시글 수
-        Integer boardCount = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM board_posts WHERE user_id = ?", Integer.class, userId);
-        stats.put("totalBoardPosts", boardCount != null ? boardCount : 0);
-
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalTranscripts",    ((Number) row.getOrDefault("total_transcripts",    0)).intValue());
+        stats.put("contradictionCount",  ((Number) row.getOrDefault("contradiction_count",  0)).intValue());
+        stats.put("completedTranscripts",((Number) row.getOrDefault("completed_transcripts",0)).intValue());
+        stats.put("totalCases",          ((Number) row.getOrDefault("total_cases",          0)).intValue());
+        stats.put("activeCases",         ((Number) row.getOrDefault("active_cases",         0)).intValue());
+        stats.put("relationEdges",       ((Number) row.getOrDefault("relation_edges",       0)).intValue());
+        stats.put("totalBoardPosts",     ((Number) row.getOrDefault("total_board_posts",    0)).intValue());
         return stats;
     }
 }
