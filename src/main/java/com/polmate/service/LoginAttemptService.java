@@ -3,6 +3,7 @@ package com.polmate.service;
 import com.polmate.entity.LoginAttempt;
 import com.polmate.repository.LoginAttemptRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,8 +15,11 @@ import java.time.temporal.ChronoUnit;
 @RequiredArgsConstructor
 public class LoginAttemptService {
 
-    private static final int MAX_ATTEMPTS = 5;
-    private static final int LOCK_SECONDS = 30;
+    @Value("${login.attempt.max-attempts:5}")
+    private int maxAttempts;
+
+    @Value("${login.attempt.lock-seconds:30}")
+    private int lockSeconds;
 
     private final LoginAttemptRepository attemptRepo;
 
@@ -46,8 +50,8 @@ public class LoginAttemptService {
         }
 
         attempt.setAttempts(attempt.getAttempts() + 1);
-        if (attempt.getAttempts() >= MAX_ATTEMPTS) {
-            attempt.setLockedUntil(LocalDateTime.now().plusSeconds(LOCK_SECONDS));
+        if (attempt.getAttempts() >= maxAttempts) {
+            attempt.setLockedUntil(LocalDateTime.now().plusSeconds(lockSeconds));
         }
         attemptRepo.save(attempt);
     }

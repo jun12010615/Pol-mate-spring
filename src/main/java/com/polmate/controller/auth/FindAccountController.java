@@ -27,20 +27,24 @@ public class FindAccountController {
     private static final String SESS_USERID   = "pw_userId";
     private static final String SESS_EXPIRES  = "pw_expires";
     private static final String SESS_ATTEMPTS = "pw_attempts";
-    private static final long   CODE_TTL_MS   = 3 * 60 * 1000L;
-    private static final int    MAX_ATTEMPTS  = 5;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    private final UserService        userService;
+    private final UserService         userService;
     private final LoginAttemptService loginAttemptService;
-    private final JavaMailSender     mailSender;
+    private final JavaMailSender      mailSender;
 
     @Value("${trusted.proxy.ips:}")
     private String trustedProxyIpsRaw;
 
     @Value("${spring.mail.username}")
     private String mailFrom;
+
+    @Value("${auth.code.ttl-ms:180000}")
+    private long codeTtlMs;
+
+    @Value("${login.attempt.max-attempts:5}")
+    private int maxAttempts;
 
     @PostMapping
     @ResponseBody
@@ -100,7 +104,7 @@ public class FindAccountController {
             HttpSession sess = req.getSession();
             sess.setAttribute(SESS_CODE,     code);
             sess.setAttribute(SESS_USERID,   userId);
-            sess.setAttribute(SESS_EXPIRES,  System.currentTimeMillis() + CODE_TTL_MS);
+            sess.setAttribute(SESS_EXPIRES,  System.currentTimeMillis() + codeTtlMs);
             sess.setAttribute(SESS_ATTEMPTS, 0);
             sendHtmlMail(email, "[POL-MATE] 비밀번호 재설정 인증코드", buildCodeHtml(userId, code));
             loginAttemptService.loginSucceeded(clientIp);
@@ -125,11 +129,11 @@ public class FindAccountController {
         }
         if (!savedCode.equals(inputCode)) {
             int attempts = incrementAttempts(sess);
-            if (attempts >= MAX_ATTEMPTS) {
+            if (attempts >= maxAttempts) {
                 clearCodeFromSession(sess);
-                return fail("인증 시도 횟수(" + MAX_ATTEMPTS + "회)를 초과했습니다. 인증코드를 다시 발송해 주세요.");
+                return fail("인증 시도 횟수(" + maxAttempts + "회)를 초과했습니다. 인증코드를 다시 발송해 주세요.");
             }
-            return fail("인증코드가 올바르지 않습니다. (" + attempts + "/" + MAX_ATTEMPTS + ")");
+            return fail("인증코드가 올바르지 않습니다. (" + attempts + "/" + maxAttempts + ")");
         }
         clearCodeFromSession(sess);
         return ok("인증되었습니다.");
