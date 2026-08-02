@@ -8,10 +8,23 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.net.*;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/stt")
 public class SttController {
+
+    private static final Set<String> ALLOWED_MIME_TYPES = Set.of(
+        "audio/wav", "audio/x-wav", "audio/wave",
+        "audio/mpeg", "audio/mp3",
+        "audio/webm", "audio/ogg",
+        "audio/mp4", "audio/x-m4a", "audio/aac",
+        "audio/flac"
+    );
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
+        "wav", "mp3", "webm", "ogg", "m4a", "aac", "flac"
+    );
+    private static final long MAX_FILE_SIZE = 50 * 1024 * 1024L; // 50MB
 
     @Value("${clova.speech.invoke-url}")
     private String invokeUrl;
@@ -33,6 +46,22 @@ public class SttController {
         }
         if (audioFile == null || audioFile.isEmpty()) {
             return errorJson("음성 파일이 없습니다.");
+        }
+        if (audioFile.getSize() > MAX_FILE_SIZE) {
+            return errorJson("파일 크기가 50MB를 초과합니다.");
+        }
+
+        String originalFilename = audioFile.getOriginalFilename();
+        String ext = (originalFilename != null && originalFilename.contains("."))
+            ? originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase()
+            : "";
+        if (!ALLOWED_EXTENSIONS.contains(ext)) {
+            return errorJson("허용되지 않는 파일 형식입니다. (wav, mp3, webm, ogg, m4a, aac, flac 허용)");
+        }
+
+        String contentType = audioFile.getContentType();
+        if (contentType == null || !ALLOWED_MIME_TYPES.contains(contentType.toLowerCase())) {
+            return errorJson("허용되지 않는 MIME 타입입니다.");
         }
 
         try {

@@ -27,6 +27,7 @@ import re
 import uuid
 import threading
 import tempfile
+import time
 
 # ── CV / OCR 관련 (CCTV 분석용) ─────────────────────────────────────────────
 import cv2
@@ -123,6 +124,7 @@ PLATE_PATTERN            = re.compile(r'\d{2,3}[가나다라마거너더러머�
 OCR_CONFIDENCE_THRESHOLD = 0.85
 
 cctv_jobs: dict = {}
+_CCTV_JOBS_LOCK = threading.Lock()
 
 
 class OCRopt:
@@ -2012,9 +2014,16 @@ def plate_matches(input_plate: str, ocr_text: str) -> bool:
     return bool(input_nums) and input_nums in ocr_nums
 
 
+def _cctv_set(job_id: str, **kwargs):
+    with _CCTV_JOBS_LOCK:
+        job = cctv_jobs.get(job_id)
+        if job is not None:
+            job.update(kwargs)
+
+
 def run_cctv_analysis(job_id: str, video_path: str, plate: str):
     try:
-        cctv_jobs[job_id]["status"] = "analyzing"
+        _cctv_set(job_id, status="analyzing")
         cap          = cv2.VideoCapture(video_path)
         fps          = cap.get(cv2.CAP_PROP_FPS) or 30
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -2060,7 +2069,7 @@ def run_cctv_analysis(job_id: str, video_path: str, plate: str):
                             "desc":      f"번호판 '{plate_text}' 차량 발견 (전체프레임)"
                         })
 
-                cctv_jobs[job_id]["progress"] = int((frame_idx / max(total_frames, 1)) * 100)
+                _cctv_set(job_id, progress=int((frame_idx / max(total_frames, 1)) * 100))
 
             frame_idx += 1
 
@@ -2075,13 +2084,10 @@ def run_cctv_analysis(job_id: str, video_path: str, plate: str):
                 seen.add(key)
                 unique_results.append(r)
 
-        cctv_jobs[job_id]["status"]   = "done"
-        cctv_jobs[job_id]["progress"] = 100
-        cctv_jobs[job_id]["results"]  = unique_results
+        _cctv_set(job_id, status="done", progress=100, results=unique_results)
 
     except Exception as e:
-        cctv_jobs[job_id]["status"] = "error"
-        cctv_jobs[job_id]["error"]  = str(e)
+        _cctv_set(job_id, status="error", error=str(e))
         if os.path.exists(video_path):
             os.remove(video_path)
 
@@ -2369,6 +2375,32 @@ JSON만 출력하라. 다른 설명·마크다운·코드펜스 금지. JSON 밖
 # [섹션 6] Flask 라우트 — CCTV 번호판 분석
 # ════════════════════════════════════════════════════════════════════════════
 
+_CCTV_JOB_TTL = 3600  # 완료/오류 job 1시간 후 자동 제거
+
+
+def _cleanup_cctv_jobs():
+    now = time.time()
+    with _CCTV_JOBS_LOCK:
+        expired = [
+            jid for jid, j in cctv_jobs.items()
+            if j.get("status") in ("done", "error") and now - j.get("created_at", now) > _CCTV_JOB_TTL
+        ]
+        for jid in expired:
+            del cctv_jobs[jid]
+
+
+_ALLOWED_VIDEO_MIME = {
+    "video/mp4", "video/mpeg",
+    "video/avi", "video/x-msvideo",
+    "video/quicktime",
+    "video/x-matroska",
+    "video/webm",
+    "video/x-ms-wmv",
+}
+_ALLOWED_VIDEO_EXT  = {"mp4", "avi", "mov", "mkv", "webm", "wmv", "mpeg", "mpg"}
+_MAX_VIDEO_SIZE     = 500 * 1024 * 1024  # 500MB
+
+
 @app.route("/cctv/analyze", methods=["POST"])
 def cctv_analyze():
     if "video" not in request.files:
@@ -2376,13 +2408,35 @@ def cctv_analyze():
     video_file = request.files["video"]
     plate      = request.form.get("plate", "").strip()
 
-    suffix = os.path.splitext(video_file.filename)[1] or ".mp4"
+    filename = video_file.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in _ALLOWED_VIDEO_EXT:
+        return jsonify({"success": False,
+                        "error": "허용되지 않는 파일 형식입니다. (mp4, avi, mov, mkv, webm, wmv 허용)"}), 400
+
+    content_type = (video_file.content_type or "").lower()
+    if content_type not in _ALLOWED_VIDEO_MIME:
+        return jsonify({"success": False, "error": "허용되지 않는 MIME 타입입니다."}), 400
+
+    video_file.stream.seek(0, 2)
+    file_size = video_file.stream.tell()
+    video_file.stream.seek(0)
+    if file_size > _MAX_VIDEO_SIZE:
+        return jsonify({"success": False, "error": "파일 크기가 500MB를 초과합니다."}), 400
+
+    suffix = f".{ext}"
     tmp    = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     video_file.save(tmp.name)
     tmp.close()
 
+    _cleanup_cctv_jobs()
+
     job_id = str(uuid.uuid4())
-    cctv_jobs[job_id] = {"status": "queued", "progress": 0, "results": [], "error": None}
+    with _CCTV_JOBS_LOCK:
+        cctv_jobs[job_id] = {
+            "status": "queued", "progress": 0, "results": [], "error": None,
+            "created_at": time.time(),
+        }
     t = threading.Thread(target=run_cctv_analysis, args=(job_id, tmp.name, plate))
     t.daemon = True
     t.start()
@@ -2391,15 +2445,17 @@ def cctv_analyze():
 
 @app.route("/cctv/status/<job_id>", methods=["GET"])
 def cctv_status(job_id):
-    job = cctv_jobs.get(job_id)
-    if not job:
-        return jsonify({"success": False, "error": "존재하지 않는 작업입니다."}), 404
+    with _CCTV_JOBS_LOCK:
+        job = cctv_jobs.get(job_id)
+        if not job:
+            return jsonify({"success": False, "error": "존재하지 않는 작업입니다."}), 404
+        snapshot = dict(job)
     return jsonify({
         "success":  True,
-        "status":   job["status"],
-        "progress": job["progress"],
-        "results":  job["results"],
-        "error":    job["error"],
+        "status":   snapshot["status"],
+        "progress": snapshot["progress"],
+        "results":  snapshot["results"],
+        "error":    snapshot["error"],
     })
 
 
